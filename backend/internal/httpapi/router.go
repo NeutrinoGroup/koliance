@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/koliance/backend/internal/config"
 	"github.com/koliance/backend/internal/developer"
 	"github.com/koliance/backend/internal/game"
+	"github.com/koliance/backend/internal/liquidation"
 	"github.com/koliance/backend/internal/market"
 	"github.com/koliance/backend/internal/model"
 	"github.com/koliance/backend/internal/platform/database"
@@ -27,6 +29,9 @@ type Deps struct {
 	PriceOracle *market.PriceOracle
 	Stripe      *stripeclient.Client
 	Dev         *developer.Service
+	// Liquidations serves the liquidation observation feed written by
+	// cmd/liquidator. Nil (no DATABASE_URL) degrades to an empty list.
+	Liquidations liquidation.Store
 }
 
 // Access model (see docs in backend/README.md):
@@ -84,6 +89,38 @@ func NewRouter(d Deps) http.Handler {
 			Status:          "optimal",
 		})
 	})
+
+	// ==================== LIQUIDATIONS (observation feed) ====================
+
+	// Public read-only: the dashboard polls this to scroll recent liquidations.
+	// limit defaults to 50 and is capped at 200; anything else is rejected
+	// rather than silently clamped.
+	h("/api/v1/liquidations", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		limit := 50
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 1 {
+				jsonError(w, http.StatusBadRequest, "limit must be a positive integer")
+				return
+			}
+			if n > 200 {
+				jsonError(w, http.StatusBadRequest, "limit must be at most 200")
+				return
+			}
+			limit = n
+		}
+
+		if d.Liquidations == nil {
+			jsonResponse(w, http.StatusOK, map[string]interface{}{"liquidations": []liquidation.Event{}})
+			return
+		}
+		events, err := d.Liquidations.Latest(r.Context(), limit)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		jsonResponse(w, http.StatusOK, map[string]interface{}{"liquidations": events})
+	}))
 
 	// ==================== GAME ====================
 

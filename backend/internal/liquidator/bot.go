@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/koliance/backend/internal/chain"
 	"github.com/koliance/backend/internal/chain/bindings"
+	"github.com/koliance/backend/internal/liquidation"
 	"github.com/koliance/backend/internal/oracle"
 	"github.com/koliance/backend/internal/perp/nonce"
 	"github.com/koliance/backend/internal/perp/position"
@@ -43,6 +45,11 @@ type Bot struct {
 	updates UpdateProvider
 	handler chain.EventHandler
 
+	// obs is the observation store for the dashboard endpoint. It is a
+	// side-channel: nil when DATABASE_URL is unset, and its failures are logged
+	// rather than propagated into the liquidation loop.
+	obs liquidation.Store
+
 	// watermark is the committed lastProcessedBlock (in-memory mirror of the
 	// persisted file; advanced atomically only at backfill commit points).
 	watermark uint64
@@ -52,7 +59,11 @@ type Bot struct {
 // nonce manager from the confirmed nonce, builds the sender and the price feed,
 // and loads the watermark. Any failure here is fatal and closes the resources
 // opened so far.
-func New(ctx context.Context, cfg Config, log *slog.Logger) (*Bot, error) {
+//
+// obs is the optional liquidation observation store (nil = observation
+// disabled, log only); it is deliberately not fatal to pass nil or for the
+// store to fail later, because observation is a side-channel, not the main path.
+func New(ctx context.Context, cfg Config, log *slog.Logger, obs liquidation.Store) (*Bot, error) {
 	if log == nil {
 		log = slog.Default()
 	}
@@ -128,6 +139,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*Bot, error) {
 		sender:    sender,
 		nonce:     mgr,
 		updates:   noUpdates,
+		obs:       obs,
 		watermark: wm,
 	}
 	b.handler = tableHandler{table: table}
@@ -277,6 +289,7 @@ func (b *Bot) scanAndLiquidate(ctx context.Context) {
 				continue
 			}
 			b.log.Info("liquidate submitted", "feed", batch.FeedID, "count", len(chunk), "tx", hash.Hex())
+			b.recordLiquidation(ctx, batch, chunk, hash)
 		}
 	}
 
@@ -289,6 +302,35 @@ func (b *Bot) scanAndLiquidate(ctx context.Context) {
 		"nonce_issued", b.nonce.Issued(),
 		"nonce_next", b.nonce.Peek(),
 	)
+}
+
+// recordLiquidation persists one successfully submitted liquidate() chunk as one
+// observation event per position. It is a side-channel: a nil store is a no-op,
+// and any store failure (including a timeout) degrades to a warning log so the
+// observation path can never block or fail the liquidation loop.
+func (b *Bot) recordLiquidation(ctx context.Context, batch position.Batch, chunk []*big.Int, txHash common.Hash) {
+	if b.obs == nil {
+		return
+	}
+
+	events := make([]liquidation.Event, 0, len(chunk))
+	for _, id := range chunk {
+		events = append(events, liquidation.Event{
+			PositionID: id.Uint64(),
+			FeedID:     batch.FeedID,
+			ExitPrice:  batch.MarkPrice.String(),
+			TxHash:     txHash.Hex(),
+		})
+	}
+
+	// One bounded round-trip for the whole chunk, regardless of its size, so a
+	// hung DB can stall the loop by at most ObsWriteTimeout per submission.
+	wctx, cancel := context.WithTimeout(ctx, b.cfg.ObsWriteTimeout)
+	defer cancel()
+	if err := b.obs.Record(wctx, events); err != nil {
+		b.log.Warn("liquidation events not persisted",
+			"feed", batch.FeedID, "count", len(events), "tx", txHash.Hex(), "err", err)
+	}
 }
 
 // tableHandler feeds chain events into the position table. HandleLiquidated

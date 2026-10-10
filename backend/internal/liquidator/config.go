@@ -76,6 +76,12 @@ type Config struct {
 	// local-chain validation (GAP-40).
 	MaxPositionsPerCall int
 
+	// ObsWriteTimeout bounds each observation write (one round-trip, all
+	// positions of one chunk). The observation channel is a side-channel: a slow
+	// or hung DB must never stall the liquidation loop, so a timeout here
+	// degrades to a warning log rather than propagating.
+	ObsWriteTimeout time.Duration
+
 	// GasPriceWei, when positive, is used verbatim (testnet: pin it high rather
 	// than estimate, 推进方案 2.2). Nil lets the node suggest.
 	GasPriceWei *big.Int
@@ -119,6 +125,7 @@ func LoadConfig(getenv func(string) string) (*Config, error) {
 		BackoffMax:          parseDuration(getenv("LIQUIDATOR_BACKOFF_MAX"), 30*time.Second),
 		HealthyThreshold:    parseDuration(getenv("LIQUIDATOR_HEALTHY_THRESHOLD"), 30*time.Second),
 		MaxPositionsPerCall: parseInt(getenv("LIQUIDATOR_MAX_POSITIONS_PER_CALL"), 50),
+		ObsWriteTimeout:     parseDuration(getenv("LIQUIDATOR_OBS_WRITE_TIMEOUT"), 2*time.Second),
 		GasPriceWei:         parseBigWei(getenv("LIQUIDATOR_GAS_PRICE_WEI")),
 		GasLimit:            parseUint(getenv("LIQUIDATOR_GAS_LIMIT")),
 		TxTimeout:           parseDuration(getenv("LIQUIDATOR_TX_TIMEOUT"), 60*time.Second),

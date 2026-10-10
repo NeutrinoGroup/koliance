@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+
+	"github.com/koliance/backend/internal/liquidation"
 )
 
 const schemaSQL = `
@@ -150,8 +152,13 @@ func main() {
 	fmt.Println("✅ Successfully connected to Supabase PostgreSQL!")
 
 	fmt.Println("⏳ Initializing database schema...")
-	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
-		log.Fatalf("❌ Schema initialization failed: %v", err)
+	// liquidation.SchemaSQL lives next to its reader/writer (internal/liquidation)
+	// so the table shape has exactly one source of truth; migrate is just one of
+	// its two idempotent initialisers (the bot's PG.EnsureSchema is the other).
+	for _, ddl := range []string{schemaSQL, liquidation.SchemaSQL} {
+		if _, err := pool.Exec(ctx, ddl); err != nil {
+			log.Fatalf("❌ Schema initialization failed: %v", err)
+		}
 	}
 
 	fmt.Println("🎉 Database tables successfully created/verified in Supabase:")
@@ -159,5 +166,6 @@ func main() {
 	fmt.Println("   ├─ card_transactions")
 	fmt.Println("   ├─ session_keys")
 	fmt.Println("   ├─ game_proofs")
-	fmt.Println("   └─ market_orders")
+	fmt.Println("   ├─ market_orders")
+	fmt.Println("   └─ liquidation_events")
 }

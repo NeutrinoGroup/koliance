@@ -15,8 +15,13 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/koliance/backend/internal/liquidation"
 	"github.com/koliance/backend/internal/liquidator"
 )
 
@@ -43,7 +48,14 @@ func main() {
 	}
 	defer release()
 
-	bot, err := liquidator.New(ctx, *cfg, logger)
+	// Observation is a side-channel: the store is optional, and every failure
+	// below degrades to "log only, no store" rather than blocking the bot.
+	obs := connectObservationStore(ctx, logger)
+	if obs != nil {
+		defer obs.Close()
+	}
+
+	bot, err := liquidator.New(ctx, *cfg, logger, obs)
 	if err != nil {
 		logger.Error("startup", "err", err)
 		os.Exit(1)
@@ -55,4 +67,40 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("liquidator stopped cleanly")
+}
+
+// connectObservationStore builds the liquidation_events store from DATABASE_URL.
+// It never fails the process: an absent URL or any connection/schema failure is
+// logged as an explicit warning and returns nil, which disables observation
+// while the liquidation loop keeps running.
+func connectObservationStore(ctx context.Context, logger *slog.Logger) *liquidation.PG {
+	url := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if url == "" {
+		logger.Warn("liquidation observations disabled: DATABASE_URL is not set")
+		return nil
+	}
+
+	cctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	pool, err := pgxpool.New(cctx, url)
+	if err != nil {
+		logger.Warn("liquidation observations disabled: failed to build pool", "err", err)
+		return nil
+	}
+	if err := pool.Ping(cctx); err != nil {
+		pool.Close()
+		logger.Warn("liquidation observations disabled: ping failed", "err", err)
+		return nil
+	}
+
+	store := liquidation.NewPG(pool)
+	if err := store.EnsureSchema(cctx); err != nil {
+		pool.Close()
+		logger.Warn("liquidation observations disabled: ensure schema failed", "err", err)
+		return nil
+	}
+
+	logger.Info("liquidation observations enabled")
+	return store
 }

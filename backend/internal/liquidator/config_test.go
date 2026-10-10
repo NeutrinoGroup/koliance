@@ -42,6 +42,9 @@ func TestLoadConfigValid(t *testing.T) {
 	if cfg.MaxPositionsPerCall != 50 {
 		t.Errorf("MaxPositionsPerCall = %d, want 50", cfg.MaxPositionsPerCall)
 	}
+	if cfg.ObsWriteTimeout != 2*time.Second {
+		t.Errorf("ObsWriteTimeout = %s, want 2s", cfg.ObsWriteTimeout)
+	}
 	if cfg.Feed != "demo" {
 		t.Errorf("Feed = %s, want demo", cfg.Feed)
 	}

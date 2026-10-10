@@ -12,6 +12,7 @@ import (
 	"github.com/koliance/backend/internal/developer"
 	"github.com/koliance/backend/internal/game"
 	"github.com/koliance/backend/internal/httpapi"
+	"github.com/koliance/backend/internal/liquidation"
 	"github.com/koliance/backend/internal/market"
 	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
@@ -45,14 +46,15 @@ func main() {
 	devService := developer.NewService(githubCli)
 
 	handler := httpapi.NewRouter(httpapi.Deps{
-		Cfg:         cfg,
-		DB:          db,
-		Game:        gameService,
-		Cards:       cardService,
-		Market:      marketService,
-		PriceOracle: priceOracle,
-		Stripe:      stripeCli,
-		Dev:         devService,
+		Cfg:          cfg,
+		DB:           db,
+		Game:         gameService,
+		Cards:        cardService,
+		Market:       marketService,
+		PriceOracle:  priceOracle,
+		Stripe:       stripeCli,
+		Dev:          devService,
+		Liquidations: liquidation.NewPG(db.Pool),
 	})
 
 	port := cfg.Port
