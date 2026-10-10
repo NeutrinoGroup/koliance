@@ -193,9 +193,10 @@ Bot 侧绑定必须与冻结 ABI 严格对齐——一旦错位，不是崩溃�
     「本次不引入 Docker」**冲突**——本 ADR 接受：不引 Docker，每次 deploy 多付一次模块图拉取。
 - LGPL-3.0 上游许可的长期合规考量（demo 不阻塞，闭源分发需再评估）。
 
-### 遗留
-- **abigen 生成产物的入仓策略**（入库与否 + `go generate` 留痕）：实现约定，本 ADR 只定「用什么」。
-- **版本 pin**：go-ethereum 版本需固定并写进 `go.sum`，随首次 `go get` 一并锁定。
+### 遗留（`docs/changes/022` 已落地）
+
+- **abigen 生成产物的入仓策略**：已定——**入库**（`backend/internal/chain/bindings/ipositionmanager.go`）+ **ABI 快照入库**（`ipositionmanager.abi.json`）+ **`go:generate` 留痕**（`doc.go`，`go run github.com/ethereum/go-ethereum/cmd/abigen@v1.16.9`）。见 `docs/changes/022`。
+- **版本 pin**：已锁定 `github.com/ethereum/go-ethereum v1.16.9`（go.mod/go.sum；`go list -m -versions` 实测最新 1.17.8，选 1.16 线最新补丁）。见 `docs/changes/022`。
 
 > WS 断线重连与水位已**升入正文 §5.3**（P1 架构），不再作「遗留」。
 
