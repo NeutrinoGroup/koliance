@@ -8,8 +8,8 @@
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
 > **最后更新**：2026-10-11 · 分支 `feat/liquidation-bot-chain`
-> **本轮**：**GAP-38 新登记**（§5，ADR-005 §5.3）· **GAP-26 接链层已落地**（§3，`docs/changes/022`）
-> **最新登记**：**GAP-38 新登记**（§5）· **GAP-26 部分**（接链层已落地）· GAP-37 已修（§3.6）· GAP-25 标注已修正（§3.7）
+> **本轮**：**GAP-39 新登记**（§5，价格层 Hermes 生产路径）· **GAP-26 价格层已落地**（§3，`docs/changes/023`）
+> **最新登记**：**GAP-39 新登记**（§5）· **GAP-26 部分**（接链层 + 价格层已落地）· GAP-38 待做（§5）
 
 ---
 
@@ -80,7 +80,7 @@
 | GAP-23 | RFC 架构与仓库分层不兼容 + 4 处内部矛盾 | 🔴 P0 | ⬜ | 设计决策 |
 | GAP-24 | 三套 Session Key 模型互不兼容 | 🟠 P1 | 🟠 | **链上闭环**（`013`+`014`）；Go 侧仍用 `sk_sess_` |
 | GAP-25 | 全局锁串行化 vs 10,000 TPS 目标 | 🟠 P1 | 🟠 | **保留、不阻塞**；须先写基准测试量化（`ADR-004`，见 §3.7） |
-| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | 🟠 | 部分：接链层已落地（`022`）；见 §3 |
+| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | 🟠 | 部分：接链层 + 价格层已落地（`022`+`023`）；见 §3 |
 | GAP-27 | 逐块资金费率未实现（赛道靶心） | 🟠 P1 | ✅ | 本分支 |
 | GAP-28 | 双 lockfile，`npm ci` 装过期树 | 🟡 P2 | ✅ | 前提已消失（`docs/changes/020`） |
 | GAP-29 | 缺 `deploy/` 目录 | 🟡 P2 | ✅ | `docs/changes/019` |
@@ -93,6 +93,7 @@
 | GAP-36 | `.gitignore` 的 `ignition/deployments/` 管不到 `contracts/` 下 → 部署产物误入库 | 🟠 P1 | ✅ | 见 §3.4 |
 | GAP-37 | 面板同时显示两条口径的清算状态（一条含资金费、一条不含） | 🟠 P1 | ✅ | 见 §3.6（`docs/changes/021`） |
 | GAP-38 | WS 断线重连 + `lastProcessedBlock` 水位持久化（ADR-005 §5.3 P1） | 🟠 P1 | 🟠 | 见 §5（`docs/changes/022`） |
+| GAP-39 | Hermes 生产路径：流式 tick / staleness 边界 / 批量更新 / 置信区间 | 🟡 P2 | 🟠 | 见 §5.2（`docs/changes/023`） |
 
 ---
 
@@ -154,7 +155,7 @@ Test-Path .github/workflows/ci.yml    # 期望 True
 | `Vault.sol` / `PositionManager.sol` | ✅ 已实现，138 用例通过 | — |
 | Pyth 拉取式预言机 | ✅ `PythOracleAdapter` 已实现；**美股 feed 在 Monad 上不可用**（`执行方案-后端与合约.md:29-46` 实测） | 外部事实，非缺陷 |
 | 前端交易面板 | ✅ `/perp` 页面 + `PositionPanel`，读链不读 mock | — |
-| **Go 清算 Bot** | 🟠 **核心已做**（`internal/perp/{position,nonce}`，29 测试 `-race` 通过）；**接链层已做**（`internal/chain`，10 测试 `-race` 通过，`docs/changes/022`）；**交易发送/装配未做** | ⛔ 交易/回执需 **已部署的 `PositionManager` 地址** |
+| **Go 清算 Bot** | 🟠 **核心已做**（`internal/perp/{position,nonce}`，29 测试 `-race` 通过）；**接链层已做**（`internal/chain`，10 测试 `-race` 通过，`docs/changes/022`）；**价格层已做**（`internal/oracle`，12 测试 `-race` 通过，`docs/changes/023`）；**交易发送/装配未做** | ⛔ 交易/回执需 **已部署的 `PositionManager` 地址** |
 | **链上部署** | 🔴 **未做** | ⛔ **需要 `PRIVATE_KEY` + Monad 测试币** |
 | `GET /api/v1/liquidations` | 🟠 未做 | ⛔ 依赖 Bot |
 
@@ -458,6 +459,7 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | GAP-25 | `agentcard` 全局锁 → 需先写基准测试量化 | `backend/internal/agentcard` | 1 天 |
 | GAP-13 | 后端接 go-ethereum，`/health` 改为真实探活 | `backend/` | 1 天 |
 | GAP-38 | WS 断线重连 + `lastProcessedBlock` 水位持久化（ADR-005 §5.3 P1） | `backend/internal/chain`（`Backfill`/`Subscribe` 原语已就位）+ `cmd/liquidator` | 1 天 |
+| GAP-39 | Hermes 生产路径：SSE/WS 流式 tick、staleness 边界（镜像 `getPriceNoOlderThan`）、批量更新、置信区间 | `backend/internal/oracle/hermes.go`（最小 REST 已就位） | 0.5 天 |
 
 ### 5.1 GAP-38：WS 断线重连与事件水位（ADR-005 §5.3 P1）
 
@@ -471,6 +473,19 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 
 **负向判据（D3，落地时必须真跑）**：kill 本地 `npx hardhat node` → 发若干事件 → 再拉起，断言回填后**零丢事件**
 （本地 `PositionOpened` 计数 == 链上事件数）。这是"失败即无声"的高危项，判据必须有牙。
+
+### 5.2 GAP-39：Hermes 生产路径（价格层的最小实现遗留）
+
+`internal/oracle`（`docs/changes/023`）的 `HermesFeed` 是**演示不阻塞的最小实现**：单次
+`/v2/updates/price/latest` REST GET + `price/expo` 归一化（`NormalizeHermesPrice` 已逐行镜像
+`PythOracleAdapter._normalize` 并有对拍测试）。生产叙事还差：
+
+- **SSE/WS 流式 tick**：现为每价一次轮询式 GET，无订阅、无缓存。
+- **staleness 边界**：镜像 `PythOracleAdapter.getPriceNoOlderThan`——拉取式预言机上，测试网 feed
+  可能**月级陈旧**却仍返回一个价；现实现不拒绝陈旧价，对保证金系统是错误失败模式。
+- **批量更新 / 置信区间**：现实现逐 feed 取、丢弃 `conf` 字段。
+
+**演示不受影响**：演示主路径是 `DemoFeed`（链上 `DemoOracle`，owner 可调、无 staleness 语义），`HermesFeed` 只作生产叙事。
 
 ---
 
