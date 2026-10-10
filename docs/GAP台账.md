@@ -8,8 +8,8 @@
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
 > **最后更新**：2026-10-11 · 分支 `feat/liquidation-bot-chain`
-> **本轮**：**GAP-39 新登记**（§5，价格层 Hermes 生产路径）· **GAP-26 价格层已落地**（§3，`docs/changes/023`）
-> **最新登记**：**GAP-39 新登记**（§5）· **GAP-26 部分**（接链层 + 价格层已落地）· GAP-38 待做（§5）
+> **本轮**：**GAP-40 / GAP-41 新登记**（§5.3 / §5.4）· **GAP-38 ✅**（Bot 装配落地，`docs/changes/024`）· **GAP-26 交易发送 + cmd/liquidator 已落地**（§3）
+> **最新登记**：**GAP-40 / GAP-41 新登记**（§5.3 / §5.4）· GAP-38 ✅ · GAP-26 剩「Monad 部署 + `/api/v1/liquidations`」
 
 ---
 
@@ -80,7 +80,7 @@
 | GAP-23 | RFC 架构与仓库分层不兼容 + 4 处内部矛盾 | 🔴 P0 | ⬜ | 设计决策 |
 | GAP-24 | 三套 Session Key 模型互不兼容 | 🟠 P1 | 🟠 | **链上闭环**（`013`+`014`）；Go 侧仍用 `sk_sess_` |
 | GAP-25 | 全局锁串行化 vs 10,000 TPS 目标 | 🟠 P1 | 🟠 | **保留、不阻塞**；须先写基准测试量化（`ADR-004`，见 §3.7） |
-| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | 🟠 | 部分：接链层 + 价格层已落地（`022`+`023`）；见 §3 |
+| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | 🟠 | 部分：接链层 + 价格层 + **Bot 装配**已落地（`022`+`023`+`024`）；见 §3 |
 | GAP-27 | 逐块资金费率未实现（赛道靶心） | 🟠 P1 | ✅ | 本分支 |
 | GAP-28 | 双 lockfile，`npm ci` 装过期树 | 🟡 P2 | ✅ | 前提已消失（`docs/changes/020`） |
 | GAP-29 | 缺 `deploy/` 目录 | 🟡 P2 | ✅ | `docs/changes/019` |
@@ -92,8 +92,10 @@
 | GAP-35 | 全库行尾未重规范化（CRLF/LF 混用） | 🟡 P2 | ✅ | 见 §3.3（**推迟理由不成立**） |
 | GAP-36 | `.gitignore` 的 `ignition/deployments/` 管不到 `contracts/` 下 → 部署产物误入库 | 🟠 P1 | ✅ | 见 §3.4 |
 | GAP-37 | 面板同时显示两条口径的清算状态（一条含资金费、一条不含） | 🟠 P1 | ✅ | 见 §3.6（`docs/changes/021`） |
-| GAP-38 | WS 断线重连 + `lastProcessedBlock` 水位持久化（ADR-005 §5.3 P1） | 🟠 P1 | 🟠 | 见 §5（`docs/changes/022`） |
+| GAP-38 | WS 断线重连 + `lastProcessedBlock` 水位持久化（ADR-005 §5.3 P1） | 🟠 P1 | ✅ | 见 §5.1（`docs/changes/024`） |
 | GAP-39 | Hermes 生产路径：流式 tick / staleness 边界 / 批量更新 / 置信区间 | 🟡 P2 | 🟠 | 见 §5.2（`docs/changes/023`） |
+| GAP-40 | 本地链端到端集成验证（Bot 提交 `liquidate` 回执）未跑 | 🟠 P1 | 🟠 | 见 §5.3（`docs/changes/024`） |
+| GAP-41 | Bot 镜像不含资金费 → 低估可清算集合 | 🟠 P1 | 🟠 | 见 §5.4（`docs/changes/024`） |
 
 ---
 
@@ -155,7 +157,7 @@ Test-Path .github/workflows/ci.yml    # 期望 True
 | `Vault.sol` / `PositionManager.sol` | ✅ 已实现，138 用例通过 | — |
 | Pyth 拉取式预言机 | ✅ `PythOracleAdapter` 已实现；**美股 feed 在 Monad 上不可用**（`执行方案-后端与合约.md:29-46` 实测） | 外部事实，非缺陷 |
 | 前端交易面板 | ✅ `/perp` 页面 + `PositionPanel`，读链不读 mock | — |
-| **Go 清算 Bot** | 🟠 **核心已做**（`internal/perp/{position,nonce}`，29 测试 `-race` 通过）；**接链层已做**（`internal/chain`，10 测试 `-race` 通过，`docs/changes/022`）；**价格层已做**（`internal/oracle`，12 测试 `-race` 通过，`docs/changes/023`）；**交易发送/装配未做** | ⛔ 交易/回执需 **已部署的 `PositionManager` 地址** |
+| **Go 清算 Bot** | 🟠 **核心已做**（`internal/perp/{position,nonce}`）；**接链层已做**（`internal/chain`，`022`）；**价格层已做**（`internal/oracle`，`023`）；**交易发送 + `cmd/liquidator` 装配已做**（`internal/liquidator`，16 测试 `-race` 通过，`024`） | ⛔ **端到端回执**需本地链集成（GAP-40）+ 已部署的 `PositionManager` 地址 |
 | **链上部署** | 🔴 **未做** | ⛔ **需要 `PRIVATE_KEY` + Monad 测试币** |
 | `GET /api/v1/liquidations` | 🟠 未做 | ⛔ 依赖 Bot |
 
@@ -458,10 +460,16 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | --- | --- | --- | --- |
 | GAP-25 | `agentcard` 全局锁 → 需先写基准测试量化 | `backend/internal/agentcard` | 1 天 |
 | GAP-13 | 后端接 go-ethereum，`/health` 改为真实探活 | `backend/` | 1 天 |
-| GAP-38 | WS 断线重连 + `lastProcessedBlock` 水位持久化（ADR-005 §5.3 P1） | `backend/internal/chain`（`Backfill`/`Subscribe` 原语已就位）+ `cmd/liquidator` | 1 天 |
 | GAP-39 | Hermes 生产路径：SSE/WS 流式 tick、staleness 边界（镜像 `getPriceNoOlderThan`）、批量更新、置信区间 | `backend/internal/oracle/hermes.go`（最小 REST 已就位） | 0.5 天 |
+| GAP-40 | 本地链端到端集成验证（见 §5.3） | `contracts/`（`npx hardhat node` + `demo-seed.ts`）+ `cmd/liquidator` | 0.5 天 |
+| GAP-41 | Bot 镜像纳入资金费（见 §5.4） | `backend/internal/perp/position` + `internal/chain` | 0.5 天 |
 
-### 5.1 GAP-38：WS 断线重连与事件水位（ADR-005 §5.3 P1）
+### 5.1 GAP-38：WS 断线重连与事件水位（ADR-005 §5.3 P1）—— ✅ 已落地
+
+> ✅ **已落地**（`docs/changes/024`，`internal/liquidator`）。实现口径见该文档 §关键设计 3：
+> **保守水位 + 回填提交点原子推进**（tmp+rename 持久化 `lastProcessedBlock`；`chain.EventHandler` 边界不带区块号，
+> 故推进粒度放宽到回填提交点，满足同一「不重不漏」不变量）。原 D3 负向判据（kill 本地链 → 发事件 → 再拉起，
+> 断言零丢事件）**并入 GAP-40 的本地链集成验证**（见 §5.3）。
 
 `internal/chain`（`docs/changes/022`）只提供 `Backfill(ctx, from, to, h)` 与 `Subscribe(ctx, h)` 两个**原语**，
 刻意不自愈。ADR-005 §5.3 的架构不变量——**持久化 `lastProcessedBlock` 水位** + **指数退避重连** +
@@ -486,6 +494,56 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 - **批量更新 / 置信区间**：现实现逐 feed 取、丢弃 `conf` 字段。
 
 **演示不受影响**：演示主路径是 `DemoFeed`（链上 `DemoOracle`，owner 可调、无 staleness 语义），`HermesFeed` 只作生产叙事。
+
+### 5.3 GAP-40：本地链端到端集成验证（Bot 提交 `liquidate` 回执）未跑
+
+`cmd/liquidator` 装配与单测已落地（`docs/changes/024`），但**端到端回执尚未在本地链上跑过**——
+按 D1 不得伪装成已跑。本地工具链已就位（`contracts/node_modules` 存在、`ignition/modules/PerpStack.ts` 与
+`scripts/demo-seed.ts` 存在），命令如下（本子代理未执行，留待集成）：
+
+```powershell
+# 终端 A：起本地链（HTTP + WS 同端口 8545，chain 31337，账户带测试币）
+cd contracts
+npx hardhat node
+
+# 终端 B：部署 + 注入流动性 + 开 20 笔混合仓位（14 long / 6 short @ 50x，入场价 180）
+npx hardhat run scripts/demo-seed.ts --network localhost
+# 记录输出的 NEXT_PUBLIC_PERP_POSITION_MANAGER / NEXT_PUBLIC_PERP_ORACLE 地址
+
+# 终端 B：写一个 drop-price 脚本（或复用 DemoControlPanel 的 setPrice），把 NVDA 价从 180 打到多头强平价下
+# （多头 50x、entry 180 → 强平价 ≈ 163.6）
+
+# 终端 C：起 Bot（私钥取 hardhat node 输出的任一 funded 账户私钥）
+cd backend
+$env:LIQUIDATOR_RPC="http://127.0.0.1:8545"
+$env:LIQUIDATOR_WS="ws://127.0.0.1:8545"
+$env:LIQUIDATOR_CHAIN_ID="31337"
+$env:LIQUIDATOR_POSITION_MANAGER="<pm 地址>"
+$env:LIQUIDATOR_DEMO_ORACLE="<oracle 地址>"
+$env:LIQUIDATOR_FEED="demo"
+$env:LIQUIDATOR_PRIVATE_KEY="<funded 账户私钥，无 0x 也可>"
+$env:LIQUIDATOR_START_BLOCK="1"
+go run ./cmd/liquidator
+
+# 判据：Bot 结构化日志出现 "liquidate submitted"（tx=0x…），且硬链接收到 PositionLiquidated 回执；
+# 附带 D3 负向：kill 终端 A 的 node → 发若干事件 → 再拉起 node + Bot，断言本地 PositionOpened 计数 == 链上事件数（零丢）。
+```
+
+**还差的最小件**：一个「调低 DemoOracle 价」的脚本（`demo-seed.ts` 不降价；`DemoControlPanel.tsx` 是前端按钮，
+headless 集成需要一个等价脚本或 `cast send` 一行）。
+
+### 5.4 GAP-41：Bot 镜像不含资金费 → 低估可清算集合
+
+`internal/perp/position.Position` **无 `entryFundingIndex`**（该包设计于 ADR-003 逐块资金费之前，
+`position.go:32-35` 明写「liquidator 无用的字段省略」）。故 `position.Scan` 按**纯价格**判清算，而链上
+`_isLiquidatable` 是 `collateral + pnl - funding`（`PositionManager.sol:1045-1049`）。
+
+**后果（安全方向，演示不阻塞）**：资金费非零时，Bot **低估可清算集合**——漏清算（资金费把仓位推过线时 Bot 看不到）；
+反向（Bot 认为可清算、链上因负资金费不可清算）时链上 `liquidate` 对不可清算仓位 `continue` 静默跳过，**不会 revert**。
+
+**解除条件**：`position.Position` 增补 `EntryFundingIndex`，`chain.positionFromEvent` 从 `PositionOpened` 事件之外
+补该字段（事件本身不携带它，需在 open 时按 `cumulativeFundingIndex` 快照或改事件）；`Scan` 的判定与
+`_isLiquidatable` 对齐。属 `internal/perp/position` + `internal/chain` 的改动，超出 `024` 装配范围。
 
 ---
 
