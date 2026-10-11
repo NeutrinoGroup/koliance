@@ -112,4 +112,32 @@ describe("KolToken (kol / ICON)", async function () {
     }
     assert.ok(reverted, "Should reject claim if reward is below minReward");
   });
+
+  it("Should transition currentEra on-chain across 730 days and claim halved block reward", async function () {
+    const kolToken = await viem.deployContract("KolToken");
+    const halvingPeriod = await kolToken.read.HALVING_PERIOD();
+
+    assert.equal(await kolToken.read.currentEra(), 0n);
+
+    // Fast-forward 730 days + 100 seconds to cross into Era 1
+    await testClient.increaseTime({ seconds: Number(halvingPeriod) + 100 });
+    await testClient.mine({ blocks: 1 });
+
+    assert.equal(await kolToken.read.currentEra(), 1n);
+
+    const minerContract = await viem.getContractAt(
+      "KolToken",
+      kolToken.address,
+      { client: { wallet: minerClient } }
+    );
+
+    await minerContract.write.claimBlockReward();
+
+    const minerBalance = await kolToken.read.balanceOf([minerClient.account.address]);
+    const rateEra0 = await kolToken.read.rewardRatePerSecondForEra([0n]);
+    const rateEra1 = await kolToken.read.rewardRatePerSecondForEra([1n]);
+
+    // Expected reward includes full Era 0 plus the elapsed seconds in Era 1
+    assert.ok(minerBalance >= halvingPeriod * rateEra0 + 100n * rateEra1);
+  });
 });

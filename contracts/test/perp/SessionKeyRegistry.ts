@@ -612,6 +612,11 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
     const currentNonce = await registry.read.userNonce([user.account.address]);
     const { message, signature } = await sign(user.account, { nonce: currentNonce });
 
+    await expectRevert(
+      registry.write.invalidateNonce([user.account.address], { account: outsider.account }),
+      "NotAuthorizedCaller",
+    );
+
     await registry.write.invalidateNonce([user.account.address], { account: user.account });
     const newNonce = await registry.read.userNonce([user.account.address]);
     assert.equal(newNonce, currentNonce + 1n);
@@ -660,6 +665,24 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       ),
       "DelegationIsFrozen",
     );
+
+    // Unfreezing restores ability to re-register
+    await registry.write.unfreeze([sessionKey], { account: user.account });
+    await registry.write.registerDelegation(
+      [
+        message.user as `0x${string}`,
+        message.agent as `0x${string}`,
+        message.sessionKey as `0x${string}`,
+        message.maxSpendPerTx as bigint,
+        message.dailySpendLimit as bigint,
+        message.validUntil as bigint,
+        message.nonce as bigint,
+        signature,
+      ],
+      { account: user.account },
+    );
+    const unfrozenDelegation = await registry.read.getDelegation([sessionKey]);
+    assert.equal(unfrozenDelegation.frozen, false);
   });
 
   it("S-3: retains spentInWindow and windowStart when re-registering the same session key", async function () {
@@ -704,5 +727,11 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       registry.write.authorizeSpend([sessionKey, half], { account: agent.account }),
       "ExceededDailyLimit",
     );
+
+    // After 24h, the window still resets cleanly for the re-registered session key
+    await publicClient.request({ method: "evm_increaseTime", params: [Number(ONE_DAY) + 1] } as never);
+    await publicClient.request({ method: "evm_mine" } as never);
+    assert.equal(await registry.read.remainingDailyAllowance([sessionKey]), DAILY_LIMIT);
+    await registry.write.authorizeSpend([sessionKey, half], { account: agent.account });
   });
 });
