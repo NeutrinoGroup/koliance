@@ -1,5 +1,7 @@
 # Ignore Smart Contracts and Go backend from Vercel web deployment
 contracts/
 backend/
-.env*
+.env
+.env.local
+.env.*.local
 *.sol
