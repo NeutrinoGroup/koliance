@@ -604,4 +604,33 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       "NoSuchDelegation",
     );
   });
+
+  it("S-1: invalidateNonce burns pending delegations signed with previous nonce", async function () {
+    nonce = 600n;
+    await reset();
+
+    const currentNonce = await registry.read.userNonce([user.account.address]);
+    const { message, signature } = await sign(user.account, { nonce: currentNonce });
+
+    await registry.write.invalidateNonce([user.account.address], { account: user.account });
+    const newNonce = await registry.read.userNonce([user.account.address]);
+    assert.equal(newNonce, currentNonce + 1n);
+
+    await expectRevert(
+      registry.write.registerDelegation(
+        [
+          message.user as `0x${string}`,
+          message.agent as `0x${string}`,
+          message.sessionKey as `0x${string}`,
+          message.maxSpendPerTx as bigint,
+          message.dailySpendLimit as bigint,
+          message.validUntil as bigint,
+          message.nonce as bigint,
+          signature,
+        ],
+        { account: user.account },
+      ),
+      "InvalidNonce",
+    );
+  });
 });
