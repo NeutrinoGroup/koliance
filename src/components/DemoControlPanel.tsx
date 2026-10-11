@@ -1,16 +1,8 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  createPublicClient,
-  createWalletClient,
-  custom,
-  http,
-  formatUnits,
-  type PublicClient,
-  type WalletClient,
-} from "viem";
-import { monadTestnet } from "@/lib/contract";
+import { formatUnits, type PublicClient, type WalletClient } from "viem";
+import { createPerpPublicClient, createPerpWalletClient, perpChain } from "@/lib/perpChain";
 import {
   FEEDS,
   FEED_SYMBOLS,
@@ -52,11 +44,7 @@ import { DEMO_ORACLE_ABI, POSITION_MANAGER_ABI } from "@/lib/perpAbi";
 /** Bumps the panel offers. Kept well inside DemoOracle's (-10000, 10000) bps limit. */
 const BUMP_STEPS = [-1500n, -1000n, -500n, 500n, 1000n, 1500n] as const;
 
-const CLIENT = createPublicClient({
-  chain: monadTestnet,
-  transport: http("https://testnet-rpc.monad.xyz", { batch: true }),
-  batch: { multicall: true },
-});
+const CLIENT = createPerpPublicClient();
 
 interface LiquidationRow {
   positionId: bigint;
@@ -90,12 +78,7 @@ export function DemoControlPanel({ account }: { account: `0x${string}` | null })
   );
 
   const walletClient = useMemo<WalletClient | null>(() => {
-    if (typeof window === "undefined" || !window.ethereum || !account) return null;
-    return createWalletClient({
-      chain: monadTestnet,
-      account,
-      transport: custom(window.ethereum),
-    });
+    return createPerpWalletClient(account);
   }, [account]);
 
   const readPrices = useCallback(async () => {
@@ -127,7 +110,8 @@ export function DemoControlPanel({ account }: { account: `0x${string}` | null })
         functionName: "nextPositionId",
       })) as bigint;
 
-      const count = Number(next - 1n);
+      // PositionManager assigns `++nextPositionId`, so it holds the LAST id issued.
+      const count = Number(next);
       const candidateIds = Array.from(
         { length: count > 0 ? count : 0 },
         (_, i) => BigInt(i + 1)
@@ -216,8 +200,8 @@ export function DemoControlPanel({ account }: { account: `0x${string}` | null })
           abi: DEMO_ORACLE_ABI,
           functionName: "bumpPrice",
           args: [FEEDS[sym], deltaBps],
-          account,
-          chain: monadTestnet,
+          account: walletClient.account ?? account,
+          chain: perpChain,
         });
         await CLIENT.waitForTransactionReceipt({ hash });
         setFeedback({ kind: "ok", msg: `${sym} ${label} 已生效 · ${hash.slice(0, 10)}…` });
@@ -256,8 +240,8 @@ export function DemoControlPanel({ account }: { account: `0x${string}` | null })
         abi: POSITION_MANAGER_ABI,
         functionName: "liquidate",
         args: [ids, []],
-        account,
-        chain: monadTestnet,
+        account: walletClient.account ?? account,
+        chain: perpChain,
       });
       const receipt = await CLIENT.waitForTransactionReceipt({ hash });
       const elapsed = Date.now() - started;

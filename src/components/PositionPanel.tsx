@@ -11,8 +11,8 @@ import {
   RefreshCw,
   Wallet,
 } from "lucide-react";
-import { createPublicClient, createWalletClient, custom, http, formatUnits } from "viem";
-import { monadTestnet } from "@/lib/contract";
+import { formatUnits } from "viem";
+import { createPerpPublicClient, createPerpWalletClient, perpChain, perpTxUrl } from "@/lib/perpChain";
 import {
   PERP_ADDRESSES,
   PERP_IS_CONFIGURED,
@@ -52,14 +52,9 @@ import {
  * mirror, not a read: the chain has no per-position liquidation-price getter.
  */
 
-const RPC = "https://testnet-rpc.monad.xyz";
 const E6 = 10n ** 6n;
 
-const CLIENT = createPublicClient({
-  chain: monadTestnet,
-  transport: http(RPC, { batch: true }),
-  batch: { multicall: true },
-});
+const CLIENT = createPerpPublicClient();
 
 /** The feed the demo trades. DemoOracle prices it; Pyth uses the same id. */
 const ACTIVE_FEED = FEEDS.NVDA;
@@ -203,8 +198,9 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
         setAllowance(alw);
       }
 
-      // Ids are contiguous from 1, so the scan is bounded by nextPositionId.
-      const count = Number(nextId - 1n);
+      // Ids are contiguous from 1 and PositionManager assigns `++nextPositionId`,
+      // so nextPositionId is the LAST id issued and the scan is 1..nextPositionId.
+      const count = Number(nextId);
       const candidateIds = Array.from(
         { length: count > 0 ? count : 0 },
         (_, i) => BigInt(i + 1)
@@ -307,12 +303,7 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
   // ---- writes --------------------------------------------------------------
 
   const writeClient = () => {
-    if (typeof window === "undefined" || !window.ethereum || !account) return null;
-    return createWalletClient({
-      account,
-      chain: monadTestnet,
-      transport: custom(window.ethereum),
-    });
+    return createPerpWalletClient(account);
   };
 
   const run = async (key: string, label: string, fn: () => Promise<`0x${string}`>) => {
@@ -340,6 +331,8 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
       const wc = writeClient()!;
       return wc.writeContract({
         address: PERP_ADDRESSES.usdc,
+        chain: perpChain,
+        account: wc.account ?? null,
         abi: MOCK_USDC_ABI,
         functionName: "approve",
         args: [PERP_ADDRESSES.positionManager, 2n ** 255n],
@@ -371,6 +364,8 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
         const wc = writeClient()!;
         return wc.writeContract({
           address: PERP_ADDRESSES.positionManager,
+          chain: perpChain,
+          account: wc.account ?? null,
           abi: POSITION_MANAGER_ABI,
           functionName: "openPosition",
           args: [ACTIVE_FEED, collateralAmount, mathForPreview.leverageBps, isLong, []],
@@ -398,6 +393,8 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
 
       return wc.writeContract({
         address: PERP_ADDRESSES.positionManager,
+        chain: perpChain,
+        account: wc.account ?? null,
         abi: POSITION_MANAGER_ABI,
         functionName: "closePosition",
         args: [id, minOutUsd, deadline, []],
@@ -463,9 +460,12 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
           )}
           <div className="min-w-0">
             <div>{feedback.msg}</div>
-            {feedback.txHash && (
+            {feedback.txHash && !perpTxUrl(feedback.txHash) && (
+              <div className="mt-1 truncate font-mono text-[10px] opacity-70">{feedback.txHash}</div>
+            )}
+            {feedback.txHash && perpTxUrl(feedback.txHash) && (
               <a
-                href={`https://testnet.monadexplorer.com/tx/${feedback.txHash}`}
+                href={perpTxUrl(feedback.txHash) ?? undefined}
                 target="_blank"
                 rel="noreferrer"
                 className="mt-1 flex items-center gap-1 truncate font-mono text-[10px] underline opacity-70"
