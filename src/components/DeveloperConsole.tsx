@@ -25,7 +25,12 @@ import {
   EyeOff,
   Server,
   Cpu,
+  Search,
+  ExternalLink,
+  History,
+  Filter,
 } from "lucide-react";
+import { getAuditHistory, recordAuditEvent, AuditRecord, AuditCategory } from "@/lib/audit";
 
 interface StatsData {
   wallet_address: string;
@@ -89,6 +94,11 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
   const [executionLogs, setExecutionLogs] = useState<string[]>([]);
   const [activeTier, setActiveTier] = useState<string>("STARTER_FREE");
 
+  // Traceable Audit History State
+  const [auditFilter, setAuditFilter] = useState<"ALL" | AuditCategory>("ALL");
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([]);
+
   // Telemetry stats
   const [stats, setStats] = useState<StatsData>({
     wallet_address: activeWallet,
@@ -98,79 +108,88 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
     success_rate_percent: 99.8,
     avg_latency_ms: 38,
     payment_distribution: {
-      crypto: 42,
-      stripe: 18,
-      bank: 5,
+      crypto: 14,
+      stripe: 6,
+      bank: 2,
     },
-    total_volume_usd: 3420.5,
+    total_volume_usd: 840.5,
     recent_orders: [
       {
-        payment_id: "pay_9a81cd",
-        item_name: "Nansen High Frequency Data Feed",
+        payment_id: "pay_98b671a8f",
+        item_name: "High Frequency Data Feed",
         amount: 25.0,
         quantity: 1,
         payment_method: "crypto",
         crypto_currency: "MON",
-        tx_hash: "0x8f19...20ba",
+        tx_hash: "0xfa91...10ab",
         on_chain_status: "COMMITTED_TO_MONAD",
         order_hash: "0x3e18...d8a1",
-        created_at: new Date(Date.now() - 1000 * 60 * 12).toISOString(),
+        created_at: "2026-10-11T08:52:10Z",
       },
       {
-        payment_id: "pay_7c22ee",
-        item_name: "Compute Cluster Node-04 Quota",
-        amount: 99.0,
-        quantity: 2,
-        payment_method: "stripe",
-        tx_hash: "0x11ab...e45f",
-        on_chain_status: "COMMITTED_TO_MONAD",
-        order_hash: "0xaa90...112c",
-        created_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-      },
-      {
-        payment_id: "pay_55aa12",
-        item_name: "Autonomous Model Token Pack",
-        amount: 15.0,
+        payment_id: "pay_7c2409f1e",
+        item_name: "Alpaca Perp Hedge Margin",
+        amount: 150.0,
         quantity: 1,
-        payment_method: "crypto",
-        crypto_currency: "KOL",
-        tx_hash: "0xcc29...3881",
+        payment_method: "stripe",
+        tx_hash: "0xb712...98c2",
         on_chain_status: "COMMITTED_TO_MONAD",
-        order_hash: "0xfa12...99ee",
-        created_at: new Date(Date.now() - 1000 * 60 * 110).toISOString(),
+        order_hash: "0x9812...e021",
+        created_at: "2026-10-11T07:15:30Z",
+      },
+      {
+        payment_id: "pay_4e0192ca5",
+        item_name: "Session Key Top-Up",
+        amount: 50.0,
+        quantity: 1,
+        payment_method: "bank",
+        tx_hash: "0x12fa...6789",
+        on_chain_status: "COMMITTED_TO_MONAD",
+        order_hash: "0x6102...ab34",
+        created_at: "2026-10-10T23:40:12Z",
       },
     ],
   });
 
-  // Bound Agents
+  // Bound Agents state
   const [agents, setAgents] = useState<BoundAgent[]>([
     {
-      agent_id: "agt_alpha_01",
-      agent_name: "Alpha-Perp-Arbitrage",
+      agent_id: "agt_8f29d71a4e",
+      agent_name: "alpha-trader",
       model_name: "deepseek-r1",
       wallet_address: activeWallet,
-      wallet_balance: 1500.0,
+      wallet_balance: 150.0,
       status: "ACTIVE",
       session_key: "sk_sess_9a8bc721de004f",
       limits: {
-        max_per_tx_usd: 150.0,
-        daily_limit_usd: 800.0,
+        max_per_tx_usd: 50.0,
+        daily_limit_usd: 200.0,
       },
     },
     {
-      agent_id: "agt_sentinel_02",
-      agent_name: "KOL-Sentinel-Bot",
+      agent_id: "agt_2b904e12c8",
+      agent_name: "arbitrage-scout",
       model_name: "gpt-4o",
-      wallet_address: "0x3198a291dc4581290bb82910fa82019ab921c812",
-      wallet_balance: 420.0,
+      wallet_address: activeWallet,
+      wallet_balance: 320.0,
       status: "ACTIVE",
-      session_key: "sk_sess_441ba892cd11aa",
+      session_key: "sk_sess_4f8120be89a1c2",
       limits: {
-        max_per_tx_usd: 50.0,
+        max_per_tx_usd: 100.0,
         daily_limit_usd: 300.0,
       },
     },
   ]);
+
+  // Load audit history
+  useEffect(() => {
+    setAuditLogs(getAuditHistory(activeWallet));
+    const handleUpdate = () => {
+      setAuditLogs(getAuditHistory(activeWallet));
+    };
+    window.addEventListener("koliance_audit_updated", handleUpdate);
+    return () => window.removeEventListener("koliance_audit_updated", handleUpdate);
+  }, [activeWallet]);
 
   // Fetch backend telemetry if online
   useEffect(() => {
@@ -238,6 +257,15 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
       setFreeClaimsLeft((c) => Math.max(0, c - 1));
       setClaimMessage(`[SUCCESS] 100 API Calls credited (Demo sandbox mode).`);
     } finally {
+      // Record traceable audit log
+      recordAuditEvent({
+        walletAddress: activeWallet,
+        category: "QUOTA",
+        action: "CLAIM_STARTER_FREE",
+        description: "Claimed 100 API Calls Starter Package (Gasless trial)",
+        amount: "+100 Calls",
+        status: "CONFIRMED_ON_MONAD",
+      });
       setClaiming(false);
       setTimeout(() => setClaimMessage(null), 4000);
     }
@@ -293,6 +321,16 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           ...prev.recent_orders.slice(0, 5),
         ],
       }));
+
+      recordAuditEvent({
+        walletAddress: activeWallet,
+        category: "PAYMENT",
+        action: "AGENT_MICROPAYMENT",
+        description: "Autonomous payment executed: Nansen High Frequency Data Feed",
+        amount: "-$25.00 USD",
+        tx_hash: simulatedTx,
+        status: "COMMITTED",
+      });
     } else {
       const newSessKey = "sk_sess_" + Math.random().toString(16).substring(2, 14);
       setExecutionLogs((prev) => [
@@ -315,10 +353,31 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
         },
         ...prev,
       ]);
+
+      recordAuditEvent({
+        walletAddress: activeWallet,
+        category: "AGENT",
+        action: "BIND_SESSION_KEY",
+        description: "Bound Alpha-Bot with deepseek-r1 to wallet session key",
+        amount: "Max $100/tx",
+        status: "CONFIRMED_ON_MONAD",
+      });
     }
 
     setIsRunning(false);
   };
+
+  const filteredAudits = auditLogs.filter((rec) => {
+    if (auditFilter !== "ALL" && rec.category !== auditFilter) return false;
+    if (!auditSearch) return true;
+    const term = auditSearch.toLowerCase();
+    return (
+      rec.action.toLowerCase().includes(term) ||
+      rec.description.toLowerCase().includes(term) ||
+      rec.order_hash?.toLowerCase().includes(term) ||
+      rec.tx_hash?.toLowerCase().includes(term)
+    );
+  });
 
   return (
     <div className="w-full space-y-6 pb-16 font-sans text-slate-100">
@@ -328,39 +387,35 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           <div className="flex items-center gap-2 text-xs font-mono text-slate-400 mb-1">
             <span>Koliance Cloud</span>
             <span>/</span>
-            <span>Gateway Services</span>
-            <span>/</span>
-            <span className="text-white font-semibold">Developer Console</span>
+            <span className="text-purple-300 font-semibold">Developer Service Console</span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-3">
-            <span>Developer Services & Telemetry</span>
-            <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">
-              v1.4 Production
-            </span>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white font-mono flex items-center gap-2.5">
+            <Server className="w-5 h-5 text-purple-400" />
+            <span>Agentic Infrastructure & Key Management</span>
           </h1>
         </div>
 
         {/* Global Environment & Status Indicator */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#111420] border border-white/10 text-xs font-mono">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-[#111420] border border-white/10 text-xs font-mono">
             <span className="w-2 h-2 rounded bg-emerald-400" />
             <span className="text-slate-300">Monad Testnet (Chain ID 10143)</span>
           </div>
 
-          <div className="px-3 py-1.5 rounded-lg bg-[#111420] border border-white/10 text-xs font-mono text-slate-400">
+          <div className="px-3 py-1.5 rounded-md bg-[#111420] border border-white/10 text-xs font-mono text-slate-400">
             SLA: <span className="text-emerald-400 font-semibold">99.98%</span>
           </div>
         </div>
       </div>
 
       {/* 2. Professional Tab Navigation (Stripe / Vercel Style) */}
-      <div className="flex items-center gap-1 border-b border-white/10 pb-px overflow-x-auto">
+      <div className="flex items-center gap-1 border-b border-white/10 pb-px overflow-x-auto no-scrollbar">
         {[
           { id: "overview", label: "Overview & Analytics", icon: <Activity className="w-4 h-4" /> },
           { id: "playground", label: "Live API Playground", icon: <Terminal className="w-4 h-4" /> },
           { id: "packages", label: "Quota & Subscription Packs", icon: <Coins className="w-4 h-4" /> },
           { id: "agents", label: "Bound Agents Registry", icon: <Cpu className="w-4 h-4" /> },
-          { id: "audit", label: "On-Chain Audit Stream", icon: <Database className="w-4 h-4" /> },
+          { id: "audit", label: "Operation Audit & History", icon: <History className="w-4 h-4" /> },
         ].map((tab) => {
           const isActive = consoleTab === tab.id;
           return (
@@ -383,7 +438,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
       {/* 3. API Key & Quota Summary Strip */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Key Card (8 cols) */}
-        <div className="lg:col-span-8 p-5 rounded-xl bg-[#111420] border border-white/10 space-y-4">
+        <div className="lg:col-span-8 p-5 rounded-lg bg-[#111420] border border-white/10 space-y-4 shadow-sm">
           <div className="flex items-center justify-between text-xs font-mono">
             <div className="flex items-center gap-2 text-slate-300 font-semibold">
               <KeyRound className="w-4 h-4 text-purple-400" />
@@ -397,20 +452,20 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-[#090b12] px-3.5 py-2.5 rounded-lg border border-white/10 font-mono text-xs text-white">
+          <div className="flex items-center gap-2 bg-[#090b12] px-3.5 py-2.5 rounded-md border border-white/10 font-mono text-xs text-white">
             <span className="flex-1 truncate tracking-wider">
               {revealKey ? apiKey : `${apiKey.slice(0, 12)}••••••••••••••••••••••••`}
             </span>
             <button
               onClick={() => setRevealKey(!revealKey)}
-              className="p-1 hover:bg-white/10 rounded transition text-slate-400 hover:text-white"
+              className="p-1 hover:bg-white/10 rounded-md transition text-slate-400 hover:text-white"
               title={revealKey ? "Hide key" : "Reveal key"}
             >
               {revealKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
             <button
               onClick={copyToClipboard}
-              className="p-1 hover:bg-white/10 rounded transition text-slate-400 hover:text-white"
+              className="p-1 hover:bg-white/10 rounded-md transition text-slate-400 hover:text-white"
               title="Copy Key"
             >
               {copiedKey ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
@@ -427,8 +482,8 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           </div>
         </div>
 
-        {/* Quota & Fast Recharge (4 cols) */}
-        <div className="lg:col-span-4 p-5 rounded-xl bg-[#111420] border border-white/10 space-y-4 flex flex-col justify-between">
+        {/* Quota & Fast Recharge (4 cols) - Architectural Geometry, Zero Pill */}
+        <div className="lg:col-span-4 p-5 rounded-lg bg-[#111420] border border-white/10 space-y-4 flex flex-col justify-between shadow-sm">
           <div className="space-y-1">
             <div className="text-xs font-mono text-slate-400">Available Quota Balance</div>
             <div className="text-3xl font-extrabold text-white font-mono flex items-baseline gap-2">
@@ -440,13 +495,14 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             </div>
           </div>
 
+          {/* Modern Precision Button: h-10, rounded-md, hairline border, inset highlight */}
           <button
             onClick={handleFreeClaim}
             disabled={claiming || freeClaimsLeft <= 0}
-            className={`w-full py-2 rounded-lg font-mono text-xs font-semibold transition flex items-center justify-center gap-2 ${
+            className={`w-full h-10 px-4 rounded-md font-mono text-xs font-semibold transition-all flex items-center justify-center gap-2 border ${
               freeClaimsLeft > 0
-                ? "bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-900/20 cursor-pointer"
-                : "bg-white/5 text-slate-500 cursor-not-allowed border border-white/5"
+                ? "bg-purple-600 hover:bg-purple-500 border-purple-500/40 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] cursor-pointer"
+                : "bg-white/5 text-slate-500 cursor-not-allowed border-white/5"
             }`}
           >
             {claiming ? (
@@ -464,7 +520,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
         <motion.div
           initial={{ opacity: 0, y: -6 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2"
+          className="p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2"
         >
           <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{claimMessage}</span>
@@ -476,7 +532,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
         <div className="space-y-6">
           {/* Key Metrics Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div className="p-4 rounded-xl bg-[#111420] border border-white/10 space-y-1">
+            <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
               <div className="text-xs font-mono text-slate-400">Total Requests (24h)</div>
               <div className="text-2xl font-bold text-white font-mono">{stats.total_calls_24h}</div>
               <div className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
@@ -485,19 +541,19 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#111420] border border-white/10 space-y-1">
+            <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
               <div className="text-xs font-mono text-slate-400">Success Rate</div>
               <div className="text-2xl font-bold text-emerald-400 font-mono">{stats.success_rate_percent}%</div>
               <div className="text-[11px] font-mono text-slate-400">Target SLA: 99.90%</div>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#111420] border border-white/10 space-y-1">
+            <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
               <div className="text-xs font-mono text-slate-400">Average P95 Latency</div>
               <div className="text-2xl font-bold text-cyan-400 font-mono">{stats.avg_latency_ms} ms</div>
               <div className="text-[11px] font-mono text-slate-400">Monad Edge Network</div>
             </div>
 
-            <div className="p-4 rounded-xl bg-[#111420] border border-white/10 space-y-1">
+            <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
               <div className="text-xs font-mono text-slate-400">Gross Settlement Volume</div>
               <div className="text-2xl font-bold text-purple-300 font-mono">${stats.total_volume_usd.toFixed(2)}</div>
               <div className="text-[11px] font-mono text-slate-400">Multi-Channel Routing</div>
@@ -507,7 +563,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           {/* Breakdown & Telemetry Matrix */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Payment Distribution */}
-            <div className="lg:col-span-5 p-5 rounded-xl bg-[#111420] border border-white/10 space-y-4">
+            <div className="lg:col-span-5 p-5 rounded-lg bg-[#111420] border border-white/10 space-y-4 shadow-sm">
               <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
                 <Coins className="w-4 h-4 text-purple-400" />
                 <span>Payment Method Routing Distribution</span>
@@ -547,7 +603,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             </div>
 
             {/* Recent Orders Overview */}
-            <div className="lg:col-span-7 p-5 rounded-xl bg-[#111420] border border-white/10 space-y-4">
+            <div className="lg:col-span-7 p-5 rounded-lg bg-[#111420] border border-white/10 space-y-4 shadow-sm">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
                   <Database className="w-4 h-4 text-cyan-400" />
@@ -589,7 +645,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
 
       {/* 5. Tab 2: Live API Playground (OpenAI / Stripe style) */}
       {consoleTab === "playground" && (
-        <div className="rounded-xl bg-[#111420] border border-white/10 p-6 space-y-6">
+        <div className="rounded-lg bg-[#111420] border border-white/10 p-6 space-y-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
             <div>
               <h2 className="text-base font-bold text-white font-mono flex items-center gap-2">
@@ -601,12 +657,12 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               </p>
             </div>
 
-            <div className="flex items-center gap-1 bg-[#090b12] p-1 rounded-lg border border-white/10">
+            <div className="flex items-center gap-1 bg-[#090b12] p-1 rounded-md border border-white/10">
               <button
                 onClick={() => setPlaygroundMethod("pay")}
-                className={`px-3 py-1.5 rounded text-xs font-mono transition cursor-pointer ${
+                className={`h-8 px-3 rounded-md text-xs font-mono transition cursor-pointer ${
                   playgroundMethod === "pay"
-                    ? "bg-purple-600 text-white font-semibold"
+                    ? "bg-purple-600 text-white font-semibold shadow-xs"
                     : "text-slate-400 hover:text-white"
                 }`}
               >
@@ -614,9 +670,9 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               </button>
               <button
                 onClick={() => setPlaygroundMethod("bind")}
-                className={`px-3 py-1.5 rounded text-xs font-mono transition cursor-pointer ${
+                className={`h-8 px-3 rounded-md text-xs font-mono transition cursor-pointer ${
                   playgroundMethod === "bind"
-                    ? "bg-purple-600 text-white font-semibold"
+                    ? "bg-purple-600 text-white font-semibold shadow-xs"
                     : "text-slate-400 hover:text-white"
                 }`}
               >
@@ -633,7 +689,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                 <span>Deduction: 1 Quota</span>
               </div>
 
-              <div className="p-4 rounded-lg bg-[#090b12] border border-white/10 font-mono text-xs overflow-x-auto min-h-[240px]">
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/10 font-mono text-xs overflow-x-auto min-h-[240px]">
                 {playgroundMethod === "pay" ? (
                   <pre className="text-cyan-300 leading-relaxed">
 {`{
@@ -666,7 +722,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               <button
                 onClick={handleRunPlayground}
                 disabled={isRunning || quota <= 0}
-                className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold transition flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                className="w-full h-10 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
               >
                 {isRunning ? (
                   <>
@@ -689,7 +745,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                 <span className="text-emerald-400 font-semibold">[READY]</span>
               </div>
 
-              <div className="p-4 rounded-lg bg-[#090b12] border border-white/10 font-mono text-xs space-y-2 min-h-[240px] max-h-[300px] overflow-y-auto">
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/10 font-mono text-xs space-y-2 min-h-[240px] max-h-[300px] overflow-y-auto">
                 {executionLogs.length === 0 ? (
                   <div className="text-slate-600 flex items-center justify-center pt-20">
                     <span>Click [Execute Request] to run transaction in sandbox...</span>
@@ -730,10 +786,10 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {/* Tier 1: Starter */}
-            <div className="p-6 rounded-xl bg-[#111420] border border-white/10 flex flex-col justify-between space-y-6">
+            <div className="p-6 rounded-lg bg-[#111420] border border-white/10 flex flex-col justify-between space-y-6 shadow-sm">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold">
                     STARTER PACK
                   </span>
                   <span className="text-xs font-mono text-slate-400">60 RPM</span>
@@ -753,10 +809,10 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               <button
                 onClick={handleFreeClaim}
                 disabled={claiming || freeClaimsLeft <= 0}
-                className={`w-full py-2.5 rounded-lg font-mono text-xs font-semibold transition cursor-pointer ${
+                className={`w-full h-10 px-4 rounded-md font-mono text-xs font-semibold transition-all border flex items-center justify-center cursor-pointer ${
                   freeClaimsLeft > 0
-                    ? "bg-cyan-600 hover:bg-cyan-500 text-white"
-                    : "bg-white/5 text-slate-500 cursor-not-allowed border border-white/5"
+                    ? "bg-cyan-600 hover:bg-cyan-500 border-cyan-500/40 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98]"
+                    : "bg-white/5 text-slate-500 cursor-not-allowed border-white/5"
                 }`}
               >
                 {claiming ? (
@@ -770,10 +826,10 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             </div>
 
             {/* Tier 2: Growth Pro */}
-            <div className="p-6 rounded-xl bg-[#141828] border border-purple-500/40 flex flex-col justify-between space-y-6 shadow-xl shadow-purple-950/20 relative">
+            <div className="p-6 rounded-lg bg-[#141828] border border-purple-500/40 flex flex-col justify-between space-y-6 shadow-lg shadow-purple-950/20 relative">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30 font-semibold">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/30 font-semibold">
                     GROWTH PRO // RECOMMENDED
                   </span>
                   <span className="text-xs font-mono text-purple-300">300 RPM</span>
@@ -798,18 +854,26 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                   setQuota((q) => q + 10000);
                   setActiveTier("GROWTH_PRO");
                   setClaimMessage("[SUCCESS] 10,000 API calls activated under Growth Pro pack.");
+                  recordAuditEvent({
+                    walletAddress: activeWallet,
+                    category: "QUOTA",
+                    action: "PURCHASE_GROWTH_PRO",
+                    description: "Purchased Growth Pro Pack (+10,000 API Calls)",
+                    amount: "+10,000 Units",
+                    status: "COMMITTED",
+                  });
                 }}
-                className="w-full py-2.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold transition cursor-pointer shadow-md shadow-purple-900/30"
+                className="w-full h-10 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition-all cursor-pointer"
               >
                 Purchase via KOL / Stripe
               </button>
             </div>
 
             {/* Tier 3: Scale Ultra */}
-            <div className="p-6 rounded-xl bg-[#111420] border border-white/10 flex flex-col justify-between space-y-6">
+            <div className="p-6 rounded-lg bg-[#111420] border border-white/10 flex flex-col justify-between space-y-6 shadow-sm">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono px-2 py-0.5 rounded bg-slate-500/10 text-slate-300 border border-white/10 font-semibold">
+                  <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-500/10 text-slate-300 border border-white/10 font-semibold">
                     ENTERPRISE SCALE
                   </span>
                   <span className="text-xs font-mono text-slate-400">1200 RPM</span>
@@ -831,8 +895,16 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                   setQuota((q) => q + 100000);
                   setActiveTier("SCALE_ULTRA");
                   setClaimMessage("[SUCCESS] 100,000 API calls activated with dedicated priority queue.");
+                  recordAuditEvent({
+                    walletAddress: activeWallet,
+                    category: "QUOTA",
+                    action: "PURCHASE_SCALE_ULTRA",
+                    description: "Subscribed to Enterprise Scale Pack (+100,000 API Calls)",
+                    amount: "+100,000 Units",
+                    status: "COMMITTED",
+                  });
                 }}
-                className="w-full py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-white font-mono text-xs font-semibold transition cursor-pointer"
+                className="w-full h-10 px-4 rounded-md bg-slate-800 hover:bg-slate-700 border border-white/10 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] active:scale-[0.98] transition-all cursor-pointer"
               >
                 Subscribe Enterprise
               </button>
@@ -854,10 +926,10 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {agents.map((ag) => (
-              <div key={ag.agent_id} className="p-5 rounded-xl bg-[#111420] border border-white/10 space-y-3">
+              <div key={ag.agent_id} className="p-5 rounded-lg bg-[#111420] border border-white/10 space-y-3 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="font-bold text-sm text-white font-mono">{ag.agent_name}</div>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-semibold">
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 font-semibold">
                     {ag.model_name}
                   </span>
                 </div>
@@ -881,46 +953,146 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
         </div>
       )}
 
-      {/* 8. Tab 5: Audit Logs & Settlements */}
+      {/* 8. Tab 5: Complete Operation Audit & Transaction Traceability (操作可追溯与交易历史) */}
       {consoleTab === "audit" && (
-        <div className="p-5 rounded-xl bg-[#111420] border border-white/10 space-y-4">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div className="p-5 rounded-lg bg-[#111420] border border-white/10 space-y-5 shadow-sm">
+          {/* Header & Controls */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
             <div>
-              <h3 className="text-sm font-bold text-white font-mono">Monad On-Chain Settlement Orders</h3>
-              <p className="text-xs text-slate-400 font-mono">Cryptographic receipts with deterministic block proofs</p>
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-purple-400" />
+                <h3 className="text-sm font-bold text-white font-mono">User Operation Traceability & Transaction History</h3>
+              </div>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                Deterministic block proofs on Monad (Chain ID 10143) · Complete audit trail of quotas, KOL token acquisitions, and payments
+              </p>
             </div>
-            <span className="text-xs font-mono text-slate-400">Chain ID: 10143</span>
+
+            {/* Search Box */}
+            <div className="relative w-full md:w-64">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={auditSearch}
+                onChange={(e) => setAuditSearch(e.target.value)}
+                placeholder="Search hash or action..."
+                className="w-full pl-9 pr-3 py-1.5 rounded-md bg-[#090b12] border border-white/10 text-xs font-mono text-white placeholder-slate-600 focus:outline-none focus:border-purple-500 transition"
+              />
+            </div>
           </div>
 
+          {/* Category Filter Chips */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
+            {(
+              [
+                { id: "ALL", label: "All Operations (全部记录)" },
+                { id: "KOL", label: "KOL Tokens (获取 KOL 历史)" },
+                { id: "QUOTA", label: "Quota Packages (额度包)" },
+                { id: "PAYMENT", label: "Payments (交易流水)" },
+                { id: "AGENT", label: "Agent Bindings (授权绑定)" },
+              ] as const
+            ).map((f) => (
+              <button
+                key={f.id}
+                onClick={() => setAuditFilter(f.id)}
+                className={`h-8 px-3 rounded-md font-mono text-xs font-medium transition cursor-pointer border shrink-0 ${
+                  auditFilter === f.id
+                    ? "bg-purple-600 text-white border-purple-500/50 shadow-xs"
+                    : "bg-[#141824] text-slate-400 hover:text-white border-white/10 hover:border-white/20"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Audit Table */}
           <div className="overflow-x-auto">
             <table className="w-full text-left font-mono text-xs">
               <thead>
                 <tr className="border-b border-white/10 text-slate-400">
                   <th className="pb-2.5 font-medium">TIMESTAMP (UTC)</th>
-                  <th className="pb-2.5 font-medium">ITEM NAME</th>
-                  <th className="pb-2.5 font-medium">CHANNEL</th>
+                  <th className="pb-2.5 font-medium">CATEGORY</th>
+                  <th className="pb-2.5 font-medium">ACTION / DESCRIPTION</th>
                   <th className="pb-2.5 font-medium">AMOUNT</th>
                   <th className="pb-2.5 font-medium">ORDER HASH</th>
                   <th className="pb-2.5 font-medium">MONAD TX</th>
-                  <th className="pb-2.5 font-medium text-right">STATUS</th>
+                  <th className="pb-2.5 font-medium text-right">CONSENSUS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {stats.recent_orders.map((order, i) => (
-                  <tr key={i} className="hover:bg-white/[0.02]">
-                    <td className="py-3 text-slate-400">{new Date(order.created_at).toISOString().replace("T", " ").slice(0, 19)}</td>
-                    <td className="py-3 font-sans text-white font-medium">{order.item_name}</td>
-                    <td className="py-3 uppercase text-slate-300">{order.payment_method}</td>
-                    <td className="py-3 text-cyan-300 font-bold">${order.amount.toFixed(2)}</td>
-                    <td className="py-3 text-slate-400">{order.order_hash}</td>
-                    <td className="py-3 text-purple-300">{order.tx_hash}</td>
-                    <td className="py-3 text-right">
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
-                        [COMMITTED]
-                      </span>
+                {filteredAudits.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-8 text-center text-slate-500">
+                      No matching audit records found.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredAudits.map((item) => (
+                    <tr key={item.id} className="hover:bg-white/[0.02] transition">
+                      <td className="py-3 text-slate-400 whitespace-nowrap">
+                        {new Date(item.timestamp).toISOString().replace("T", " ").slice(0, 19)}
+                      </td>
+                      <td className="py-3">
+                        <span
+                          className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${
+                            item.category === "KOL"
+                              ? "bg-purple-500/10 text-purple-300 border-purple-500/30"
+                              : item.category === "PAYMENT"
+                              ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30"
+                              : item.category === "QUOTA"
+                              ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                              : "bg-slate-500/10 text-slate-300 border-slate-500/30"
+                          }`}
+                        >
+                          {item.category}
+                        </span>
+                      </td>
+                      <td className="py-3 font-sans text-white font-medium max-w-[260px]">
+                        <div className="truncate text-xs font-semibold">{item.action}</div>
+                        <div className="text-[11px] text-slate-400 font-mono truncate">{item.description}</div>
+                      </td>
+                      <td className="py-3 font-bold whitespace-nowrap">
+                        <span
+                          className={
+                            item.amount?.startsWith("+")
+                              ? "text-emerald-400"
+                              : item.amount?.startsWith("-")
+                              ? "text-rose-400"
+                              : "text-cyan-300"
+                          }
+                        >
+                          {item.amount || "N/A"}
+                        </span>
+                      </td>
+                      <td className="py-3 text-slate-400 font-mono">
+                        <span className="truncate block max-w-[120px]" title={item.order_hash}>
+                          {item.order_hash ? `${item.order_hash.slice(0, 8)}...${item.order_hash.slice(-4)}` : "—"}
+                        </span>
+                      </td>
+                      <td className="py-3 font-mono">
+                        {item.tx_hash ? (
+                          <a
+                            href={`https://testnet.monadexplorer.com/tx/${item.tx_hash}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-purple-300 hover:text-purple-200 flex items-center gap-1 group"
+                          >
+                            <span>{item.tx_hash.slice(0, 8)}...{item.tx_hash.slice(-4)}</span>
+                            <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                          </a>
+                        ) : (
+                          <span className="text-slate-600">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 text-right whitespace-nowrap">
+                        <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                          [CONFIRMED]
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

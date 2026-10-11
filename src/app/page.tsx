@@ -47,6 +47,7 @@ import { NetworkModal } from "@/components/NetworkModal";
 import { TokenStudio } from "@/components/TokenStudio";
 import { DeveloperConsole } from "@/components/DeveloperConsole";
 import { AgentNarrativeFlow } from "@/components/AgentNarrativeFlow";
+import { QuantumBootLoader } from "@/components/QuantumBootLoader";
 import {
   monadTestnet,
   KOLIANCE_ADDRESS,
@@ -607,8 +608,11 @@ function MainContent() {
 }
 
 export default function Home() {
+  const [booting, setBooting] = useState(true);
+
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0d1017] text-white flex items-center justify-center font-mono">Loading Koliance...</div>}>
+    <Suspense fallback={<QuantumBootLoader />}>
+      {booting && <QuantumBootLoader onComplete={() => setBooting(false)} />}
       <MainContent />
     </Suspense>
   );

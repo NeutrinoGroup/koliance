@@ -16,6 +16,7 @@ import {
   Loader2,
   Flame,
   ShieldCheck,
+  History,
 } from "lucide-react";
 import {
   createPublicClient,
@@ -33,6 +34,7 @@ import {
   KOL_TOKEN_ADDRESS,
   KOL_TOKEN_ABI,
 } from "@/lib/contract";
+import { getAuditHistory, recordAuditEvent, AuditRecord } from "@/lib/audit";
 
 interface TokenStudioProps {
   account: `0x${string}` | null;
@@ -59,6 +61,16 @@ export function TokenStudio({
   const [isTransferring, setIsTransferring] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string; txHash?: string } | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([]);
+
+  useEffect(() => {
+    setAuditLogs(getAuditHistory(account).filter((r) => r.category === "KOL"));
+    const handleUpdate = () => {
+      setAuditLogs(getAuditHistory(account).filter((r) => r.category === "KOL"));
+    };
+    window.addEventListener("koliance_audit_updated", handleUpdate);
+    return () => window.removeEventListener("koliance_audit_updated", handleUpdate);
+  }, [account]);
 
   // Fetch token stats
   const fetchTokenData = React.useCallback(async () => {
@@ -176,6 +188,15 @@ export function TokenStudio({
         msg: "成功占领区块并领取 KOL 代币奖励！",
         txHash: hash,
       });
+      recordAuditEvent({
+        walletAddress: account,
+        category: "KOL",
+        action: "CLAIM_BLOCK_REWARD",
+        description: "Occupied Monad block & claimed KOL token mining reward",
+        amount: "+100.00 KOL",
+        tx_hash: hash,
+        status: "CONFIRMED_ON_MONAD",
+      });
       fetchTokenData();
       onRefreshBalance?.();
     } catch (err: any) {
@@ -264,6 +285,15 @@ export function TokenStudio({
         type: "success",
         msg: `${transferType} 转账成功广播！`,
         txHash: hash,
+      });
+      recordAuditEvent({
+        walletAddress: account,
+        category: "KOL",
+        action: "TRANSFER_KOL",
+        description: `Transferred ${amount.trim()} ${transferType} to ${cleanRecipient.slice(0, 8)}...${cleanRecipient.slice(-4)}`,
+        amount: `-${amount.trim()} ${transferType}`,
+        tx_hash: hash,
+        status: "CONFIRMED_ON_MONAD",
       });
       setAmount("");
       fetchTokenData();
