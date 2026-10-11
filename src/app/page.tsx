@@ -46,6 +46,7 @@ import { TrustAttestationCard } from "@/components/TrustAttestationCard";
 import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
 import { TokenStudio } from "@/components/TokenStudio";
+import { DeveloperConsole } from "@/components/DeveloperConsole";
 import {
   monadTestnet,
   KOLIANCE_ADDRESS,
@@ -506,6 +507,20 @@ function MainContent() {
                 className="w-full h-full border-0"
                 title="AI Card Scanner // Neural Asset Processor"
               />
+            </motion.div>
+          )}
+
+          {/* TAB 8: CONSOLE (Developer API, Quota Recharge, Playground & Telemetry) */}
+          {currentView === "CONSOLE" && (
+            <motion.div
+              key="view-console"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.35, ease: "easeInOut" }}
+              className="pt-20 max-w-7xl mx-auto px-4 sm:px-6 py-4"
+            >
+              <DeveloperConsole currentAccount={account} />
             </motion.div>
           )}
         </AnimatePresence>
