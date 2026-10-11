@@ -353,11 +353,17 @@ export function isLiquidatable(p: PositionMath, markPrice: bigint): boolean {
   return equity <= applyBps(size, MAINTENANCE_MARGIN_BPS);
 }
 
-/** Liquidator bounty for a position being liquidated at `markPrice`. */
-export function liquidationReward(p: PositionMath, markPrice: bigint): bigint {
-  const equity = p.collateralUsd + unrealizedPnl(p, markPrice);
-  if (equity <= 0n) return 0n;
-  return applyBps(equity, LIQUIDATOR_REWARD_BPS);
+/**
+ * Liquidator bounty for a position being liquidated: 5% of collateral.
+ *
+ * Mirrors on-chain PositionManager.sol:580:
+ *   reward = (p.collateralUsd * PerpConstants.LIQUIDATOR_REWARD_BPS) / PerpConstants.BPS_DENOMINATOR;
+ *
+ * Based on COLLATERAL, not remaining equity. Paying 5% of equity would leave bankrupt
+ * positions (equity == 0) with 0 bounty, removing liquidator incentives.
+ */
+export function liquidationReward(p: PositionMath, _markPrice?: bigint): bigint {
+  return applyBps(p.collateralUsd, LIQUIDATOR_REWARD_BPS);
 }
 
 // ==================== VALIDATION ====================

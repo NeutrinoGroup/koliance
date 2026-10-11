@@ -33,11 +33,15 @@ import {
 import { BrandIcon } from "@/components/BrandIcon";
 import { Navbar, NavView } from "@/components/Navbar";
 import { CursorTrail } from "@/components/CursorTrail";
+import { HeroGsap } from "@/components/HeroGsap";
 import { EnergyCoreHero } from "@/components/EnergyCoreHero";
 import { TrustConstellation } from "@/components/TrustConstellation";
 import { ProductStudio } from "@/components/ProductStudio";
 import { MarketTerminal } from "@/components/MarketTerminal";
 import { IdentityCard } from "@/components/IdentityCard";
+import { CoreValueFramework } from "@/components/CoreValueFramework";
+import { KineticScrollBanner } from "@/components/KineticScrollBanner";
+import { ParallelBentoReactor } from "@/components/ParallelBentoReactor";
 import { TrustAttestationCard } from "@/components/TrustAttestationCard";
 import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
@@ -50,6 +54,7 @@ import {
   TrustRecordData,
 } from "@/lib/contract";
 import { checkBackendHealth } from "@/lib/api";
+import { useKolianceAuth } from "@/components/Providers";
 
 function MainContent() {
   const searchParams = useSearchParams();
@@ -62,6 +67,18 @@ function MainContent() {
   const [balance, setBalance] = useState("0.00");
   const [chainId, setChainId] = useState<number | null>(null);
   const [networkModalOpen, setNetworkModalOpen] = useState(false);
+
+  const {
+    address: authAddress,
+    login: authLogin,
+    logout: authLogout,
+  } = useKolianceAuth();
+
+  useEffect(() => {
+    if (authAddress) {
+      setAccount(authAddress);
+    }
+  }, [authAddress]);
 
   // Top Nav View: INDEX | DETAIL | PRODUCT | AGENTCARD
   const [currentView, setCurrentView] = useState<NavView>(initialView);
@@ -142,38 +159,34 @@ function MainContent() {
     }
   };
 
-  // Connect Wallet
+  // Connect Wallet (via Privy / Wagmi / injected fallback)
   const handleConnect = async () => {
-    if (typeof window === "undefined" || !window.ethereum) {
-      alert("Please install MetaMask, Rabby, or an EVM-compatible Web3 wallet!");
-      return;
-    }
     try {
-      const accounts = (await window.ethereum.request({
-        method: "eth_requestAccounts",
-      })) as string[];
-      if (accounts && accounts.length > 0) {
-        setAccount(accounts[0] as `0x${string}`);
+      authLogin();
+    } catch {
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        try {
+          const accounts = (await (window as any).ethereum.request({
+            method: "eth_requestAccounts",
+          })) as string[];
+          if (accounts && accounts.length > 0) {
+            setAccount(accounts[0] as `0x${string}`);
+          }
+        } catch (err) {
+          console.error("Direct wallet connect error:", err);
+        }
       }
-
-      const currentChainIdHex = (await window.ethereum.request({
-        method: "eth_chainId",
-      })) as string;
-      const currentChainId = parseInt(currentChainIdHex, 16);
-      setChainId(currentChainId);
-
-      if (currentChainId !== monadTestnet.id) {
-        setNetworkModalOpen(true);
-      }
-    } catch (err) {
-      console.error("Connect error:", err);
     }
   };
 
-  const handleDisconnect = () => {
-    setAccount(null);
-    setBalance("0.00");
-    setIdentity(null);
+  const handleDisconnect = async () => {
+    try {
+      await authLogout();
+    } finally {
+      setAccount(null);
+      setBalance("0.00");
+      setIdentity(null);
+    }
   };
 
   // Fetch account balance and contract data
@@ -348,119 +361,20 @@ function MainContent() {
               transition={{ duration: 0.35, ease: "easeInOut" }}
               className="w-full"
             >
-              {/* Fixed & Prominent 3D Energy Core Hero */}
-              <EnergyCoreHero
-                onLaunchDApps={() => setCurrentView("PRODUCT")}
-                onExploreDetails={() => setCurrentView("DETAIL")}
+              {/* Official Production Hero with Vision and Language Switcher */}
+              <HeroGsap
+                onRegisterClick={() => setCurrentView("PRODUCT")}
+                onExploreClick={() => setCurrentView("DETAIL")}
               />
 
-              {/* Protocol Architecture Bento Highlights */}
-              <div className="max-w-7xl mx-auto px-4 sm:px-8 py-12 space-y-6">
-                <div className="text-center max-w-2xl mx-auto space-y-2">
-                  <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-                    Monad 10,000 TPS Parallel Trust Architecture
-                  </h2>
-                </div>
+              {/* GSAP Showcase Kinetic Scroll Typography Marquee */}
+              <KineticScrollBanner />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pt-2">
-                  {/* Card 1 */}
-                  <div
-                    onClick={() => setCurrentView("DETAIL")}
-                    className="rounded-3xl p-6 bg-[#131722]/80 border border-white/10 hover:border-purple-500/70 hover:scale-[1.05] hover:-translate-y-2.5 hover:shadow-[0_20px_45px_rgba(168,85,247,0.25)] transition-all duration-300 cursor-pointer group space-y-4 relative overflow-hidden shadow-lg"
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 flex items-center justify-center text-white shadow-glow group-hover:scale-110 transition-transform">
-                      <Network className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-bold text-lg text-white">Trust Constellation Graph</h3>
-                        <ArrowRight className="w-4 h-4 text-cyan-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                      <p className="text-xs text-slate-400 font-mono">
-                        Multi-cluster trust weights, AI audit agents &amp; consensus metrics.
-                      </p>
-                    </div>
-                    <div className="pt-2 flex items-center gap-2 text-[11px] font-mono text-cyan-400">
-                      <span>View Detail Topology</span>
-                      <span>&rarr;</span>
-                    </div>
-                  </div>
+              {/* Protocol Architecture Bento Highlights (3D Damped Tilt, Specular Sheen, Laser Scanlines) */}
+              <ParallelBentoReactor onSelectView={setCurrentView} />
 
-                  {/* Card 2 */}
-                  <div
-                    onClick={() => setCurrentView("PRODUCT")}
-                    className="rounded-3xl p-6 bg-[#131722]/80 border border-white/10 hover:border-cyan-400/70 hover:scale-[1.05] hover:-translate-y-2.5 hover:shadow-[0_20px_45px_rgba(0,242,254,0.25)] transition-all duration-300 cursor-pointer group space-y-4 relative overflow-hidden shadow-lg"
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-teal-500 flex items-center justify-center text-black font-extrabold shadow-glow group-hover:scale-110 transition-transform">
-                      <Shield className="w-6 h-6 text-black" />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-bold text-lg text-white">Holographic Verification</h3>
-                        <ArrowRight className="w-4 h-4 text-cyan-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                      <p className="text-xs text-slate-400 font-mono">
-                        3D holographic identity badge, staking dashboard &amp; biometric protocol.
-                      </p>
-                    </div>
-                    <div className="pt-2 flex items-center gap-2 text-[11px] font-mono text-cyan-400">
-                      <span>Open Product Studio</span>
-                      <span>&rarr;</span>
-                    </div>
-                  </div>
-
-                  {/* Card 3 */}
-                  <div
-                    onClick={() => setCurrentView("AGENTCARD")}
-                    className="rounded-3xl p-6 bg-[#131722]/80 border border-white/10 hover:border-indigo-400/70 hover:scale-[1.05] hover:-translate-y-2.5 hover:shadow-[0_20px_45px_rgba(99,102,241,0.25)] transition-all duration-300 cursor-pointer group space-y-4 relative overflow-hidden shadow-lg"
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white shadow-glow group-hover:scale-110 transition-transform">
-                      <CreditCard className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-bold text-lg text-white">AI Card Scanner</h3>
-                        <ArrowRight className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                      <p className="text-xs text-slate-400 font-mono">
-                        Full-stack Neural Asset Processor with 6-card circulating digitization.
-                      </p>
-                    </div>
-                    <div className="pt-2 flex items-center gap-2 text-[11px] font-mono text-purple-400">
-                      <span>Launch AI Scanner</span>
-                      <span>&rarr;</span>
-                    </div>
-                  </div>
-
-                  {/* Card 4: KOL Token & Mining */}
-                  <div
-                    onClick={() => setCurrentView("TOKEN")}
-                    className="rounded-3xl p-6 bg-[#131722]/80 border border-purple-500/30 hover:border-purple-400 hover:scale-[1.05] hover:-translate-y-2.5 hover:shadow-[0_20px_45px_rgba(168,85,247,0.35)] transition-all duration-300 cursor-pointer group space-y-4 relative overflow-hidden shadow-lg"
-                  >
-                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 via-indigo-600 to-amber-500 flex items-center justify-center text-white shadow-glow group-hover:scale-110 transition-transform">
-                      <Coins className="w-6 h-6" />
-                    </div>
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <h3 className="font-bold text-lg text-white">KOL Token</h3>
-                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                            KOL
-                          </span>
-                        </div>
-                        <ArrowRight className="w-4 h-4 text-purple-400 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                      <p className="text-xs text-slate-400 font-mono">
-                        2^30 Max Supply · 2-year halving · Monad block claiming &amp; transfer.
-                      </p>
-                    </div>
-                    <div className="pt-2 flex items-center gap-2 text-[11px] font-mono text-amber-400">
-                      <span>Open Token Hub</span>
-                      <span>&rarr;</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              {/* Core Problem Definition, 3 Pillars, Progression Pipeline & Feature Taxonomy */}
+              <CoreValueFramework />
             </motion.div>
           )}
 
@@ -557,10 +471,13 @@ function MainContent() {
                   onRefresh={fetchData}
                 />
               </div>
+
+              {/* Core Value Framework: Problem Definition, Pipeline & Taxonomy */}
+              <CoreValueFramework />
             </motion.div>
           )}
 
-          {/* TAB 4: MARKET (Yahoo Finance Live Terminal & Gatekeeper) */}
+          {/* TAB 4: MARKET (Alpaca & Pyth Multi-Asset Terminal & Gatekeeper) */}
           {currentView === "MARKET" && (
             <motion.div
               key="view-market"

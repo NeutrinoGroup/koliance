@@ -5,7 +5,7 @@
 
 ---
 
-## 0. ⛔ 先做这一步：轮换并移出明文凭证（GAP-12）
+## 0. Prerequisite: Rotate and Exclude Plaintext Secrets (GAP-12)
 
 **在部署之前**，`render.yaml` 里有**明文密钥**：
 
@@ -14,7 +14,7 @@
 | `STEAM_API_KEY` | 明文 |
 | `ALPACA_API_KEY` / `ALPACA_API_SECRET` | 明文 |
 | `STRIPE_PUBLISHABLE_KEY` | 明文（公开键，风险较低） |
-| `STRIPE_SECRET_KEY` / `DATABASE_URL` | ✅ 已是 `sync: false`（读自 Render 面板） |
+| `STRIPE_SECRET_KEY` / `DATABASE_URL` | [OK] 已是 `sync: false`（读自 Render 面板） |
 
 **泄露已成事实**——这些值在 git 历史里，删掉当前行**不会**让它们重新变成秘密。**必须去各后台轮换**
 （Steam / Alpaca / Stripe），这是**人工操作，无法用代码完成**。
@@ -26,7 +26,7 @@
         sync: false          # 值放 Render 面板，不进仓库
 ```
 
-> ⚠️ **改之前必须确认**：这些值**已经存在于 Render 的面板**里。
+> [WARN] **改之前必须确认**：这些值**已经存在于 Render 的面板**里。
 > `autoDeploy: true`，所以改动一推上去就会触发重新部署；
 > 若面板里没有这些值，改成 `sync: false` 会让**线上后端拿不到密钥而挂掉**。
 > **这正是本次没有单方面改它的原因** —— 代码侧把改动准备好，落地时机由你定。

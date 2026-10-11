@@ -60,7 +60,7 @@ func NewRouter(d Deps) http.Handler {
 		return operator(fn)
 	}
 
-	h("/api/v1/health", func(w http.ResponseWriter, r *http.Request) {
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		connected := d.DB != nil && d.DB.IsConnected
 		jsonResponse(w, http.StatusOK, map[string]interface{}{
 			"status":    "healthy",
@@ -77,7 +77,11 @@ func NewRouter(d Deps) http.Handler {
 				"database":  connected,
 			},
 		})
-	})
+	}
+
+	h("/api/v1/health", healthHandler)
+	h("/healthz", healthHandler)
+	h("/health", healthHandler)
 
 	h("/api/v1/stats", func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, http.StatusOK, model.NetworkStats{

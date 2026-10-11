@@ -101,6 +101,9 @@ contract SessionKeyRegistry is Ownable {
     ///      repository that is `PositionManager`.
     address public spendConsumer;
 
+    /// @dev Monotonic user nonce for EIP-712 delegations (S-1).
+    mapping(address user => uint256) public userNonce;
+
     /// @dev Replay guard. While unrevoked, a delegation is a bearer instrument,
     ///      so the same signed payload must not register twice — including
     ///      after a revoke, which is what makes revocation stick.
@@ -117,6 +120,7 @@ contract SessionKeyRegistry is Ownable {
     );
     event SpendAuthorized(address indexed sessionKey, address indexed agent, uint256 amount, uint256 spentInWindow);
     event DelegationRevoked(address indexed user, address indexed sessionKey);
+    event NonceInvalidated(address indexed user, uint256 newNonce);
     event SessionKeyFrozen(address indexed sessionKey, address indexed by);
     event SessionKeyUnfrozen(address indexed sessionKey, address indexed by);
     event SpendConsumerSet(address indexed consumer);
@@ -126,6 +130,7 @@ contract SessionKeyRegistry is Ownable {
     error InvalidSignature();
     error SignatureMalleable();
     error NonceAlreadyUsed(address user, uint256 nonce);
+    error InvalidNonce(uint256 expected, uint256 actual);
     error ValidityInThePast(uint256 validUntil, uint256 currentTime);
     error SessionKeyAlreadyBound(address sessionKey, address user);
     error SelfDelegation();
@@ -226,7 +231,10 @@ contract SessionKeyRegistry is Ownable {
     ) external {
         if (user == address(0) || agent == address(0) || sessionKey == address(0)) revert ZeroAddress();
         if (validUntil <= block.timestamp) revert ValidityInThePast(validUntil, block.timestamp);
-        if (nonceUsed[user][nonce]) revert NonceAlreadyUsed(user, nonce);
+        if (nonceUsed[user][nonce] || nonce != userNonce[user]) {
+            if (nonceUsed[user][nonce]) revert NonceAlreadyUsed(user, nonce);
+            revert InvalidNonce(userNonce[user], nonce);
+        }
 
         // A user delegating to themselves grants nothing and only muddies the
         // audit trail.
@@ -237,13 +245,28 @@ contract SessionKeyRegistry is Ownable {
         _requireValidSignature(digest, user, signature);
 
         Delegation storage existing = _delegations[sessionKey];
-        // Rebinding a live session key to a different user would silently
-        // orphan the first user's caps, so it is refused outright.
-        if (existing.exists && !existing.revoked && existing.user != user) {
+        // S-1: Rebinding an existing session key to a different user is refused outright,
+        // even if the previous delegation was revoked.
+        if (existing.exists && existing.user != user) {
             revert SessionKeyAlreadyBound(sessionKey, existing.user);
         }
 
+        // S-2: If the session key already exists and is frozen, revert!
+        // An agent must NOT be able to unfreeze itself by submitting a backup signature.
+        if (existing.exists && existing.frozen) {
+            revert DelegationIsFrozen(sessionKey);
+        }
+
         nonceUsed[user][nonce] = true;
+        userNonce[user]++;
+
+        // S-3: When re-registering an existing session key, retain spentInWindow and windowStart.
+        uint256 spentInWindow = 0;
+        uint256 windowStart = block.timestamp;
+        if (existing.exists) {
+            spentInWindow = existing.spentInWindow;
+            windowStart = existing.windowStart;
+        }
 
         _delegations[sessionKey] = Delegation({
             user: user,
@@ -253,11 +276,11 @@ contract SessionKeyRegistry is Ownable {
             dailySpendLimit: dailySpendLimit,
             validUntil: validUntil,
             nonce: nonce,
-            spentInWindow: 0,
-            windowStart: block.timestamp,
+            spentInWindow: spentInWindow,
+            windowStart: windowStart,
             exists: true,
             revoked: false,
-            frozen: false
+            frozen: existing.exists ? existing.frozen : false
         });
 
         emit DelegationRegistered(user, agent, sessionKey, maxSpendPerTx, dailySpendLimit, validUntil, nonce);
@@ -388,15 +411,23 @@ contract SessionKeyRegistry is Ownable {
     // ---------------------------------------------------------------------
 
     /// @notice Kill a delegation. Only the granting user.
-    /// @dev Revocation sticks: `registerDelegation` refuses a reused nonce, so
-    ///      replaying the original signature cannot undo this.
+    /// @dev Revocation sticks: `registerDelegation` refuses a reused nonce, and
+    ///      userNonce is incremented so old/backup signatures cannot revive the delegation.
     function revoke(address sessionKey) external {
         Delegation storage d = _delegations[sessionKey];
         if (!d.exists) revert NoSuchDelegation(sessionKey);
         if (d.user != msg.sender) revert NotAuthorizedCaller(msg.sender);
 
         d.revoked = true;
+        userNonce[msg.sender]++;
         emit DelegationRevoked(msg.sender, sessionKey);
+    }
+
+    /// @notice Invalidate the current user nonce so pending/backup signatures cannot be used.
+    function invalidateNonce(address user) external {
+        if (msg.sender != user) revert NotAuthorizedCaller(msg.sender);
+        userNonce[user]++;
+        emit NonceInvalidated(user, userNonce[user]);
     }
 
     /// @notice Freeze a session key without destroying the grant.

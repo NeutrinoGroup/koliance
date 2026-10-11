@@ -879,3 +879,43 @@ func TestScanFundingIsPerFeed(t *testing.T) {
 		t.Errorf("NVDA batch ids = %v, want [1]", batches[0].PositionIDs)
 	}
 }
+
+// ==================== BENCHMARKS ====================
+
+func BenchmarkPositionPnL(b *testing.B) {
+	long := tenXLong()
+	mark := usd(198)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = long.PnL(mark)
+	}
+}
+
+func BenchmarkTableScan(b *testing.B) {
+	tbl := NewTable()
+	feeds := []string{"NVDA", "AAPL", "BTC", "ETH", "SOL"}
+	// Populate 500 positions across 5 feeds
+	for i := 0; i < 500; i++ {
+		p := tenXLong()
+		p.ID = uint64(i + 1)
+		p.FeedID = feeds[i%len(feeds)]
+		tbl.ApplyOpen(p)
+	}
+
+	prices := map[string]*big.Int{
+		"NVDA": usd(50),  // liquidated
+		"AAPL": usd(200), // healthy
+		"BTC":  usd(150), // borderline
+		"ETH":  usd(180), // at entry
+		"SOL":  usd(30),  // liquidated
+	}
+	lookup := func(feed string) (*big.Int, bool) {
+		p, ok := prices[feed]
+		return p, ok
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = tbl.Scan(mmrBps, lookup)
+	}
+}

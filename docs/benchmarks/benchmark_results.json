@@ -1,0 +1,75 @@
+[
+  {
+    "name": "Pyth Hermes Public Oracle Feed",
+    "url": "https://hermes.pyth.network/v2/updates/price/latest?ids[]=e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
+    "samples": 20,
+    "successCount": 0,
+    "errorCount": 20,
+    "errorRatePct": 100,
+    "minMs": 93.28,
+    "maxMs": 1106.51,
+    "avgMs": 275.12,
+    "p50Ms": 227.55,
+    "p95Ms": 1106.51,
+    "p99Ms": 1106.51,
+    "throughputRps": 3.63,
+    "statusCodes": {
+      "401": 20
+    }
+  },
+  {
+    "name": "Monad Testnet Public RPC Node",
+    "url": "https://testnet-rpc.monad.xyz",
+    "samples": 20,
+    "successCount": 20,
+    "errorCount": 0,
+    "errorRatePct": 0,
+    "minMs": 63.53,
+    "maxMs": 713.57,
+    "avgMs": 159.56,
+    "p50Ms": 106.73,
+    "p95Ms": 713.57,
+    "p99Ms": 713.57,
+    "throughputRps": 6.27,
+    "statusCodes": {
+      "200": 20
+    }
+  },
+  {
+    "name": "CoinGecko Crypto Public Data (BTC)",
+    "url": "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1",
+    "samples": 15,
+    "successCount": 15,
+    "errorCount": 0,
+    "errorRatePct": 0,
+    "minMs": 63.71,
+    "maxMs": 387.69,
+    "avgMs": 113.14,
+    "p50Ms": 79.26,
+    "p95Ms": 387.69,
+    "p99Ms": 387.69,
+    "throughputRps": 8.84,
+    "statusCodes": {
+      "200": 5,
+      "429": 10
+    }
+  },
+  {
+    "name": "Dynamic JWKS Endpoint Verification",
+    "url": "https://app.dynamicauth.com/api/v0/sdk/cac110df-af4b-49d3-b000-048ae6488374/.well-known/jwks",
+    "samples": 20,
+    "successCount": 20,
+    "errorCount": 0,
+    "errorRatePct": 0,
+    "minMs": 72.13,
+    "maxMs": 503.1,
+    "avgMs": 113.69,
+    "p50Ms": 81.92,
+    "p95Ms": 503.1,
+    "p99Ms": 503.1,
+    "throughputRps": 8.8,
+    "statusCodes": {
+      "200": 20
+    }
+  }
+]

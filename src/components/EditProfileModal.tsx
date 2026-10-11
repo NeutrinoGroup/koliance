@@ -77,7 +77,11 @@ export function EditProfileModal({
 
       const res = await fetch("/api/user/profile", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${profile.id}`,
+          "x-user-id": profile.id,
+        },
         body: JSON.stringify(payload),
       });
 

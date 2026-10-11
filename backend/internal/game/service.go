@@ -5,6 +5,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -14,8 +17,10 @@ import (
 )
 
 type Service struct {
-	client *SteamClient
-	db     *database.DB
+	client         *SteamClient
+	db             *database.DB
+	openIDEndpoint string
+	httpClient     *http.Client
 }
 
 func NewService(client *SteamClient, db *database.DB) *Service {
@@ -23,6 +28,14 @@ func NewService(client *SteamClient, db *database.DB) *Service {
 		client: client,
 		db:     db,
 	}
+}
+
+func (s *Service) SetOpenIDEndpoint(endpoint string) {
+	s.openIDEndpoint = endpoint
+}
+
+func (s *Service) SetHTTPClient(client *http.Client) {
+	s.httpClient = client
 }
 
 type GameStatsResponse struct {
@@ -302,3 +315,118 @@ func (s *Service) GenerateGameplayProof(steamID, walletAddress string, appID int
 
 	return resp, nil
 }
+
+type SteamVerificationResult struct {
+	SteamID string `json:"steamId"`
+	Valid   bool   `json:"valid"`
+}
+
+var steamIDRegex = regexp.MustCompile(`^https?://steamcommunity\.com/openid/id/([0-9]{17})$`)
+
+// VerifySteamOpenID performs server-side check_authentication against the Steam OpenID provider,
+// strictly verifying claimed_id format, identity matching, op_endpoint validity, and signature verification.
+func (s *Service) VerifySteamOpenID(params map[string]string) (*SteamVerificationResult, error) {
+	if params == nil {
+		return nil, fmt.Errorf("missing openid parameters")
+	}
+
+	mode := params["openid.mode"]
+	if mode == "cancel" {
+		return nil, fmt.Errorf("steam openid authentication was cancelled by user")
+	}
+	if mode != "id_res" {
+		return nil, fmt.Errorf("invalid openid.mode: %s", mode)
+	}
+
+	ns := params["openid.ns"]
+	if ns != "http://specs.openid.net/auth/2.0" {
+		return nil, fmt.Errorf("unsupported openid namespace: %s", ns)
+	}
+
+	claimedID := params["openid.claimed_id"]
+	identity := params["openid.identity"]
+	if claimedID == "" || identity == "" {
+		return nil, fmt.Errorf("missing openid.claimed_id or openid.identity")
+	}
+
+	if claimedID != identity {
+		return nil, fmt.Errorf("openid.claimed_id (%s) does not match openid.identity (%s)", claimedID, identity)
+	}
+
+	match := steamIDRegex.FindStringSubmatch(claimedID)
+	if len(match) < 2 {
+		return nil, fmt.Errorf("invalid steam claimed_id format: %s", claimedID)
+	}
+	steamID := match[1]
+
+	// Strictly verify openid.op_endpoint to prevent SSRF
+	opEndpoint := params["openid.op_endpoint"]
+	if opEndpoint != "" && !strings.HasPrefix(opEndpoint, "https://steamcommunity.com/openid/login") {
+		return nil, fmt.Errorf("untrusted openid.op_endpoint: %s", opEndpoint)
+	}
+
+	if params["openid.sig"] == "" || params["openid.signed"] == "" {
+		return nil, fmt.Errorf("missing signature parameters openid.sig or openid.signed")
+	}
+
+	// Prepare check_authentication request payload
+	form := url.Values{}
+	for k, v := range params {
+		if strings.HasPrefix(k, "openid.") {
+			form.Set(k, v)
+		}
+	}
+	// Explicitly set check_authentication mode
+	form.Set("openid.mode", "check_authentication")
+
+	verifyURL := s.openIDEndpoint
+	if verifyURL == "" {
+		verifyURL = "https://steamcommunity.com/openid/login"
+	}
+
+	client := s.httpClient
+	if client == nil {
+		if s.client != nil && s.client.httpClient != nil {
+			client = s.client.httpClient
+		} else {
+			client = &http.Client{Timeout: 5 * time.Second}
+		}
+	}
+
+	resp, err := client.PostForm(verifyURL, form)
+	if err != nil {
+		return nil, fmt.Errorf("failed to contact steam verification server: %w", err)
+	}
+	defer resp.Body.Close()
+
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read steam verification response: %w", err)
+	}
+
+	bodyStr := string(bodyBytes)
+	lines := strings.Split(bodyStr, "\n")
+	isValid := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		parts := strings.SplitN(line, ":", 2)
+		if len(parts) == 2 {
+			k := strings.TrimSpace(parts[0])
+			v := strings.TrimSpace(parts[1])
+			if k == "is_valid" && strings.EqualFold(v, "true") {
+				isValid = true
+			}
+		}
+	}
+
+	if !isValid {
+		return nil, fmt.Errorf("steam openid verification failed: signature is invalid or rejected by valve")
+	}
+
+	return &SteamVerificationResult{
+		SteamID: steamID,
+		Valid:   true,
+	}, nil
+}
+

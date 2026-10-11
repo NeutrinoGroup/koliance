@@ -28,6 +28,7 @@ import { EditProfileModal, UserProfileData } from "@/components/EditProfileModal
 import { TransferModal } from "@/components/TransferModal";
 import { monadTestnet, KOL_TOKEN_ADDRESS, KOL_TOKEN_ABI } from "@/lib/contract";
 import { truncateAddress } from "@/lib/utils";
+import { useKolianceAuth } from "@/components/Providers";
 
 interface NavAuthBadgesProps {
   walletAddress?: string | null;
@@ -42,6 +43,15 @@ export function NavAuthBadges({
   onConnectWallet,
   onDisconnectWallet,
 }: NavAuthBadgesProps) {
+  const {
+    isPrivyEnabled,
+    user: privyUser,
+    login: privyLogin,
+    linkWallet,
+    linkGoogle,
+    linkGithub,
+  } = useKolianceAuth();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
@@ -90,6 +100,7 @@ export function NavAuthBadges({
     walletAddress?: string | null;
     tier: string;
     creditAllowanceUSD?: number;
+    synthetic?: boolean;
   } | null>(null);
 
   const [githubUser, setGithubUser] = useState<{
@@ -118,7 +129,8 @@ export function NavAuthBadges({
           bio: g.bio,
           walletAddress: g.walletAddress || g.wallet_address,
           tier: g.trustTier || "GOOGLE VERIFIED CITIZEN",
-          creditAllowanceUSD: g.creditAllowanceUSD || 1200,
+          creditAllowanceUSD: g.synthetic ? 0 : (g.creditAllowanceUSD || 600),
+          synthetic: !!g.synthetic,
         });
       } else {
         setGoogleUser(null);
@@ -157,8 +169,36 @@ export function NavAuthBadges({
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // 1. Google 1-Click Login Trigger
+  // Sync Privy user authentication state into badges
+  useEffect(() => {
+    if (privyUser?.google && !googleUser) {
+      setGoogleUser({
+        id: privyUser.id,
+        name: (privyUser.google.name as string) || (privyUser.google.email as string),
+        email: privyUser.google.email as string,
+        walletAddress: (privyUser.wallet?.address || walletAddress) as string | null,
+        tier: "GOOGLE VERIFIED (PRIVY)",
+        creditAllowanceUSD: 1200,
+      });
+    }
+    if (privyUser?.github && !githubUser) {
+      setGithubUser({
+        username: privyUser.github.username as string,
+        tier: "BUIDLER (PRIVY)",
+      });
+    }
+  }, [privyUser, walletAddress, googleUser, githubUser]);
+
+  // 1. Google 1-Click Login Trigger (Privy-aware with OAuth fallback)
   const handleGoogleLogin = () => {
+    if (isPrivyEnabled) {
+      if (linkGoogle) {
+        linkGoogle();
+        return;
+      }
+      privyLogin();
+      return;
+    }
     const clientId =
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID;
     const redirectUri = encodeURIComponent("https://koliance.oodai.space");
@@ -173,8 +213,16 @@ export function NavAuthBadges({
     window.location.href = `https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}&access_type=offline&prompt=consent`;
   };
 
-  // 2. GitHub 1-Click Login Trigger
+  // 2. GitHub 1-Click Login Trigger (Privy-aware with OAuth fallback)
   const handleGithubLogin = () => {
+    if (isPrivyEnabled) {
+      if (linkGithub) {
+        linkGithub();
+        return;
+      }
+      privyLogin();
+      return;
+    }
     // Server route sets the httpOnly CSRF nonce cookie, then redirects to GitHub.
     const qs = new URLSearchParams({ path: window.location.pathname || "/" });
     window.location.href = `/api/auth/github/start?${qs.toString()}`;
@@ -187,17 +235,18 @@ export function NavAuthBadges({
     window.location.href = `https://steamcommunity.com/openid/login?openid.ns=http://specs.openid.net/auth/2.0&openid.mode=checkid_setup&openid.return_to=${returnUrl}&openid.realm=${realm}&openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select`;
   };
 
-  // Quick Instant Demo Login for Testing (One-click Google + GitHub verify)
+  // Sandbox Demo Login for Testing (Explicitly synthetic with 0 credit allocation)
   const handleInstantGoogleDemo = () => {
     const demo = {
       googleId: "109842839210492819283",
       email: "alexander.dev@google.com",
-      emailVerified: true,
-      name: "Alexander Monad Core",
+      emailVerified: false,
+      synthetic: true,
+      name: "Alexander (Demo Synthetic)",
       picture: "https://lh3.googleusercontent.com/a/default-user=s96-c",
       walletAddress: walletAddress || "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
-      trustTier: "GOOGLE VERIFIED ARCHITECT",
-      creditAllowanceUSD: 1200,
+      trustTier: "UNVERIFIED SYNTHETIC DEMO",
+      creditAllowanceUSD: 0,
     };
     localStorage.setItem("koliance_google_profile", JSON.stringify(demo));
     syncAuthState();
@@ -397,6 +446,19 @@ export function NavAuthBadges({
                       <span>断开</span>
                     </button>
                   </div>
+
+                  {isPrivyEnabled && linkWallet && (
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        linkWallet();
+                      }}
+                      className="w-full py-1 px-2 rounded-lg bg-[#1a2134] hover:bg-[#25304a] text-slate-300 hover:text-white text-[10px] font-mono transition flex items-center justify-center gap-1 border border-white/10"
+                    >
+                      <Link2 className="w-3 h-3 text-purple-400" />
+                      <span>关联其他钱包 (Link External Wallet)</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -442,7 +504,7 @@ export function NavAuthBadges({
                       {googleUser && <CheckCircle2 className="w-3 h-3 text-blue-400" />}
                     </div>
                     <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
-                      {googleUser ? googleUser.email : "+$1,200 USD 授信"}
+                      {googleUser ? (googleUser.synthetic ? "[SYNTHETIC] 0 USD 授信" : googleUser.email) : "+$1,200 USD 授信"}
                     </div>
                   </div>
                 </div>

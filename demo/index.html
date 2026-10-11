@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Koliance Protocol — Nansen-Style Web3 Optimization Preview</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulseSlow {
+      0%, 100% { opacity: 0.3; transform: scale(1); }
+      50% { opacity: 0.6; transform: scale(1.08); }
+    }
+    @keyframes glowSweep {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .neon-border {
+      box-shadow: 0 0 25px -4px rgba(0, 255, 167, 0.18), inset 0 0 20px -5px rgba(131, 110, 249, 0.2);
+    }
+    .card-hover:hover {
+      border-color: rgba(0, 255, 167, 0.5);
+      transform: translateY(-3px);
+      box-shadow: 0 15px 35px -10px rgba(0, 255, 167, 0.2);
+    }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #06080b; }
+    ::-webkit-scrollbar-thumb { background: #1f293d; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-[#06080B] text-slate-100 font-sans antialiased selection:bg-[#00FFA7] selection:text-black overflow-x-hidden min-h-screen">
+
+  <!-- TOP GLOW BACKGROUND -->
+  <div class="fixed inset-0 pointer-events-none z-0">
+    <div class="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[800px] h-[500px] bg-gradient-to-b from-[#836EF9]/20 via-[#00FFA7]/10 to-transparent blur-[140px] rounded-full"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-25"></div>
+  </div>
+
+  <div class="relative z-10 flex flex-col min-h-screen">
+
+    <!-- 1. TOP HEADER (Nansen Minimalist Cyber Nav) -->
+    <header class="sticky top-0 z-50 backdrop-blur-xl bg-[#06080B]/85 border-b border-white/10 px-4 sm:px-8 py-3.5">
+      <div class="max-w-7xl mx-auto flex items-center justify-between">
+        
+        <!-- Brand & Protocol HUD -->
+        <div class="flex items-center gap-6">
+          <div class="flex items-center gap-2.5 cursor-pointer group">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#836EF9] to-[#00FFA7] flex items-center justify-center font-black text-black text-base shadow-[0_0_15px_rgba(0,255,167,0.4)] group-hover:scale-105 transition-transform">
+              K
+            </div>
+            <div>
+              <span class="font-extrabold tracking-wider text-white text-base">KOLIANCE</span>
+              <span class="text-[11px] font-mono text-[#00FFA7] ml-1.5 px-1.5 py-0.5 rounded bg-[#00FFA7]/10 border border-[#00FFA7]/20">MONAD TESTNET</span>
+            </div>
+          </div>
+
+          <!-- Live Network Ping Badge -->
+          <div class="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-slate-300">
+            <span class="w-2 h-2 rounded-full bg-[#00FFA7] animate-pulse"></span>
+            <span>Chain ID: 10143</span>
+            <span class="text-slate-600">|</span>
+            <span id="headerTps" class="text-[#00FFA7]">10,482 TPS</span>
+          </div>
+        </div>
+
+        <!-- Center Nav Links -->
+        <nav class="hidden lg:flex items-center gap-6 text-xs font-mono text-slate-400">
+          <a href="#hero" class="text-white hover:text-[#00FFA7] transition-colors">Overview</a>
+          <a href="#woken-section" class="hover:text-[#00FFA7] transition-colors flex items-center gap-1">
+            <span>Woken Whales</span>
+            <span class="text-[10px] bg-amber-500/20 text-amber-300 px-1 py-0.2 rounded border border-amber-500/30">NANSEN RADAR</span>
+          </a>
+          <a href="#demo-terminal" class="hover:text-[#00FFA7] transition-colors">Interactive Demo</a>
+          <a href="#bento" class="hover:text-[#00FFA7] transition-colors">Bento Grid</a>
+        </nav>
+
+        <!-- Right Side: Motion Control & Progressive Auth -->
+        <div class="flex items-center gap-3">
+          <button id="toggleMotionBtn" class="text-xs font-mono px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-colors">
+            [MOTION] GSAP: <span id="motionStatus" class="text-[#00FFA7]">开启 (60FPS)</span>
+          </button>
+          <button id="connectWalletBtn" onclick="toggleWalletMock()" class="text-xs font-semibold px-4 py-2 rounded-lg bg-gradient-to-r from-[#00FFA7] to-[#00d084] text-black hover:opacity-90 transition-all shadow-[0_0_20px_rgba(0,255,167,0.3)] active:scale-95">
+            <span id="walletBtnText">Connect Wallet</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 2. HERO: GSAP CANVAS PARTICLE GRAVITY + HUD -->
+    <section id="hero" class="relative pt-14 pb-20 px-4 sm:px-8 overflow-hidden">
+      <!-- 60FPS Interactive Canvas (Mouse gravity & spring simulation) -->
+      <canvas id="heroCanvas" class="absolute inset-0 w-full h-full pointer-events-auto opacity-70"></canvas>
+
+      <div class="max-w-4xl mx-auto text-center relative z-10 pointer-events-none">
+        
+        <!-- Live Tagline -->
+        <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
+          <span class="w-1.5 h-1.5 rounded-full bg-[#00FFA7]"></span>
+          <span class="text-xs font-mono text-slate-300">Nansen 级链上情报 · Monad 10,000 TPS · Visa AgentCard</span>
+        </div>
+
+        <!-- Headline -->
+        <h1 class="text-4xl sm:text-6xl font-black text-white tracking-tight leading-[1.1] mb-6">
+          Trade, Settle & Prove<br/>
+          <span class="bg-gradient-to-r from-white via-indigo-200 to-[#836EF9] bg-clip-text text-transparent">Everything Onchain</span>
+          <span class="bg-gradient-to-r from-[#00FFA7] to-emerald-400 bg-clip-text text-transparent"> with AI</span>
+        </h1>
+
+        <!-- Subtext -->
+        <p class="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto mb-8 font-normal leading-relaxed">
+          无需等待 10MB 视频加载！基于 GSAP Canvas 与轻量交互沙盒，呈现休眠巨鲸苏醒（Woken Wallets）、Visa 链下微结算与 Steam 游戏信用凭证。
+        </p>
+
+        <!-- CTA Action Buttons -->
+        <div class="flex flex-wrap items-center justify-center gap-4 pointer-events-auto">
+          <button onclick="scrollToDemo()" class="px-6 py-3 rounded-xl bg-[#00FFA7] text-black font-bold text-xs sm:text-sm hover:shadow-[0_0_30px_rgba(0,255,167,0.5)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
+            <span>进入实时交互模拟</span>
+            <span>&darr;</span>
+          </button>
+          <button onclick="simulateNewWokenWhale()" class="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-white font-semibold text-xs sm:text-sm border border-white/10 transition-all flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+            <span>雷达侦测: 模拟巨鲸苏醒</span>
+          </button>
+        </div>
+
+        <!-- Live Metrics Strip (Ticker) -->
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 max-w-3xl mx-auto mt-14 pt-8 border-t border-white/10 pointer-events-auto">
+          <div class="p-3 bg-white/[0.02] rounded-xl border border-white/5 backdrop-blur-sm">
+            <div class="text-[11px] font-mono text-slate-500 mb-1">PARALLEL TPS</div>
+            <div id="metricTps" class="text-2xl font-bold font-mono text-[#00FFA7]">10,482</div>
+            <div class="text-[10px] text-slate-400">Monad Parallel EVM</div>
+          </div>
+          <div class="p-3 bg-white/[0.02] rounded-xl border border-white/5 backdrop-blur-sm">
+            <div class="text-[11px] font-mono text-slate-500 mb-1">FINALITY</div>
+            <div class="text-2xl font-bold font-mono text-white">380 <span class="text-xs text-slate-400 font-normal">ms</span></div>
+            <div class="text-[10px] text-slate-400">Sub-second Confirmation</div>
+          </div>
+          <div class="p-3 bg-white/[0.02] rounded-xl border border-white/5 backdrop-blur-sm">
+            <div class="text-[11px] font-mono text-slate-500 mb-1">WOKEN WALLETS (24H)</div>
+            <div class="text-2xl font-bold font-mono text-amber-400">148</div>
+            <div class="text-[10px] text-slate-400">>3 Year Dormant Alert</div>
+          </div>
+          <div class="p-3 bg-white/[0.02] rounded-xl border border-white/5 backdrop-blur-sm">
+            <div class="text-[11px] font-mono text-slate-500 mb-1">SETTLED (USD)</div>
+            <div class="text-2xl font-bold font-mono text-[#836EF9]">$49.2K</div>
+            <div class="text-[10px] text-slate-400">Visa Luhn Verified</div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 3. FEATURE DEMO WORKSHOP (替代大视频的交互式轻量沙盒) -->
+    <section id="demo-terminal" class="py-10 px-4 sm:px-8 max-w-6xl mx-auto w-full">
+      <div class="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
+        <div>
+          <div class="text-xs font-mono text-[#00FFA7] uppercase tracking-wider mb-1">● FEATURE WORKSHOP (REPLACING 10MB VIDEO)</div>
+          <h2 class="text-2xl font-extrabold text-white">产品功能交互演示台</h2>
+          <p class="text-xs text-slate-400 mt-1">毫秒加载、随时交互，通过代码状态机真实演示三大核心模块运行原理。</p>
+        </div>
+        <!-- Terminal Tabs -->
+        <div class="flex p-1 bg-[#131722] rounded-xl border border-white/10">
+          <button onclick="switchTab('woken')" id="tabBtn-woken" class="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#836EF9] text-white shadow transition-all">
+            1. 沉睡巨鲸苏醒 (Woken Radar)
+          </button>
+          <button onclick="switchTab('card')" id="tabBtn-card" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all">
+            2. Visa AgentCard 扣款
+          </button>
+          <button onclick="switchTab('steam')" id="tabBtn-steam" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all">
+            3. Steam 链上存证
+          </button>
+        </div>
+      </div>
+
+      <!-- Terminal Window Container -->
+      <div class="rounded-2xl bg-[#0c1017] border border-white/15 overflow-hidden shadow-2xl relative neon-border">
+        
+        <!-- Header Bar -->
+        <div class="px-4 py-3 bg-[#111722] border-b border-white/10 flex items-center justify-between text-xs font-mono text-slate-400">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-red-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500/80"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/80"></span>
+            <span class="ml-2" id="terminalTitle">koliance-core / woken-wallets-radar</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-[#00FFA7] animate-pulse"></span>
+            <span>LIVE SOCKET</span>
+          </div>
+        </div>
+
+        <!-- TAB 1: WOKEN WALLETS RADAR -->
+        <div id="tabContent-woken" class="p-6">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-3">
+            <div>
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <span>沉睡巨鲸觉醒情报流 (Woken Wallets Feed)</span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">Nansen 级标签</span>
+              </h3>
+              <p class="text-xs text-slate-400 mt-0.5">监控休眠超过 500 天无交易、突然苏醒进行转账的百万美金巨鲸地址。</p>
+            </div>
+            <button onclick="simulateNewWokenWhale()" class="self-start sm:self-auto text-xs font-mono px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-[#00FFA7] border border-emerald-500/30 transition-all flex items-center gap-1.5">
+              <span>+ 模拟苏醒一条巨鲸</span>
+            </button>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs font-mono">
+              <thead>
+                <tr class="text-slate-500 border-b border-white/10 pb-2">
+                  <th class="py-2.5">时间</th>
+                  <th class="py-2.5">地址 / Nansen 标签</th>
+                  <th class="py-2.5">沉睡周期</th>
+                  <th class="py-2.5">异动规模</th>
+                  <th class="py-2.5">意图解析 (Intent)</th>
+                  <th class="py-2.5 text-right">警报级别</th>
+                </tr>
+              </thead>
+              <tbody id="wokenTableBody" class="divide-y divide-white/5">
+                <tr class="text-slate-300 hover:bg-white/[0.02] transition-colors">
+                  <td class="py-3 text-slate-400">刚刚</td>
+                  <td class="py-3">
+                    <span class="text-cyan-400 font-semibold">0x71C8...3B19</span>
+                    <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300">Early ETH ICO Whale</span>
+                  </td>
+                  <td class="py-3 text-amber-400 font-bold">1,824 天 (5.0 年)</td>
+                  <td class="py-3 text-white font-bold">2,500 ETH ($7.85M)</td>
+                  <td class="py-3 text-emerald-400">转入 Uniswap V3 流动池提供深度</td>
+                  <td class="py-3 text-right"><span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold">HIGH</span></td>
+                </tr>
+                <tr class="text-slate-300 hover:bg-white/[0.02] transition-colors">
+                  <td class="py-3 text-slate-400">3 分钟前</td>
+                  <td class="py-3">
+                    <span class="text-cyan-400 font-semibold">0x3A9F...88E1</span>
+                    <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-300">Smart Money DEX Trader</span>
+                  </td>
+                  <td class="py-3 text-amber-400">640 天 (1.7 年)</td>
+                  <td class="py-3 text-white font-bold">1,200,000 USDC</td>
+                  <td class="py-3 text-purple-400">质押至 Monad Lending Pool</td>
+                  <td class="py-3 text-right"><span class="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">MED</span></td>
+                </tr>
+                <tr class="text-slate-300 hover:bg-white/[0.02] transition-colors">
+                  <td class="py-3 text-slate-400">12 分钟前</td>
+                  <td class="py-3">
+                    <span class="text-cyan-400 font-semibold">0x91F2...02CA</span>
+                    <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-slate-500/20 text-slate-300">Monad Early Genesis</span>
+                  </td>
+                  <td class="py-3 text-amber-400">412 天 (1.1 年)</td>
+                  <td class="py-3 text-white font-bold">500,000 MON</td>
+                  <td class="py-3 text-cyan-400">激活 Koliance 信任身份凭证</td>
+                  <td class="py-3 text-right"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">LOW</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- TAB 2: AGENTCARD SIMULATION -->
+        <div id="tabContent-card" class="p-6 hidden">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 items-center">
+            <div>
+              <h3 class="text-base font-bold text-white mb-1">Visa BIN 492810 虚拟信用卡秒级授权</h3>
+              <p class="text-xs text-slate-400 mb-5">ISO/IEC 7812 规范标准卡号，Luhn MOD 10 校验，采用内存会话密钥进行高频扣款。</p>
+              
+              <div class="space-y-2.5 font-mono text-xs">
+                <div class="p-2.5 rounded-lg bg-white/5 border border-white/10 flex justify-between">
+                  <span class="text-slate-400">Session Key 限额:</span>
+                  <span class="text-white font-bold">$500.00 / 日</span>
+                </div>
+                <div class="p-2.5 rounded-lg bg-white/5 border border-white/10 flex justify-between">
+                  <span class="text-slate-400">允许 MCC:</span>
+                  <span class="text-[#00FFA7]">7999 (Gaming), 5734 (Software)</span>
+                </div>
+                <div class="p-2.5 rounded-lg bg-white/5 border border-white/10 flex justify-between">
+                  <span class="text-slate-400">上链模式:</span>
+                  <span class="text-purple-400">Go 后端异步批量哈希上链存证</span>
+                </div>
+              </div>
+
+              <div class="mt-6 flex items-center gap-3">
+                <button onclick="simulateSwipeCard()" class="px-4 py-2.5 rounded-lg bg-gradient-to-r from-[#836EF9] to-[#00FFA7] text-black font-bold text-xs hover:opacity-95 transition-all shadow-[0_0_20px_rgba(131,110,249,0.4)]">
+                  点击模拟微支付扣款 ($25.00)
+                </button>
+                <span id="swipeStatus" class="text-xs font-mono text-slate-400">状态: 等待操作</span>
+              </div>
+            </div>
+
+            <!-- Virtual Visa Card -->
+            <div class="relative w-full max-w-sm mx-auto aspect-[1.586] rounded-2xl p-6 bg-gradient-to-br from-[#1c223a] via-[#101426] to-[#0b0d17] border border-white/20 shadow-2xl overflow-hidden">
+              <div class="absolute -right-12 -top-12 w-40 h-40 bg-[#00FFA7]/15 rounded-full blur-2xl"></div>
+              <div class="relative z-10 flex flex-col justify-between h-full font-mono">
+                <div class="flex items-center justify-between">
+                  <span class="text-xs font-black tracking-widest text-[#00FFA7]">KOLIANCE AGENT</span>
+                  <span class="text-xs text-white/80 italic font-sans font-bold">VISA</span>
+                </div>
+                <div class="my-auto">
+                  <div class="text-lg tracking-[0.2em] font-bold text-white">4928 1045 8820 9134</div>
+                  <div class="flex items-center gap-4 text-[10px] text-slate-400 mt-2">
+                    <span>VALID: 10/29</span>
+                    <span>CVV: 882</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-[11px] text-slate-300">
+                  <span>HOLDER: AI_AGENT_0x71C8</span>
+                  <span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px]">ACTIVE</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- TAB 3: STEAM ON-CHAIN PROOF -->
+        <div id="tabContent-steam" class="p-6 hidden font-mono text-xs">
+          <div class="max-w-xl mx-auto space-y-4">
+            <div>
+              <h3 class="text-base font-bold text-white font-sans">Steam 游戏时长与成就 Keccak256 密码学存证</h3>
+              <p class="text-slate-400 font-sans mt-0.5">读取 Steam Web API 游戏时长，生成防篡改证据哈希并写入 Monad 合约，折算为信用授信。</p>
+            </div>
+
+            <div class="p-4 rounded-xl bg-black/40 border border-white/10 space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">SteamID:</span>
+                <span class="text-cyan-400">76561198028114928</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">CS:GO 2 游戏时长:</span>
+                <span class="text-white">1,420 小时 (已验证)</span>
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-slate-400">Keccak256 证据哈希:</span>
+                <span class="text-[#00FFA7] break-all">0xa3872c9167b5e40e2d1d07c089207e4d82b3d81b312783709b119c43bcae619a</span>
+              </div>
+              <div class="flex items-center justify-between pt-2 border-t border-white/5">
+                <span class="text-slate-400">AgentCard 信用增幅:</span>
+                <span class="text-purple-400 font-bold">+ $2,500 USD (Monad Testnet)</span>
+              </div>
+            </div>
+
+            <div class="text-center pt-2">
+              <button onclick="alert('已模拟触发 Steam API 凭证重新签名与 Monad 上链校验！')" class="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/15 text-white font-sans font-semibold transition-all">
+                重新生成凭证并写入 Monad
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 4. NANSEN-STYLE BENTO GRID ARCHITECTURE -->
+    <section id="bento" class="py-14 px-4 sm:px-8 max-w-7xl mx-auto w-full">
+      <div class="text-center max-w-xl mx-auto mb-10">
+        <h2 class="text-2xl sm:text-3xl font-black text-white">Bento Grid 模块化架构</h2>
+        <p class="text-slate-400 text-xs sm:text-sm mt-1.5">去中心化身份信用、微支付与跨市场多空交易一体化终端</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        <!-- Bento 1: Woken Wallets (Span 2) -->
+        <div class="md:col-span-2 rounded-2xl p-6 bg-[#0d111a] border border-white/10 card-hover transition-all duration-300 relative overflow-hidden group">
+          <div class="relative z-10">
+            <span class="text-[11px] font-mono text-[#00FFA7] px-2 py-0.5 rounded bg-[#00FFA7]/10 border border-[#00FFA7]/20">01 / RADAR</span>
+            <h3 class="text-lg font-bold text-white mt-3 mb-2">沉睡钱包苏醒追踪 (Woken & Smart Money)</h3>
+            <p class="text-xs text-slate-400 max-w-md mb-4 leading-relaxed">
+              基于 500M+ 实体画像，秒级推送长期沉睡巨鲸的资金觉醒转移、大额提现与意图，先于市场洞悉筹码流向。
+            </p>
+            <div class="flex items-center gap-2 text-xs font-mono text-[#00FFA7]">
+              <span>查看完整雷达图谱 &rarr;</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bento 2: Monad 10k TPS Engine -->
+        <div class="rounded-2xl p-6 bg-[#0d111a] border border-white/10 card-hover transition-all duration-300 relative overflow-hidden group">
+          <div class="relative z-10">
+            <span class="text-[11px] font-mono text-[#836EF9] px-2 py-0.5 rounded bg-[#836EF9]/10 border border-[#836EF9]/20">02 / PARALLEL EVM</span>
+            <h3 class="text-lg font-bold text-white mt-3 mb-2">Monad 10,000 TPS</h3>
+            <p class="text-xs text-slate-400 mb-4 leading-relaxed">
+              万级微支付批量聚合，亚秒级共识确认（<400ms）。
+            </p>
+            <div class="text-xl font-mono font-bold text-white">0.38s <span class="text-xs text-slate-500 font-normal">Finality</span></div>
+          </div>
+        </div>
+
+        <!-- Bento 3: Visa AgentCard (Span 1) -->
+        <div class="rounded-2xl p-6 bg-[#0d111a] border border-white/10 card-hover transition-all duration-300 relative overflow-hidden group">
+          <div class="relative z-10">
+            <span class="text-[11px] font-mono text-indigo-400 px-2 py-0.5 rounded bg-indigo-400/10 border border-indigo-400/20">03 / VISA BIN</span>
+            <h3 class="text-lg font-bold text-white mt-3 mb-2">AgentCard 权限矩阵</h3>
+            <p class="text-xs text-slate-400 mb-3 leading-relaxed">
+              细粒度 MCC 商户码白名单、单笔限额与会话熔断，守护资产安全。
+            </p>
+            <span class="text-[11px] font-mono text-slate-500">ISO/IEC 7812 规范</span>
+          </div>
+        </div>
+
+        <!-- Bento 4: Alpaca Leveraged Stock & Perp (Span 2) -->
+        <div class="md:col-span-2 rounded-2xl p-6 bg-[#0d111a] border border-white/10 card-hover transition-all duration-300 relative overflow-hidden group">
+          <div class="relative z-10">
+            <span class="text-[11px] font-mono text-cyan-400 px-2 py-0.5 rounded bg-cyan-400/10 border border-cyan-400/20">04 / MULTI-MARKET</span>
+            <h3 class="text-lg font-bold text-white mt-3 mb-2">美股多空杠杆与永续合约双核撮合</h3>
+            <p class="text-xs text-slate-400 max-w-md mb-4 leading-relaxed">
+              对接 Alpaca 毫秒级美股行情，支持 NVDA、TSLA 多空对冲与 1x~4x 杠杆保证金交易。
+            </p>
+            <div class="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+              <span class="px-2 py-0.5 rounded bg-white/5">1x ~ 4x 杠杆</span>
+              <span class="px-2 py-0.5 rounded bg-white/5">$100,000 模拟体验金</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- 5. FOOTER -->
+    <footer class="mt-auto border-t border-white/10 py-6 px-4 text-center text-xs text-slate-500 font-mono">
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div>© 2026 Koliance Protocol. Built on Monad Testnet (Chain ID 10143).</div>
+        <div class="flex items-center gap-4 text-slate-400">
+          <span>Go Microservice</span>
+          <span>·</span>
+          <span>Next.js 15 App Router</span>
+          <span>·</span>
+          <span>Supabase Postgres</span>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+
+  <!-- SCRIPT FOR PARTICLES & INTERACTION -->
+  <script>
+    // 1. GSAP-Style Canvas Particle Gravity System
+    const canvas = document.getElementById('heroCanvas');
+    const ctx = canvas.getContext('2d');
+    let width, height;
+    let particles = [];
+    let isMotionActive = true;
+    let mouse = { x: null, y: null, radius: 140 };
+
+    function resize() {
+      width = canvas.width = window.innerWidth;
+      height = canvas.height = document.getElementById('hero').offsetHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    window.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+    });
+
+    window.addEventListener('mouseleave', () => {
+      mouse.x = null;
+      mouse.y = null;
+    });
+
+    const colors = ['#836EF9', '#00FFA7', '#60a5fa', '#a78bfa'];
+
+    class Particle {
+      constructor() {
+        this.x = Math.random() * width;
+        this.y = Math.random() * height;
+        this.vx = (Math.random() - 0.5) * 0.7;
+        this.vy = (Math.random() - 0.5) * 0.7;
+        this.radius = Math.random() * 2 + 1;
+        this.color = colors[Math.floor(Math.random() * colors.length)];
+      }
+      update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0 || this.x > width) this.vx *= -1;
+        if (this.y < 0 || this.y > height) this.vy *= -1;
+
+        if (mouse.x !== null && mouse.y !== null) {
+          const dx = mouse.x - this.x;
+          const dy = mouse.y - this.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < mouse.radius) {
+            const force = (mouse.radius - dist) / mouse.radius;
+            this.x -= (dx / dist) * force * 3;
+            this.y -= (dy / dist) * force * 3;
+          }
+        }
+      }
+      draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+      }
+    }
+
+    const count = Math.min(Math.floor(width / 22), 60);
+    for (let i = 0; i < count; i++) {
+      particles.push(new Particle());
+    }
+
+    function renderCanvas() {
+      if (!isMotionActive) return;
+      ctx.clearRect(0, 0, width, height);
+
+      for (let i = 0; i < particles.length; i++) {
+        for (let j = i + 1; j < particles.length; j++) {
+          const dx = particles[i].x - particles[j].x;
+          const dy = particles[i].y - particles[j].y;
+          const distSq = dx * dx + dy * dy;
+          if (distSq < 9000) {
+            const alpha = 1 - Math.sqrt(distSq) / 95;
+            ctx.beginPath();
+            ctx.moveTo(particles[i].x, particles[i].y);
+            ctx.lineTo(particles[j].x, particles[j].y);
+            ctx.strokeStyle = `rgba(131, 110, 249, ${alpha * 0.16})`;
+            ctx.stroke();
+          }
+        }
+      }
+
+      particles.forEach(p => {
+        p.update();
+        p.draw();
+      });
+
+      requestAnimationFrame(renderCanvas);
+    }
+    requestAnimationFrame(renderCanvas);
+
+    // Toggle Motion
+    document.getElementById('toggleMotionBtn').addEventListener('click', () => {
+      isMotionActive = !isMotionActive;
+      document.getElementById('motionStatus').innerText = isMotionActive ? '开启 (60FPS)' : '已暂停 (省电)';
+      document.getElementById('motionStatus').className = isMotionActive ? 'text-[#00FFA7]' : 'text-slate-500';
+      if (isMotionActive) renderCanvas();
+      else ctx.clearRect(0, 0, width, height);
+    });
+
+    // 2. High-Frequency TPS Counter Ticker
+    setInterval(() => {
+      const base = 10450 + Math.floor(Math.random() * 70);
+      const formatted = base.toLocaleString();
+      const elH = document.getElementById('headerTps');
+      const elM = document.getElementById('metricTps');
+      if (elH) elH.innerText = formatted + ' TPS';
+      if (elM) elM.innerText = formatted;
+    }, 1200);
+
+    // 3. Tab Switcher
+    function switchTab(tab) {
+      ['woken', 'card', 'steam'].forEach(t => {
+        const btn = document.getElementById('tabBtn-' + t);
+        const content = document.getElementById('tabContent-' + t);
+        if (t === tab) {
+          btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-[#836EF9] text-white shadow transition-all';
+          content.classList.remove('hidden');
+        } else {
+          btn.className = 'px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white transition-all';
+          content.classList.add('hidden');
+        }
+      });
+      const titleEl = document.getElementById('terminalTitle');
+      if (tab === 'woken') titleEl.innerText = 'koliance-core / woken-wallets-radar';
+      if (tab === 'card') titleEl.innerText = 'koliance-core / visa-bin-settlement';
+      if (tab === 'steam') titleEl.innerText = 'koliance-core / steam-keccak-proof';
+    }
+
+    // 4. Simulate Woken Whale
+    function simulateNewWokenWhale() {
+      const table = document.getElementById('wokenTableBody');
+      const addresses = ['0x4E21...9C44', '0x18F3...A07B', '0x88C2...12ED'];
+      const randomAddr = addresses[Math.floor(Math.random() * addresses.length)];
+      const row = document.createElement('tr');
+      row.className = 'text-slate-300 bg-[#00FFA7]/10 transition-all duration-700 animate-pulse';
+      row.innerHTML = `
+        <td class="py-3 text-[#00FFA7] font-bold">1秒前 (NEW)</td>
+        <td class="py-3">
+          <span class="text-cyan-400 font-semibold">${randomAddr}</span>
+          <span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-300">Woken Dormant Whale</span>
+        </td>
+        <td class="py-3 text-amber-400 font-bold">1,480 天 (4.0 年)</td>
+        <td class="py-3 text-white font-bold">1,850 ETH ($5.81M)</td>
+        <td class="py-3 text-emerald-400">大额分批转入 Binance 交易所</td>
+        <td class="py-3 text-right"><span class="px-2 py-0.5 rounded bg-red-500/20 text-red-300 font-bold">CRITICAL</span></td>
+      `;
+      table.insertBefore(row, table.firstChild);
+      setTimeout(() => {
+        row.classList.remove('bg-[#00FFA7]/10', 'animate-pulse');
+      }, 2000);
+    }
+
+    // 5. Swipe Card Simulation
+    function simulateSwipeCard() {
+      const statusEl = document.getElementById('swipeStatus');
+      statusEl.innerText = '正在验证 Session Key 与 MCC 权限...';
+      statusEl.className = 'text-xs font-mono text-amber-400';
+      setTimeout(() => {
+        statusEl.innerText = 'Visa Luhn MOD 10 校验通过，成功微扣款 $25.00！';
+        statusEl.className = 'text-xs font-mono text-[#00FFA7] font-bold';
+      }, 500);
+    }
+
+    // 6. Progressive Auth Mock
+    let isConnected = false;
+    function toggleWalletMock() {
+      isConnected = !isConnected;
+      const btn = document.getElementById('walletBtnText');
+      if (isConnected) {
+        btn.innerText = '0x71C8...3B19 (已连接)';
+        alert('[OK] 渐进式授权体验已激活：未登录时完全开放浏览行情与雷达，点击发卡或交易时弹出此连接框！');
+      } else {
+        btn.innerText = 'Connect Wallet';
+      }
+    }
+
+    function scrollToDemo() {
+      document.getElementById('demo-terminal').scrollIntoView({ behavior: 'smooth' });
+    }
+  </script>
+</body>
+</html>

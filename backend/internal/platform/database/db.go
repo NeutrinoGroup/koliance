@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ type MemoryStore struct {
 	Cards        map[string]map[string]interface{}
 	Transactions []map[string]interface{}
 	Proofs       []map[string]interface{}
+	Configs      map[string][]byte
 }
 
 func New(databaseURL string) *DB {
@@ -28,6 +30,12 @@ func New(databaseURL string) *DB {
 		Cards:        make(map[string]map[string]interface{}),
 		Transactions: make([]map[string]interface{}, 0),
 		Proofs:       make([]map[string]interface{}, 0),
+		Configs: map[string][]byte{
+			"maintenance_mode":    []byte(`{"enabled":false}`),
+			"quant_risk_limits":   []byte(`{"max_leverage":50,"max_single_trade_usd":10000,"daily_loss_limit_usd":500}`),
+			"nansen_pipeline":     []byte(`{"poll_interval_seconds":300,"chains":["ethereum","monad"]}`),
+			"credit_rating_engine": []byte(`{"steam_multiplier":1.0,"github_multiplier":1.5,"allow_synthetic_credit":false}`),
+		},
 	}
 
 	if databaseURL == "" {
@@ -100,4 +108,48 @@ func (m *MemoryStore) AppendProof(proof map[string]interface{}) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.Proofs = append(m.Proofs, proof)
+}
+
+type SystemConfig struct {
+	Key         string    `json:"key"`
+	Value       []byte    `json:"value"` // raw JSONB
+	Description string    `json:"description"`
+	UpdatedAt   time.Time `json:"updatedAt"`
+}
+
+func (db *DB) GetSystemConfig(ctx context.Context, key string) (*SystemConfig, error) {
+	if db.Pool != nil && db.IsConnected {
+		var cfg SystemConfig
+		row := db.Pool.QueryRow(ctx, "SELECT key, value, COALESCE(description, ''), updated_at FROM system_configs WHERE key = $1", key)
+		if err := row.Scan(&cfg.Key, &cfg.Value, &cfg.Description, &cfg.UpdatedAt); err != nil {
+			return nil, err
+		}
+		return &cfg, nil
+	}
+	// Memory store fallback
+	db.MemoryStore.mu.RLock()
+	defer db.MemoryStore.mu.RUnlock()
+	if val, ok := db.MemoryStore.Configs[key]; ok {
+		return &SystemConfig{
+			Key:         key,
+			Value:       val,
+			Description: "In-memory dynamic configuration",
+			UpdatedAt:   time.Now().UTC(),
+		}, nil
+	}
+	return nil, fmt.Errorf("config key not found: %s", key)
+}
+
+func (db *DB) SetSystemConfig(ctx context.Context, key string, value []byte, description string) error {
+	if db.Pool != nil && db.IsConnected {
+		_, err := db.Pool.Exec(ctx,
+			"INSERT INTO system_configs (key, value, description, updated_at) VALUES ($1, $2, $3, NOW()) ON CONFLICT (key) DO UPDATE SET value = $2, description = $3, updated_at = NOW()",
+			key, value, description,
+		)
+		return err
+	}
+	db.MemoryStore.mu.Lock()
+	defer db.MemoryStore.mu.Unlock()
+	db.MemoryStore.Configs[key] = value
+	return nil
 }

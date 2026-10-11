@@ -80,4 +80,22 @@ describe("GitHub OAuth state (CSRF)", () => {
     expect(fetchMock).toHaveBeenCalled();
     expect(res.cookies.get(GITHUB_STATE_COOKIE)?.value).toBe("");
   });
+
+  it("exchange refuses untrusted redirect_uri origins", async () => {
+    const fetchMock = mockGitHub();
+    const startRes = await start(new NextRequest("https://koliance.oodai.space/api/auth/github/start"));
+    const state = new URL(startRes.headers.get("location")!).searchParams.get("state")!;
+    const nonce = startRes.cookies.get(GITHUB_STATE_COOKIE)!.value;
+
+    const res = await exchange(
+      exchangeReq(
+        { code: "c", state, redirect_uri: "https://evil.com/callback" },
+        nonce
+      )
+    );
+    expect(res.status).toBe(400);
+    const data = await res.json();
+    expect(data.error).toMatch(/Untrusted redirect_uri/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });

@@ -116,7 +116,7 @@ describe("Agent opens a position under a session key (ADR-004 connection)", asyn
       maxSpendPerTx: PER_TX,
       dailySpendLimit: DAILY,
       validUntil: block.timestamp + ONE_DAY * 7n,
-      nonce: AGENT_ID,
+      nonce: await ctx.registry.read.userNonce([user.account.address]),
       ...overrides,
     };
 
@@ -247,7 +247,7 @@ describe("Agent opens a position under a session key (ADR-004 connection)", asyn
     // 1,000 + 1,000 fits the 3,000 day; the third would be 3,000 exactly, which
     // is allowed, so the fourth is what must fail. Use 1,000 each time and cap
     // the day at 3,000 by hand.
-    await delegate(ctx, { dailySpendLimit: usdc(2_000), nonce: 7n });
+    await delegate(ctx, { dailySpendLimit: usdc(2_000) });
 
     await agentOpen(ctx); // 1,000
     await agentOpen(ctx); // 2,000

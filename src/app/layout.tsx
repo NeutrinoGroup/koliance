@@ -135,6 +135,9 @@ const jsonLd = {
   ],
 };
 
+import { I18nProvider } from "@/lib/i18n";
+import { Providers } from "@/components/Providers";
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -172,7 +175,11 @@ export default function RootLayout({
             <p>Koliance is deployed on Monad Testnet (Chain ID: 10143) with native MON gas token support.</p>
           </div>
         </noscript>
-        {children}
+        <I18nProvider>
+          <Providers>
+            {children}
+          </Providers>
+        </I18nProvider>
       </body>
     </html>
   );

@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
 // The hardhat-viem helper exposes clients and deployment, not the standalone
@@ -83,7 +83,7 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
     // key because the *user* is the one who signs, and the key only ever
     // identifies which delegation is being spent against.
     sessionKey = agent.account.address;
-    nonce = 1n;
+    nonce = await registry.read.userNonce([user.account.address]);
   }
 
   async function validUntil() {
@@ -475,7 +475,7 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
         maxSpendPerTx: MAX_PER_TX,
         dailySpendLimit: DAILY_LIMIT,
         validUntil: await validUntil(),
-        nonce: 1n,
+        nonce: await second.read.userNonce([outsider.account.address]),
       };
       const signature = await outsider.signTypedData({
         account: outsider.account,
@@ -516,7 +516,7 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
         maxSpendPerTx: MAX_PER_TX,
         dailySpendLimit: DAILY_LIMIT,
         validUntil: await validUntil(),
-        nonce: 2n,
+        nonce: await registry.read.userNonce([outsider.account.address]),
       };
       const signature = await outsider.signTypedData({
         account: outsider.account,
@@ -603,5 +603,135 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       registry.write.authorizeSpend([outsider.account.address, MAX_PER_TX], { account: agent.account }),
       "NoSuchDelegation",
     );
+  });
+
+  it("S-1: invalidateNonce burns pending delegations signed with previous nonce", async function () {
+    nonce = 600n;
+    await reset();
+
+    const currentNonce = await registry.read.userNonce([user.account.address]);
+    const { message, signature } = await sign(user.account, { nonce: currentNonce });
+
+    await expectRevert(
+      registry.write.invalidateNonce([user.account.address], { account: outsider.account }),
+      "NotAuthorizedCaller",
+    );
+
+    await registry.write.invalidateNonce([user.account.address], { account: user.account });
+    const newNonce = await registry.read.userNonce([user.account.address]);
+    assert.equal(newNonce, currentNonce + 1n);
+
+    await expectRevert(
+      registry.write.registerDelegation(
+        [
+          message.user as `0x${string}`,
+          message.agent as `0x${string}`,
+          message.sessionKey as `0x${string}`,
+          message.maxSpendPerTx as bigint,
+          message.dailySpendLimit as bigint,
+          message.validUntil as bigint,
+          message.nonce as bigint,
+          signature,
+        ],
+        { account: user.account },
+      ),
+      "InvalidNonce",
+    );
+  });
+
+  it("S-2: refuses re-registration if the existing session key is frozen", async function () {
+    nonce = 700n;
+    await reset();
+    await register();
+
+    await registry.write.freeze([sessionKey], { account: deployer.account });
+
+    const nextNonce = await registry.read.userNonce([user.account.address]);
+    const { message, signature } = await sign(user.account, { nonce: nextNonce });
+
+    await expectRevert(
+      registry.write.registerDelegation(
+        [
+          message.user as `0x${string}`,
+          message.agent as `0x${string}`,
+          message.sessionKey as `0x${string}`,
+          message.maxSpendPerTx as bigint,
+          message.dailySpendLimit as bigint,
+          message.validUntil as bigint,
+          message.nonce as bigint,
+          signature,
+        ],
+        { account: user.account },
+      ),
+      "DelegationIsFrozen",
+    );
+
+    // Unfreezing restores ability to re-register
+    await registry.write.unfreeze([sessionKey], { account: user.account });
+    await registry.write.registerDelegation(
+      [
+        message.user as `0x${string}`,
+        message.agent as `0x${string}`,
+        message.sessionKey as `0x${string}`,
+        message.maxSpendPerTx as bigint,
+        message.dailySpendLimit as bigint,
+        message.validUntil as bigint,
+        message.nonce as bigint,
+        signature,
+      ],
+      { account: user.account },
+    );
+    const unfrozenDelegation = await registry.read.getDelegation([sessionKey]);
+    assert.equal(unfrozenDelegation.frozen, false);
+  });
+
+  it("S-3: retains spentInWindow and windowStart when re-registering the same session key", async function () {
+    nonce = 800n;
+    await reset();
+    await register();
+
+    const half = MAX_PER_TX; // 100 USDC
+    await registry.write.authorizeSpend([sessionKey, half], { account: agent.account });
+
+    const before = await registry.read.getDelegation([sessionKey]);
+    assert.equal(before.spentInWindow, half);
+
+    const nextNonce = await registry.read.userNonce([user.account.address]);
+    const updatedValidUntil = (await validUntil()) + ONE_DAY * 3n;
+    const { message, signature } = await sign(user.account, {
+      nonce: nextNonce,
+      validUntil: updatedValidUntil,
+    });
+
+    await registry.write.registerDelegation(
+      [
+        message.user as `0x${string}`,
+        message.agent as `0x${string}`,
+        message.sessionKey as `0x${string}`,
+        message.maxSpendPerTx as bigint,
+        message.dailySpendLimit as bigint,
+        message.validUntil as bigint,
+        message.nonce as bigint,
+        signature,
+      ],
+      { account: user.account },
+    );
+
+    const after = await registry.read.getDelegation([sessionKey]);
+    assert.equal(after.spentInWindow, half);
+    assert.equal(after.windowStart, before.windowStart);
+
+    await registry.write.authorizeSpend([sessionKey, half], { account: agent.account });
+
+    await expectRevert(
+      registry.write.authorizeSpend([sessionKey, half], { account: agent.account }),
+      "ExceededDailyLimit",
+    );
+
+    // After 24h, the window still resets cleanly for the re-registered session key
+    await publicClient.request({ method: "evm_increaseTime", params: [Number(ONE_DAY) + 1] } as never);
+    await publicClient.request({ method: "evm_mine" } as never);
+    assert.equal(await registry.read.remainingDailyAllowance([sessionKey]), DAILY_LIMIT);
+    await registry.write.authorizeSpend([sessionKey, half], { account: agent.account });
   });
 });

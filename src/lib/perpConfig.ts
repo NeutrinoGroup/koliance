@@ -112,7 +112,7 @@ export const USD_DECIMALS = 18;
 /**
  * Pyth feed ids used by the perp module.
  *
- * ⚠️ These are NOT usable on Monad Testnet today. Read this before wiring them
+ * Warning: These are NOT usable on Monad Testnet today. Read this before wiring them
  * to `PythOracleAdapter`.
  *
  * The `Index` variants are 24/7 in Pyth's off-chain metadata — outside market

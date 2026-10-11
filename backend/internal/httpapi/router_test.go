@@ -19,7 +19,7 @@ const opToken = "test-operator-token"
 
 // newTestRouter builds the router with real services but unreachable
 // upstreams. Every test below fails (or succeeds) before any network call.
-func newTestRouter(t *testing.T, mutate func(*config.Config)) http.Handler {
+func newTestRouter(t testing.TB, mutate func(*config.Config)) http.Handler {
 	t.Helper()
 	cfg := &config.Config{
 		SteamDomain:        "koliance.oodai.space",
@@ -260,3 +260,33 @@ func TestAgentCardFlow(t *testing.T) {
 		t.Errorf("authorize response echoes the session key")
 	}
 }
+
+// ==================== BENCHMARKS ====================
+
+func BenchmarkRouterHealthz(b *testing.B) {
+	h := newTestRouter(b, nil)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			b.Fatalf("expected 200, got %d", rr.Code)
+		}
+	}
+}
+
+func BenchmarkRouterStats(b *testing.B) {
+	h := newTestRouter(b, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+	req.Header.Set("Origin", "https://koliance.oodai.space")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rr := httptest.NewRecorder()
+		h.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			b.Fatalf("expected 200, got %d", rr.Code)
+		}
+	}
+}
+

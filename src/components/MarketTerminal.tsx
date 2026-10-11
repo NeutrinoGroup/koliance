@@ -303,7 +303,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
         <div className="flex items-center gap-6 min-w-max text-xs font-mono">
           <div className="flex items-center gap-2 text-slate-400 font-bold uppercase tracking-wider pr-3 border-r border-white/10">
             <Activity className="w-3.5 h-3.5 text-white animate-pulse" />
-            <span>Yahoo / Alpaca Live Tape</span>
+            <span>Alpaca & Pyth Multi-Asset Tape</span>
           </div>
 
           {TICKER_TAPE.map((item) => {
