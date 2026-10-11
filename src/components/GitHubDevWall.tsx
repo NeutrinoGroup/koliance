@@ -301,9 +301,9 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
               <button
                 type="button"
                 onClick={() => loadProfile("torvalds")}
-                className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-amber-300 transition flex items-center gap-1"
+                className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-purple-300 transition flex items-center gap-1"
               >
-                <Star className="w-3 h-3 text-amber-400" />
+                <Star className="w-3 h-3 text-purple-400" />
                 <span>@torvalds (Linux 之父)</span>
               </button>
               <button
@@ -489,7 +489,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
           </div>
 
           <div className="px-3.5 py-2 rounded-2xl bg-black/50 border border-white/10 flex items-center gap-2">
-            <Star className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+            <Star className="w-4 h-4 text-purple-400 fill-purple-400/20" />
             <div>
               <span className="text-[10px] text-slate-400 block uppercase leading-none">累计星标</span>
               <strong className="text-white text-sm font-black">{devStats.totalStars} Stars</strong>
@@ -600,8 +600,8 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1 text-amber-300 font-bold">
-                  <Star className="w-3 h-3 fill-amber-300/30" />
+                <span className="flex items-center gap-1 text-purple-300 font-bold">
+                  <Star className="w-3 h-3 fill-purple-300/30" />
                   <span>{repo.stargazers_count || 0}</span>
                 </span>
                 <span className="flex items-center gap-1 text-slate-400">

@@ -30,7 +30,7 @@ export function NetworkModal({ isOpen, onClose, onSwitch }: NetworkModalProps) {
             <X className="w-5 h-5" />
           </button>
 
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 mb-5">
+          <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 mb-5">
             <AlertTriangle className="w-6 h-6" />
           </div>
 

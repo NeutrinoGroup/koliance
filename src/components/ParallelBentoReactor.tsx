@@ -14,7 +14,7 @@ interface ReactorCardProps {
   badge?: string;
   desc: string;
   actionText: string;
-  accentColor: "purple" | "cyan" | "indigo" | "amber";
+  accentColor: "purple" | "cyan" | "indigo" | "emerald";
   icon: React.ReactNode;
   onClick: () => void;
   features?: "constellation" | "scanline" | "hologram" | "halving";
@@ -92,12 +92,12 @@ function ReactorCard({
       iconBg: "from-indigo-500 to-purple-600",
       textAccent: "text-indigo-400",
     },
-    amber: {
-      border: "hover:border-amber-400/70",
-      shadow: "hover:shadow-[0_20px_50px_rgba(245,158,11,0.3)]",
-      glowBg: "rgba(245, 158, 11, 0.25)",
-      iconBg: "from-purple-500 via-indigo-600 to-amber-500",
-      textAccent: "text-amber-400",
+    emerald: {
+      border: "hover:border-emerald-400/70",
+      shadow: "hover:shadow-[0_20px_50px_rgba(16,185,129,0.3)]",
+      glowBg: "rgba(16, 185, 129, 0.25)",
+      iconBg: "from-emerald-500 to-teal-600",
+      textAccent: "text-emerald-400",
     },
   }[accentColor];
 
@@ -236,7 +236,7 @@ export function ParallelBentoReactor({ onSelectView }: ParallelBentoReactorProps
           badge="KOL"
           desc="2^30 Max Supply · 2-year halving · Monad block claiming & transfer."
           actionText="Open Token Hub"
-          accentColor="amber"
+          accentColor="emerald"
           icon={<Coins className="w-6 h-6" />}
           onClick={() => onSelectView("TOKEN")}
           features="halving"

@@ -21,7 +21,6 @@ import {
   Cpu,
   Info,
   Sliders,
-  Zap,
   Check,
   AlertCircle,
   Send,
@@ -395,8 +394,8 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               verify what is on screen.
             */}
             {marketData?.dataCaveat && (
-              <p className="mt-1.5 inline-flex items-start gap-1.5 rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-1 text-[10px] leading-relaxed text-amber-200/90">
-                <span className="font-mono uppercase tracking-wider text-amber-300/90">
+              <p className="mt-1.5 inline-flex items-start gap-1.5 rounded-md border border-purple-400/30 bg-purple-400/5 px-2 py-1 text-[10px] leading-relaxed text-purple-200/90">
+                <span className="font-mono uppercase tracking-wider text-purple-300/90">
                   {marketData.source}
                 </span>
                 <span>{marketData.dataCaveat}</span>
@@ -517,7 +516,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-emerald-400" />
+                <Activity className="w-4 h-4 text-emerald-400" />
                 <h3 className="font-bold text-sm text-white">Alpaca 多空下单控制台 (KISS)</h3>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">

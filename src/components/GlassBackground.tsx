@@ -3,7 +3,15 @@
 import React, { useEffect, useState } from "react";
 import { Shader, Swirl, ChromaFlow, FlutedGlass } from "shaders/react";
 
-export function GlassBackground() {
+interface GlassBackgroundProps {
+  className?: string;
+  opacity?: string;
+}
+
+export function GlassBackground({
+  className = "absolute inset-0 pointer-events-none -z-10 overflow-hidden",
+  opacity = "opacity-45",
+}: GlassBackgroundProps) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -15,7 +23,7 @@ export function GlassBackground() {
   }
 
   return (
-    <div className="absolute inset-0 pointer-events-none -z-10 overflow-hidden opacity-45 mix-blend-screen">
+    <div className={`${className} ${opacity} mix-blend-screen`}>
       <Shader toneMapping="neutral" className="w-full h-full">
         <Swirl
           blend={50}

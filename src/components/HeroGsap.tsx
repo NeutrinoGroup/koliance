@@ -193,7 +193,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
         <div
           ref={badgeRef}
-          className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full glass-panel border border-monad-400/30 text-xs text-monad-200 shadow-glow"
+          className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-lg glass-panel border border-monad-400/30 text-xs text-monad-200 shadow-glow"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
           <span className="font-semibold tracking-wider text-white uppercase text-[11px] font-mono">{t("vision.hero_tag")}</span>
@@ -203,7 +203,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
 
         <button
           onClick={() => setLang(lang === "en" ? "zh" : "en")}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-panel border border-white/10 hover:border-white/30 text-xs font-mono text-slate-300 hover:text-white transition cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel border border-white/10 hover:border-white/30 text-xs font-mono text-slate-300 hover:text-white transition cursor-pointer"
         >
           <Globe className="w-3.5 h-3.5 text-cyan-400" />
           <span>{lang === "en" ? "EN / ZH" : "ZH / EN"}</span>
@@ -234,7 +234,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       >
         <button
           onClick={onRegisterClick}
-          className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-gradient-to-r from-monad-600 via-monad-500 to-monad-600 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-xs tracking-wider uppercase font-mono shadow-glow hover:shadow-glow-lg transition-all duration-300 active:scale-95"
+          className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-xl bg-gradient-to-r from-monad-600 via-monad-500 to-monad-600 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-xs tracking-wider uppercase font-mono shadow-glow hover:shadow-glow-lg transition-all duration-300 active:scale-95"
         >
           <span>{t("vision.register")}</span>
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -242,7 +242,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
 
         <button
           onClick={onExploreClick}
-          className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full glass-panel hover:bg-monad-900/40 border border-white/15 hover:border-monad-400/60 text-monad-200 hover:text-white font-medium text-xs tracking-wider uppercase font-mono transition-all duration-300"
+          className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl glass-panel hover:bg-monad-900/40 border border-white/15 hover:border-monad-400/60 text-monad-200 hover:text-white font-medium text-xs tracking-wider uppercase font-mono transition-all duration-300"
         >
           <span>{t("vision.explore")}</span>
         </button>

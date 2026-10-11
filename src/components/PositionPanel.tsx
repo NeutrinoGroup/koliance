@@ -409,19 +409,19 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
 
   if (!PERP_IS_CONFIGURED) {
     return (
-      <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-6">
-        <div className="flex items-center gap-3 text-amber-300">
+      <div className="rounded-xl border border-purple-500/40 bg-purple-500/5 p-6">
+        <div className="flex items-center gap-3 text-purple-300">
           <AlertCircle className="h-5 w-5 shrink-0" />
           <h3 className="font-semibold">Perp 模块未配置</h3>
         </div>
-        <p className="mt-3 text-sm leading-relaxed text-amber-200/80">
+        <p className="mt-3 text-sm leading-relaxed text-purple-200/80">
           缺少 <code className="rounded bg-black/30 px-1">NEXT_PUBLIC_PERP_*</code> 环境变量。先运行{" "}
           <code className="rounded bg-black/30 px-1">
             npx hardhat run scripts/demo-seed.ts --network monadTestnet
           </code>
           ，再把输出的四个地址填入 <code className="rounded bg-black/30 px-1">.env.local</code>。
         </p>
-        <p className="mt-2 text-xs text-amber-200/60">
+        <p className="mt-2 text-xs text-purple-200/60">
           此处不会显示模拟数据 —— 假数据会让演示失去可验证性。
         </p>
       </div>
@@ -551,7 +551,7 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
             </div>
             <div className="flex justify-between">
               <span>出金上限</span>
-              <span className="text-amber-300">${formatUsd(previewCap)}</span>
+              <span className="text-purple-300">${formatUsd(previewCap)}</span>
             </div>
             <p className="pt-1 text-[10px] leading-relaxed text-white/30">
               池子需预留「出金上限」= 保证金 + 名义规模。偿付护栏：池子付不出的仓位会被直接拒绝开仓，而不是开了之后平不掉。
@@ -631,7 +631,7 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
                           )}
                         </span>
                         {r.liquidatable && (
-                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                          <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">
                             可清算
                           </span>
                         )}

@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useLanguage } from "@/lib/i18n";
+import { GlassBackground } from "@/components/GlassBackground";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -55,9 +56,9 @@ export function QuantumProtocolStream() {
     const cards = Array.from(cardsContainer.querySelectorAll<HTMLElement>(".quantum-phase-card"));
 
     const ctx = gsap.context(() => {
-      // Set initial state: card 0 fully visible, cards 1 & 2 invisible and lower down
-      gsap.set(cards[0], { opacity: 1, y: 0, filter: "blur(0px)", pointerEvents: "auto" });
-      gsap.set(cards.slice(1), { opacity: 0, y: 50, filter: "blur(12px)", pointerEvents: "none" });
+      // Set initial state without blur distortion: card 0 fully visible, cards 1 & 2 invisible and offset
+      gsap.set(cards[0], { opacity: 1, y: 0, pointerEvents: "auto" });
+      gsap.set(cards.slice(1), { opacity: 0, y: 50, pointerEvents: "none" });
 
       const tl = gsap.timeline({
         scrollTrigger: {
@@ -82,36 +83,34 @@ export function QuantumProtocolStream() {
         },
       });
 
-      // Segment 1 -> Transition from Card 0 to Card 1
+      // Segment 1 -> Clean cross-fade transition from Card 0 to Card 1 (no blur)
       tl.to(cards[0], {
         opacity: 0,
         y: -40,
-        filter: "blur(12px)",
         pointerEvents: "none",
         duration: 1,
         ease: "power2.inOut",
       })
       .fromTo(
         cards[1],
-        { opacity: 0, y: 50, filter: "blur(12px)", pointerEvents: "none" },
-        { opacity: 1, y: 0, filter: "blur(0px)", pointerEvents: "auto", duration: 1, ease: "power2.inOut" },
+        { opacity: 0, y: 50, pointerEvents: "none" },
+        { opacity: 1, y: 0, pointerEvents: "auto", duration: 1, ease: "power2.inOut" },
         "-=0.6"
       )
       // Pause on Card 1
       .to({}, { duration: 0.5 })
-      // Segment 2 -> Transition from Card 1 to Card 2
-      .to(cards[1], {
+      // Segment 2 -> Clean cross-fade transition from Card 1 to Card 2 (no blur)
+      tl.to(cards[1], {
         opacity: 0,
         y: -40,
-        filter: "blur(12px)",
         pointerEvents: "none",
         duration: 1,
         ease: "power2.inOut",
       })
       .fromTo(
         cards[2],
-        { opacity: 0, y: 50, filter: "blur(12px)", pointerEvents: "none" },
-        { opacity: 1, y: 0, filter: "blur(0px)", pointerEvents: "auto", duration: 1, ease: "power2.inOut" },
+        { opacity: 0, y: 50, pointerEvents: "none" },
+        { opacity: 1, y: 0, pointerEvents: "auto", duration: 1, ease: "power2.inOut" },
         "-=0.6"
       )
       // Rest on Card 2
@@ -129,7 +128,13 @@ export function QuantumProtocolStream() {
       ref={sectionRef}
       className="relative w-full h-screen bg-transparent flex flex-col justify-center px-4 sm:px-8 select-none overflow-hidden"
     >
-      <div className="max-w-7xl mx-auto w-full flex flex-col justify-between h-[82vh] py-6">
+      {/* Scoped Shader Glass Background starting specifically at "What Core Problem Does Koliance Solve?" */}
+      <GlassBackground
+        className="absolute inset-0 pointer-events-none -z-10 overflow-hidden"
+        opacity="opacity-45"
+      />
+
+      <div className="max-w-7xl mx-auto w-full flex flex-col justify-between h-[82vh] py-6 z-10">
         {/* Top Minimalist Hairline Metadata */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6 font-mono text-xs text-slate-400">
           <div className="flex items-center gap-3">
@@ -149,7 +154,7 @@ export function QuantumProtocolStream() {
           </div>
         </div>
 
-        {/* Central Stage: Overlapping Progressive Disclosure Cards */}
+        {/* Central Stage: Overlapping Progressive Disclosure Cards (Sharp, Crisp Glass - No Blur) */}
         <div ref={cardsContainerRef} className="relative flex-1 flex items-center justify-center my-6">
           {phases.map((phase) => (
             <div
@@ -166,7 +171,7 @@ export function QuantumProtocolStream() {
                 <p className="text-lg sm:text-2xl text-slate-300 font-light leading-relaxed">
                   {phase.question}
                 </p>
-                <div className="pt-2 text-sm sm:text-base font-mono text-cyan-300 leading-relaxed border-l-2 border-cyan-400 pl-4 bg-cyan-950/20 py-2.5 backdrop-blur-sm rounded-r-lg">
+                <div className="pt-2 text-sm sm:text-base font-mono text-cyan-300 leading-relaxed border-l-2 border-cyan-400 pl-4 bg-cyan-950/20 py-2.5 rounded-r-lg border border-white/5">
                   {phase.solution}
                 </div>
               </div>

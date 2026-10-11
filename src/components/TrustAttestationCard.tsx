@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ShieldAlert, Zap, KeyRound, CheckCircle2, ArrowUpRight, Loader2, Sparkles } from "lucide-react";
+import { ShieldAlert, Activity, KeyRound, CheckCircle2, ArrowUpRight, Loader2, Sparkles } from "lucide-react";
 import { generateProof, truncateAddress } from "@/lib/utils";
 import { monadTestnet } from "@/lib/contract";
 
@@ -170,7 +170,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
               </>
             ) : (
               <>
-                <Zap className="w-4 h-4 text-white" />
+                <Activity className="w-4 h-4 text-white" />
                 <span>Submit Attestation Record</span>
               </>
             )}

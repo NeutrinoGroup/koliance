@@ -10,7 +10,7 @@ import {
   Unlock,
   Radio,
   Check,
-  Zap,
+  Activity,
   RefreshCw,
   Search,
   ExternalLink,
@@ -514,7 +514,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                         onClick={() => loadSteamProfile("76561197960287930")}
                         className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-cyan-300 transition flex items-center gap-1"
                       >
-                        <Crown className="w-3 h-3 text-amber-400" />
+                        <Crown className="w-3 h-3 text-cyan-400" />
                         <span>Gabe Newell (Valve CEO)</span>
                       </button>
                       <button
@@ -609,7 +609,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 {/* EMV Chip & Contactless */}
                 <div className="relative z-10 flex items-center justify-between" style={{ transform: "translateZ(25px)" }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-7 rounded-md bg-gradient-to-r from-amber-200 via-amber-400 to-amber-100 border border-amber-500/40 shadow-sm flex items-center justify-center p-1">
+                    <div className="w-10 h-7 rounded-md bg-gradient-to-r from-slate-200 via-slate-300 to-slate-100 border border-slate-300/60 shadow-sm flex items-center justify-center p-1">
                       <div className="w-full h-full border border-black/20 rounded-[2px]" />
                     </div>
                     <Radio className="w-4 h-4 text-slate-400 transform rotate-90" />
@@ -670,7 +670,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
             <div className="grid grid-cols-2 gap-3 pt-1">
               <button
                 onClick={() => setStripeModalOpen(true)}
-                className="flex items-center justify-center gap-2 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs font-mono transition shadow-[0_0_20px_rgba(99,102,241,0.35)] active:scale-95"
+                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs font-mono transition shadow-[0_0_20px_rgba(99,102,241,0.35)] active:scale-95"
               >
                 <DollarSign className="w-4 h-4" />
                 <span>使用 Stripe 充值</span>
@@ -678,7 +678,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
 
               <button
                 onClick={() => setCardFrozen(!cardFrozen)}
-                className={`flex items-center justify-center gap-2 py-3 rounded-2xl text-xs font-mono font-bold transition border ${
+                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-mono font-bold transition border ${
                   cardFrozen
                     ? "bg-red-500/20 text-red-300 border-red-500/40"
                     : "bg-white/[0.06] hover:bg-white/10 text-white border-white/10"
@@ -696,10 +696,10 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
           <div>
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2.5">
-                <Zap className="w-5 h-5 text-amber-400" />
+                <Activity className="w-5 h-5 text-purple-400" />
                 <h3 className="font-bold text-base text-white">高频小额微支付模拟 (Visa Micropayments)</h3>
               </div>
-              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+              <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20">
                 0 延迟 · 内存记账
               </span>
             </div>
@@ -860,8 +860,8 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-slate-300">选择快捷充值金额 (USD)：</span>
-                    <span className="text-[10px] text-amber-400 flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                    <span className="text-[10px] text-purple-300 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-purple-400 shrink-0" />
                       <span>Stripe 最低金额: $0.50</span>
                     </span>
                   </div>
@@ -913,7 +913,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 <button
                   onClick={handleExecuteStripeCheckout}
                   disabled={stripeLoading || topupAmount < 0.5}
-                  className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 text-white font-bold text-sm transition shadow-lg flex items-center justify-center gap-2 active:scale-95"
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 disabled:opacity-50 text-white font-bold text-sm transition shadow-lg flex items-center justify-center gap-2 active:scale-95"
                 >
                   {stripeLoading ? (
                     <>
@@ -922,7 +922,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                     </>
                   ) : (
                     <>
-                      <Zap className="w-4 h-4" />
+                      <CreditCard className="w-4 h-4" />
                       <span>前往 Stripe 官方收银台支付 (${topupAmount} USD)</span>
                     </>
                   )}

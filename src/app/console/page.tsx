@@ -16,6 +16,12 @@ export default function ConsolePage() {
     if (view === "CONSOLE") return;
     if (view === "INDEX") {
       router.push("/");
+    } else if (view === "TOKEN") {
+      router.push("/token");
+    } else if (view === "PERP") {
+      router.push("/perp");
+    } else if (view === "MARKET") {
+      router.push("/market");
     } else {
       router.push(`/?view=${view}`);
     }

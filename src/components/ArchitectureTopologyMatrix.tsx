@@ -82,8 +82,8 @@ export function ArchitectureTopologyMatrix() {
       id: "settlement",
       title: t("matrix.settlement_signals"),
       badge: "CONSENSUS FINALITY",
-      color: "amber",
-      icon: <TrendingUp className="w-4 h-4 text-amber-400" />,
+      color: "emerald",
+      icon: <TrendingUp className="w-4 h-4 text-emerald-400" />,
       items: [
         {
           key: "monad_record",
@@ -111,7 +111,7 @@ export function ArchitectureTopologyMatrix() {
     <div className="space-y-8">
       {/* Section Header */}
       <div className="text-center max-w-3xl mx-auto space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono uppercase tracking-wider">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono uppercase tracking-wider">
           <Layers className="w-3.5 h-3.5" />
           <span>Architecture Taxonomy</span>
         </div>
@@ -136,7 +136,7 @@ export function ArchitectureTopologyMatrix() {
                   {tier.icon}
                   <span>{tier.title}</span>
                 </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] text-slate-400">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400">
                   {tier.badge}
                 </span>
               </div>

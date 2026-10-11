@@ -280,7 +280,7 @@ export function DemoControlPanel({ account }: { account: `0x${string}` | null })
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <h2 className="text-sm font-semibold tracking-wide text-slate-200">
           演示控制台
-          <span className="ml-2 rounded border border-amber-400/40 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wider text-amber-300">
+          <span className="ml-2 rounded border border-purple-400/40 px-1.5 py-0.5 text-[10px] font-normal uppercase tracking-wider text-purple-300">
             仅演示
           </span>
         </h2>

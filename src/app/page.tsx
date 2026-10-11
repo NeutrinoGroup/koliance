@@ -47,7 +47,6 @@ import { NetworkModal } from "@/components/NetworkModal";
 import { TokenStudio } from "@/components/TokenStudio";
 import { DeveloperConsole } from "@/components/DeveloperConsole";
 import { AgentNarrativeFlow } from "@/components/AgentNarrativeFlow";
-import { GlassBackground } from "@/components/GlassBackground";
 import {
   monadTestnet,
   KOLIANCE_ADDRESS,
@@ -342,6 +341,14 @@ function MainContent() {
             router.push("/market");
             return;
           }
+          if (view === "CONSOLE") {
+            router.push("/console");
+            return;
+          }
+          if (view === "TOKEN") {
+            router.push("/token");
+            return;
+          }
           setCurrentView(view);
         }}
         account={account}
@@ -361,11 +368,8 @@ function MainContent() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.35, ease: "easeInOut" }}
-              className="relative w-full overflow-hidden"
+              className="w-full"
             >
-              {/* WebGPU / WebGL Ambient Glass Background */}
-              <GlassBackground />
-
               {/* Official Production Hero with Vision and Language Switcher */}
               <HeroGsap
                 onRegisterClick={() => setCurrentView("PRODUCT")}

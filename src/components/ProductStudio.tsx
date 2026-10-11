@@ -18,7 +18,6 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Clock,
-  Zap,
   Repeat,
 } from "lucide-react";
 import { BrandIcon } from "@/components/BrandIcon";
@@ -362,13 +361,13 @@ export function ProductStudio({
                     onClick={() => setSelectedAsset("btc")}
                     className={`p-3 rounded-2xl bg-[#121625] border transition cursor-pointer flex flex-col justify-between ${
                       selectedAsset === "btc"
-                        ? "border-amber-400 shadow-glow"
+                        ? "border-purple-400 shadow-glow"
                         : "border-white/[0.08] hover:border-white/20"
                     }`}
                   >
                     <div>
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[11px] font-bold text-amber-400 font-mono">BTC</span>
+                        <span className="text-[11px] font-bold text-purple-400 font-mono">BTC</span>
                         <MoreHorizontal className="w-3.5 h-3.5 text-slate-500" />
                       </div>
                       <p className="text-xs font-extrabold text-white font-mono">$148,730.40</p>
@@ -549,15 +548,15 @@ export function ProductStudio({
                   {/* Row 3 */}
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">
-                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                      <div className="w-7 h-7 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center font-bold">
+                        <Clock className="w-3.5 h-3.5 text-indigo-400" />
                       </div>
                       <div>
                         <span className="font-bold text-white text-[11px] block">Pending 3D Trust Cert</span>
                         <span className="text-[9px] text-slate-400">Animated indicator</span>
                       </div>
                     </div>
-                    <span className="text-amber-400 font-mono text-[11px]">&gt;</span>
+                    <span className="text-indigo-400 font-mono text-[11px]">&gt;</span>
                   </div>
                 </div>
               </div>
