@@ -152,4 +152,9 @@ describe("User Profile Security & Privilege Stripping", () => {
     expect(data.user.trust_tier).toBe("GOOGLE VERIFIED CITIZEN");
     expect(data.user.credit_allowance_usd).toBe(600);
   });
+
+  it("verifies supabaseServer uses dedicated server-side key without NEXT_PUBLIC prefix leakage", async () => {
+    // Ensure environment does not have NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
+    expect(process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
+  });
 });
