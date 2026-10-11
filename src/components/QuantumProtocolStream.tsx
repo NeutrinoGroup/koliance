@@ -138,7 +138,7 @@ export function QuantumProtocolStream() {
         {/* Top Minimalist Hairline Metadata */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-black/[0.12] pb-6 font-mono text-xs text-slate-700">
           <div className="flex items-center gap-3">
-            <span className="w-2 h-2 rounded-sm bg-cyan-600 animate-ping" />
+            <span className="w-2 h-2 rounded-sm bg-purple-600 animate-ping" />
             <span className="text-black font-extrabold tracking-widest uppercase">
               {t("problem.title")}
             </span>
@@ -148,7 +148,7 @@ export function QuantumProtocolStream() {
               {activePhase.coordinates}
             </span>
             <span className="text-black/25">{"//"}</span>
-            <span className="text-cyan-700 font-bold">
+            <span className="text-purple-700 font-bold">
               PHASE [{activePhase.index}/03]
             </span>
           </div>
@@ -171,7 +171,7 @@ export function QuantumProtocolStream() {
                 <p className="text-lg sm:text-2xl text-slate-900 font-medium leading-relaxed">
                   {phase.question}
                 </p>
-                <div className="pt-2 text-sm sm:text-base font-mono text-slate-900 font-semibold leading-relaxed px-4 py-3 bg-white/95 rounded-md shadow-md backdrop-blur-md">
+                <div className="pt-2 text-sm sm:text-base font-mono text-slate-900 font-semibold leading-relaxed px-4 py-3 bg-white/95 rounded-md shadow-md backdrop-blur-md border-0 border-transparent outline-none ring-0">
                   {phase.solution}
                 </div>
               </div>
@@ -184,7 +184,7 @@ export function QuantumProtocolStream() {
           <div className="w-full h-0.5 bg-black/15 rounded-full overflow-hidden">
             <div
               ref={progressBarRef}
-              className="h-full bg-gradient-to-r from-cyan-600 via-purple-600 to-indigo-600 w-0 transition-[width] duration-75"
+              className="h-full bg-gradient-to-r from-purple-600 via-indigo-600 to-slate-900 w-0 transition-[width] duration-75"
             />
           </div>
 
@@ -205,7 +205,7 @@ export function QuantumProtocolStream() {
             </div>
 
             <div className="font-mono text-xs text-slate-700 flex items-center gap-2">
-              <span className="text-cyan-700 font-bold">[SPECIFICATION]</span>
+              <span className="text-purple-700 font-bold">[SPECIFICATION]</span>
               <span className="text-slate-900 font-semibold">{activePhase.metric}</span>
             </div>
           </div>
