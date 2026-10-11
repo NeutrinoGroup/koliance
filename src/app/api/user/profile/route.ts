@@ -128,3 +128,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: msg }, { status: 500, headers: corsHeaders });
   }
 }
+
+export async function PUT(request: NextRequest) {
+  return POST(request);
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GET, POST } from "@/app/api/user/profile/route";
+import { GET, POST, PUT } from "@/app/api/user/profile/route";
 import { NextRequest } from "next/server";
 import * as db from "@/lib/db";
 
@@ -156,5 +156,41 @@ describe("User Profile Security & Privilege Stripping", () => {
   it("verifies supabaseServer uses dedicated server-side key without NEXT_PUBLIC prefix leakage", async () => {
     // Ensure environment does not have NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY
     expect(process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
+  });
+
+  it("handles PUT method with identical authentication and privilege stripping", async () => {
+    const syncSpy = vi.spyOn(db, "syncUserToDatabase").mockImplementation(async (payload, isTrusted) => {
+      expect(isTrusted).toBe(false);
+      return {
+        id: payload.id,
+        email: payload.email,
+        name: payload.name,
+        trust_tier: "GOOGLE VERIFIED CITIZEN",
+        credit_allowance_usd: 600,
+      };
+    });
+
+    const req = new NextRequest("http://localhost:3000/api/user/profile", {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        authorization: "Bearer bob_user",
+      },
+      body: JSON.stringify({
+        id: "bob_user",
+        email: "bob@example.com",
+        name: "Bob Updated",
+        trust_tier: "FORGED_TIER",
+        credit_allowance_usd: 999999,
+      }),
+    });
+
+    const res = await PUT(req);
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(syncSpy).toHaveBeenCalled();
+    expect(data.user.trust_tier).toBe("GOOGLE VERIFIED CITIZEN");
+    expect(data.user.credit_allowance_usd).toBe(600);
   });
 });
