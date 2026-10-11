@@ -101,10 +101,15 @@ describe("Google OAuth API Route", () => {
     }
   );
 
-  it("keeps the demo token path unchanged (wallet login is a later task)", async () => {
+  it("marks the demo identity as synthetic with strictly 0 credit allowance", async () => {
     const res = await POST(req({ id_token: "demo_verified_google_identity" }));
     expect(res.status).toBe(200);
-    expect((await res.json()).success).toBe(true);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.synthetic).toBe(true);
+    expect(data.profile.synthetic).toBe(true);
+    expect(data.profile.trustTier).toBe("UNVERIFIED SYNTHETIC DEMO");
+    expect(data.profile.creditAllowanceUSD).toBe(0);
   });
 });
 
