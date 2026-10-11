@@ -91,44 +91,78 @@ async function main() {
   console.log(`positions   : ${POSITION_COUNT} x ${COLLATERAL_USDC / E6} USDC @ ${LEVERAGE_BPS / BPS}x`);
   console.log(`liquidity   : ${liquidity / E6} USDC (sized to the payout caps)`);
 
+  const publicClient = await viem.getPublicClient();
+
+  async function sendTx(label: string, fn: () => Promise<`0x${string}`>) {
+    process.stdout.write(`  [TX] ${label}... `);
+    let lastErr: unknown;
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      try {
+        const hash = await fn();
+        const receipt = await publicClient.waitForTransactionReceipt({ hash });
+        if (receipt.status !== "success") {
+          throw new Error(`Tx failed with status ${receipt.status}: ${hash}`);
+        }
+        console.log(`[OK] (${hash.slice(0, 10)}...)`);
+        return receipt;
+      } catch (err: any) {
+        lastErr = err;
+        console.warn(
+          `\n  [WARN] Attempt ${attempt} failed: ${err?.shortMessage || err?.message || String(err)}. Retrying in 2s...`
+        );
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    throw lastErr;
+  }
+
+  console.log(`[INFO] Deploying contracts...`);
   const token = await viem.deployContract("MockUSDC");
+  console.log(`[INFO] MockUSDC: ${token.address}`);
   const oracle = await viem.deployContract("DemoOracle");
+  console.log(`[INFO] DemoOracle: ${oracle.address}`);
   const vault = await viem.deployContract("Vault", [token.address, deployer.account.address]);
+  console.log(`[INFO] Vault: ${vault.address}`);
   const pm = await viem.deployContract("PositionManager", [
     vault.address,
     oracle.address,
     token.address,
     deployer.account.address,
   ]);
+  console.log(`[INFO] PositionManager: ${pm.address}`);
 
   // Wiring order matters: PositionManager settles through the Vault, so the
   // one-shot registration has to happen before any position can open.
-  await vault.write.setPositionManager([pm.address]);
-  await oracle.write.setPrice([NVDA_FEED, ENTRY_PRICE_USD]);
+  await sendTx("vault.setPositionManager", () => vault.write.setPositionManager([pm.address]));
+  await sendTx("oracle.setPrice", () => oracle.write.setPrice([NVDA_FEED, ENTRY_PRICE_USD]));
 
   // Raise funding so the mechanism is visible over a demo-length run.
   if (DEMO_FUNDING_RATE_PER_BLOCK_WAD > 0n) {
-    await pm.write.setFundingRatePerBlockWad([DEMO_FUNDING_RATE_PER_BLOCK_WAD]);
+    await sendTx("pm.setFundingRatePerBlockWad", () =>
+      pm.write.setFundingRatePerBlockWad([DEMO_FUNDING_RATE_PER_BLOCK_WAD])
+    );
   }
   console.log(`funding rate: ${await pm.read.fundingRatePerBlockWad()} WAD/block`);
 
   // Fund and seed the LP.
-  await token.write.mint([deployer.account.address, liquidity]);
-  await token.write.approve([vault.address, liquidity]);
-  await vault.write.addLiquidity([liquidity]);
+  await sendTx("token.mint(LP)", () => token.write.mint([deployer.account.address, liquidity]));
+  await sendTx("token.approve(Vault)", () => token.write.approve([vault.address, liquidity]));
+  await sendTx("vault.addLiquidity", () => vault.write.addLiquidity([liquidity]));
 
   // Fund the trader and open mixed directions so a price move liquidates some
   // and spares others — the mixed batch is what makes the demo convincing.
   const tradingCapital = COLLATERAL_USDC * BigInt(POSITION_COUNT) * 2n;
-  await token.write.mint([deployer.account.address, tradingCapital]);
-  await token.write.approve([pm.address, tradingCapital]);
+  await sendTx("token.mint(Trader)", () => token.write.mint([deployer.account.address, tradingCapital]));
+  await sendTx("token.approve(PositionManager)", () => token.write.approve([pm.address, tradingCapital]));
 
   const ids: bigint[] = [];
   for (let i = 0; i < POSITION_COUNT; i++) {
     const isLong = i < LONG_COUNT;
-    await pm.write.openPosition([NVDA_FEED, COLLATERAL_USDC, LEVERAGE_BPS, isLong, []], {
-      account: deployer.account,
-    });
+    await sendTx(`pm.openPosition [${i + 1}/${POSITION_COUNT} ${isLong ? "LONG" : "SHORT"}]`, () =>
+      pm.write.openPosition([NVDA_FEED, COLLATERAL_USDC, LEVERAGE_BPS, isLong, []], {
+        account: deployer.account,
+      })
+    );
     ids.push(await pm.read.nextPositionId());
   }
 

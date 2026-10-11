@@ -1,5 +1,5 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
-import PerpStackModule from "./PerpStack";
+import PerpStackModule from "./PerpStack.js";
 
 /**
  * Deploys SessionKeyRegistry and wires it with PositionManager.
@@ -14,7 +14,7 @@ export default buildModule("SessionKeyRegistryModule", (m) => {
   const { positionManager } = m.useModule(PerpStackModule);
   const sessionKeyRegistry = m.contract("SessionKeyRegistry");
 
-  m.call(positionManager, "setSessionKeyRegistry", [sessionKeyRegistry]);
+  m.call(positionManager as any, "setSessionKeyRegistry", [sessionKeyRegistry]);
   m.call(sessionKeyRegistry, "setSpendConsumer", [positionManager]);
 
   return { sessionKeyRegistry };

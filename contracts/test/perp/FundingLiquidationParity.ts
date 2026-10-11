@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 /**
  * GAP-37, the half that runs on chain.
@@ -63,7 +64,7 @@ interface Vector {
 }
 
 const file = JSON.parse(
-  readFileSync("test/perp/fixtures/liquidation-funding-vectors.json", "utf8"),
+  readFileSync(new URL("./fixtures/liquidation-funding-vectors.json", import.meta.url), "utf8"),
 ) as { vectors: Vector[] };
 
 describe("Funding-aware liquidation parity: frontend price vs on-chain verdict (GAP-37)", async function () {
