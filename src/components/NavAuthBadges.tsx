@@ -100,6 +100,7 @@ export function NavAuthBadges({
     walletAddress?: string | null;
     tier: string;
     creditAllowanceUSD?: number;
+    synthetic?: boolean;
   } | null>(null);
 
   const [githubUser, setGithubUser] = useState<{
@@ -128,7 +129,8 @@ export function NavAuthBadges({
           bio: g.bio,
           walletAddress: g.walletAddress || g.wallet_address,
           tier: g.trustTier || "GOOGLE VERIFIED CITIZEN",
-          creditAllowanceUSD: g.creditAllowanceUSD || 1200,
+          creditAllowanceUSD: g.synthetic ? 0 : (g.creditAllowanceUSD || 600),
+          synthetic: !!g.synthetic,
         });
       } else {
         setGoogleUser(null);
@@ -233,17 +235,18 @@ export function NavAuthBadges({
     window.location.href = `https://steamcommunity.com/openid/login?openid.ns=http://specs.openid.net/auth/2.0&openid.mode=checkid_setup&openid.return_to=${returnUrl}&openid.realm=${realm}&openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select`;
   };
 
-  // Quick Instant Demo Login for Testing (One-click Google + GitHub verify)
+  // Sandbox Demo Login for Testing (Explicitly synthetic with 0 credit allocation)
   const handleInstantGoogleDemo = () => {
     const demo = {
       googleId: "109842839210492819283",
       email: "alexander.dev@google.com",
-      emailVerified: true,
-      name: "Alexander Monad Core",
+      emailVerified: false,
+      synthetic: true,
+      name: "Alexander (Demo Synthetic)",
       picture: "https://lh3.googleusercontent.com/a/default-user=s96-c",
       walletAddress: walletAddress || "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
-      trustTier: "GOOGLE VERIFIED ARCHITECT",
-      creditAllowanceUSD: 1200,
+      trustTier: "UNVERIFIED SYNTHETIC DEMO",
+      creditAllowanceUSD: 0,
     };
     localStorage.setItem("koliance_google_profile", JSON.stringify(demo));
     syncAuthState();
@@ -501,7 +504,7 @@ export function NavAuthBadges({
                       {googleUser && <CheckCircle2 className="w-3 h-3 text-blue-400" />}
                     </div>
                     <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
-                      {googleUser ? googleUser.email : "+$1,200 USD 授信"}
+                      {googleUser ? (googleUser.synthetic ? "[SYNTHETIC] 0 USD 授信" : googleUser.email) : "+$1,200 USD 授信"}
                     </div>
                   </div>
                 </div>
