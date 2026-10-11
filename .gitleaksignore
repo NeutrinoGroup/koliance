@@ -14,3 +14,18 @@
 96a6efd7e4b4ddd6aeb22cb4cf8354e9c224f6a4:backend/internal/config/config.go:generic-api-key:42
 ae237897e9eca83870f6f402e6d6ee00186600af:src/lib/db.ts:generic-api-key:7
 df227bff45274015f4da6ff3585a8a2089c2ce40:docs/planning/执行方案-自治Agent清结算.md:generic-api-key:194
+# --- added 2026-10-11 ---
+# 2 introduced during the #14/#16 work; the values are GONE from HEAD (hygiene
+# fixed: the Stripe default was removed from config.go, and the test key is now
+# built at runtime). The historical fingerprints remain, so they are baselined
+# here rather than having history rewritten.
+06dbb2ef6903367261915f957dce5f580e0594a5:backend/internal/config/config.go:generic-api-key:96
+3a224bc377237ac0d054bc626fdb94e9e28b3dd8:backend/internal/liquidator/config_test.go:generic-api-key:13
+# 3 pre-existing (author's commits): fake demo/spec values (sk_sess_... session
+# keys and a synthetic order status), the same class as the entries above.
+31d1f4fe1c43b46330f6b9e6c578a135ffa0fa8a:docs/developer-api-service-spec.md:generic-api-key:128
+f41f8d815c5106f5d3952595c6e1e8ee4d67c7a8:src/components/DeveloperConsole.tsx:generic-api-key:176
+7c4b7537f2073ed2a5ac73a34665ddbfcf435053:src/components/DeveloperConsole.tsx:generic-api-key:144
+# 1 on the author's feat/video-demo-onchain branch (iasi777): a hardcoded
+# contract-address fallback, scanned because fetch-depth:0 pulls every branch.
+5ef8dc0cda592e08a0cdf4ce084e29c7845d6143:contracts/scripts/demo-agent-delegation.ts:generic-api-key:55

@@ -131,7 +131,7 @@ export function QuantumProtocolStream() {
       {/* Scoped Shader Glass Background starting specifically at "What Core Problem Does Koliance Solve?" */}
       <GlassBackground
         className="absolute inset-0 pointer-events-none -z-10 overflow-hidden"
-        opacity="opacity-45"
+        opacity="opacity-85"
       />
 
       <div className="max-w-7xl mx-auto w-full flex flex-col justify-between h-[82vh] py-6 z-10">
@@ -171,7 +171,7 @@ export function QuantumProtocolStream() {
                 <p className="text-lg sm:text-2xl text-slate-900 font-medium leading-relaxed">
                   {phase.question}
                 </p>
-                <div className="pt-2 text-sm sm:text-base font-mono text-cyan-950 font-semibold leading-relaxed border-l-2 border-cyan-600 pl-4 bg-cyan-100/60 py-2.5 rounded-r-md border border-cyan-300/40 shadow-sm">
+                <div className="pt-2 text-sm sm:text-base font-mono text-slate-900 font-semibold leading-relaxed px-4 py-3 bg-white/95 rounded-md shadow-md backdrop-blur-md">
                   {phase.solution}
                 </div>
               </div>
