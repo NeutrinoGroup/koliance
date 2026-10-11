@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/koliance/backend/internal/agentapi"
 	"github.com/koliance/backend/internal/agentcard"
 	"github.com/koliance/backend/internal/config"
 	"github.com/koliance/backend/internal/developer"
@@ -27,6 +29,7 @@ type Deps struct {
 	PriceOracle *market.PriceOracle
 	Stripe      *stripeclient.Client
 	Dev         *developer.Service
+	AgentAPI    *agentapi.Service
 }
 
 // Access model (see docs in backend/README.md):
@@ -420,6 +423,144 @@ func NewRouter(d Deps) http.Handler {
 		}
 		jsonResponse(w, http.StatusOK, map[string]interface{}{"customerId": cust.ID, "email": cust.Email})
 	})))
+
+	// ==================== AGENT API & DEVELOPER SERVICES ====================
+
+	if d.AgentAPI == nil {
+		d.AgentAPI = agentapi.NewService(d.DB)
+	}
+
+	jsonEnvelope := func(w http.ResponseWriter, httpStatus int, code int, response string, data interface{}) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(httpStatus)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"code":     code,
+			"response": response,
+			"data":     data,
+		})
+	}
+
+	// POST /api/v1/agent/bind - Agent and Wallet binding
+	h("/api/v1/agent/bind", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		token := bearer(r)
+		if token != "" {
+			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
+				if errors.Is(err, agentapi.ErrQuotaExhausted) {
+					jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_QUOTA_EXHAUSTED", nil)
+					return
+				}
+				if errors.Is(err, agentapi.ErrRateLimited) {
+					jsonEnvelope(w, http.StatusTooManyRequests, 429, "ERROR_RATE_LIMITED", nil)
+					return
+				}
+				jsonEnvelope(w, http.StatusUnauthorized, 401, "ERROR_UNAUTHORIZED", nil)
+				return
+			}
+		}
+
+		var req agentapi.BindAgentRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		binding, err := d.AgentAPI.BindAgent(req.WalletAddress, req)
+		if err != nil {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", binding)
+	}))
+
+	// POST /api/v1/agent/pay - Autonomous Agent Payment & On-Chain Committal
+	h("/api/v1/agent/pay", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		token := bearer(r)
+		if token != "" {
+			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
+				if errors.Is(err, agentapi.ErrQuotaExhausted) {
+					jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_QUOTA_EXHAUSTED", nil)
+					return
+				}
+				if errors.Is(err, agentapi.ErrRateLimited) {
+					jsonEnvelope(w, http.StatusTooManyRequests, 429, "ERROR_RATE_LIMITED", nil)
+					return
+				}
+				jsonEnvelope(w, http.StatusUnauthorized, 401, "ERROR_UNAUTHORIZED", nil)
+				return
+			}
+		}
+
+		var req agentapi.PaymentRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		order, err := d.AgentAPI.ProcessPayment("", req)
+		if err != nil {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", order)
+	}))
+
+	// POST /api/v1/developer/packages/claim-or-purchase - 3-tier recharge & 3-free-claims
+	h("/api/v1/developer/packages/claim-or-purchase", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			WalletAddress string `json:"wallet_address"`
+			TierID        string `json:"tier_id"`
+			PaymentMethod string `json:"payment_method"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if req.WalletAddress == "" {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: wallet_address is required", nil)
+			return
+		}
+		resp, err := d.AgentAPI.ClaimOrPurchasePackage(req.WalletAddress, agentapi.PackageClaimRequest{
+			TierID:        req.TierID,
+			PaymentMethod: req.PaymentMethod,
+		})
+		if err != nil {
+			if errors.Is(err, agentapi.ErrFreeClaimsExhausted) {
+				jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_FREE_CLAIMS_EXHAUSTED", nil)
+				return
+			}
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_PACKAGE_FAILED: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", resp)
+	}))
+
+	// POST /api/v1/developer/keys - Create API Key
+	h("/api/v1/developer/keys", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			WalletAddress string `json:"wallet_address"`
+			Tier          string `json:"tier"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if req.Tier == "" {
+			req.Tier = "STARTER_FREE"
+		}
+		key, err := d.AgentAPI.GenerateAPIKey(req.WalletAddress, req.Tier)
+		if err != nil {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_KEY_GEN: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", key)
+	}))
+
+	// GET /api/v1/developer/stats - Console stats and usage metrics
+	h("/api/v1/developer/stats", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		wallet := strings.TrimSpace(r.URL.Query().Get("wallet_address"))
+		stats := d.AgentAPI.GetConsoleStats(wallet)
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", stats)
+	}))
+
+	// GET /api/v1/developer/agents - List bound agents
+	h("/api/v1/developer/agents", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		agents := d.AgentAPI.ListBoundAgents()
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", agents)
+	}))
 
 	return mux
 }
