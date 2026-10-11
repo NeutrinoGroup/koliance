@@ -107,3 +107,11 @@ func TestAlpacaDataURLIsOverridable(t *testing.T) {
 		t.Errorf("AlpacaDataURL = %q, want the override", got)
 	}
 }
+
+func TestStripeKeysHaveNoCommittedDefault(t *testing.T) {
+	c := loadFrom(emptyReader)
+
+	if c.StripePublishableKey != "" || c.StripeSecretKey != "" {
+		t.Fatal("Stripe keys fell back to a committed value; they must come from the environment only")
+	}
+}

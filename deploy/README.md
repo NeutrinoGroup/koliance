@@ -13,7 +13,7 @@
 | --- | --- |
 | `STEAM_API_KEY` | 明文（`config.go` 里仍是 `getEnv` 的默认值） |
 | `ALPACA_API_KEY` / `ALPACA_API_SECRET` | [OK] **代码侧已消除**：`docs/changes/027` 删掉了 `config.go` 的两处默认值，未配置即 503；`render.yaml` 里两项本就是 `sync: false`。**但历史里的值仍须轮换** |
-| `STRIPE_PUBLISHABLE_KEY` | 明文（公开键，风险较低；`config.go` 里仍是默认值） |
+| `STRIPE_PUBLISHABLE_KEY` | 明文（公开键，风险较低；`config.go` 已无默认值，仅从环境变量读取） |
 | `STRIPE_SECRET_KEY` / `DATABASE_URL` | [OK] 已是 `sync: false`（读自 Render 面板） |
 | `ALPACA_DATA_URL` / `ALPACA_DATA_FEED` / `PYTH_HERMES_URL` | [OK] 非密钥，`render.yaml` 里是显式 `value` |
 
