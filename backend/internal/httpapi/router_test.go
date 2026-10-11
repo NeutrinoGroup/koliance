@@ -12,14 +12,28 @@ import (
 	"github.com/koliance/backend/internal/developer"
 	"github.com/koliance/backend/internal/game"
 	"github.com/koliance/backend/internal/market"
+	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
+	"github.com/koliance/backend/internal/verifier"
 )
 
 const opToken = "test-operator-token"
 
+// testDB returns a database handle that stands in for a live PostgreSQL pool.
+//
+// It is a MemoryStore marked connected: the routes behind withDB only need to
+// know a durable store exists. database.New can no longer hand back a
+// memory-backed handle by accident (GAP-49) - reaching the in-memory store now
+// takes an explicit NewMemoryOnly() call, which is exactly what a test is.
+func testDB() *database.DB {
+	db := database.NewMemoryOnly()
+	db.IsConnected = true
+	return db
+}
+
 // newTestRouter builds the router with real services but unreachable
 // upstreams. Every test below fails (or succeeds) before any network call.
-func newTestRouter(t testing.TB, mutate func(*config.Config)) http.Handler {
+func newTestRouter(t testing.TB, mutate func(*Deps)) http.Handler {
 	t.Helper()
 	cfg := &config.Config{
 		SteamDomain:        "koliance.oodai.space",
@@ -27,20 +41,23 @@ func newTestRouter(t testing.TB, mutate func(*config.Config)) http.Handler {
 		CORSAllowedOrigins: config.ParseOrigins(config.DefaultCORSOrigins),
 		APIToken:           opToken,
 	}
+	d := &Deps{
+		Cfg:      cfg,
+		DB:       testDB(),
+		Game:     game.NewService(game.NewSteamClient(""), nil),
+		Cards:    agentcard.NewService(agentcard.NewPermissionGuard(), nil),
+		Verifier: verifier.NewNoop(),
+	}
 	if mutate != nil {
-		mutate(cfg)
+		mutate(d)
 	}
 	alp := market.NewAlpacaClient("http://127.0.0.1:1", "k", "s")
 	oracle := market.NewPriceOracle("k", "s")
-	return NewRouter(Deps{
-		Cfg:         cfg,
-		Game:        game.NewService(game.NewSteamClient(""), nil),
-		Cards:       agentcard.NewService(agentcard.NewPermissionGuard(), nil),
-		Market:      market.NewService(alp, oracle, nil),
-		PriceOracle: oracle,
-		Stripe:      stripeclient.New(""),
-		Dev:         developer.NewService(developer.NewGitHubClient("")),
-	})
+	d.Market = market.NewService(alp, oracle, nil)
+	d.PriceOracle = oracle
+	d.Stripe = stripeclient.New("")
+	d.Dev = developer.NewService(developer.NewGitHubClient(""))
+	return NewRouter(*d)
 }
 
 func do(h http.Handler, method, path, body string, hdr map[string]string) *httptest.ResponseRecorder {
@@ -80,7 +97,7 @@ func TestCORSAllowList(t *testing.T) {
 }
 
 func TestOperatorEndpointsFailClosed(t *testing.T) {
-	noToken := newTestRouter(t, func(c *config.Config) { c.APIToken = "" })
+	noToken := newTestRouter(t, func(d *Deps) { d.Cfg.APIToken = "" })
 	for _, p := range []string{"/api/v1/agentcard/batch-settle", "/api/v1/stripe/customer", "/api/v1/market/trade", "/api/v1/market/close"} {
 		rr := do(noToken, http.MethodPost, p, `{}`, map[string]string{"Authorization": "Bearer anything"})
 		if rr.Code != http.StatusServiceUnavailable {
@@ -107,7 +124,7 @@ func TestOperatorEndpointsFailClosed(t *testing.T) {
 
 func TestTradeValidation(t *testing.T) {
 	// Public demo trading enabled: auth passes, validation must still bite.
-	h := newTestRouter(t, func(c *config.Config) { c.DemoPublicTrading = true })
+	h := newTestRouter(t, func(d *Deps) { d.Cfg.DemoPublicTrading = true })
 	bad := []string{
 		`{"symbol":"NVDA","side":"buy","notionalUSD":-100,"leverage":1}`,
 		`{"symbol":"NVDA","side":"buy","notionalUSD":0,"leverage":1}`,
@@ -261,6 +278,122 @@ func TestAgentCardFlow(t *testing.T) {
 	}
 }
 
+// ==================== GAP-49: no silent degradation ====================
+
+// dbGatedRoutes is every route whose handler persists through the DB handle.
+// The list is data, not prose, so a new persisted route that forgets withDB
+// shows up as a test failure rather than as a silent 200 on a deployment with
+// no database.
+var dbGatedRoutes = []struct {
+	method string
+	path   string
+	body   string
+}{
+	{http.MethodGet, "/api/v1/game/steam/profile?id=76561198000000000", ""},
+	{http.MethodPost, "/api/v1/game/proof", `{"steamId":"76561198000000000","walletAddress":"0x0000000000000000000000000000000000000001","appId":730}`},
+	{http.MethodPost, "/api/v1/developer/github/proof", `{"username":"moonhotline","walletAddress":"0x0000000000000000000000000000000000000001"}`},
+	{http.MethodPost, "/api/v1/agentcard/generate", `{"walletAddress":"0x0000000000000000000000000000000000000001","initialDeposit":100}`},
+	{http.MethodPost, "/api/v1/agentcard/authorize", `{"cardId":"c","amountUSD":1,"mcc":"7999"}`},
+	{http.MethodPost, "/api/v1/agentcard/batch-settle", `{}`},
+}
+
+// A router built without a DB handle must refuse the persisted routes. This is
+// the in-process half of "no credentials -> no 200"; the startup half is
+// database.New returning ErrDatabaseURLRequired, which cmd/api treats as
+// fatal.
+func TestPersistedRoutesRefuseWithoutDBHandle(t *testing.T) {
+	h := newTestRouter(t, func(d *Deps) { d.DB = nil })
+	for _, rt := range dbGatedRoutes {
+		hdr := map[string]string{"Authorization": "Bearer " + opToken}
+		rr := do(h, rt.method, rt.path, rt.body, hdr)
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s %s without a DB handle: %d %s, want 503", rt.method, rt.path, rr.Code, rr.Body.String())
+		}
+		if !strings.Contains(rr.Body.String(), "database") {
+			t.Errorf("%s %s: refusal does not name the cause: %s", rt.method, rt.path, rr.Body.String())
+		}
+	}
+}
+
+// A handle that exists but is not connected is the same refusal. This is the
+// state the old code put deployments in by default.
+func TestPersistedRoutesRefuseWhenNotConnected(t *testing.T) {
+	h := newTestRouter(t, func(d *Deps) { d.DB = database.NewMemoryOnly() }) // IsConnected == false
+	for _, rt := range dbGatedRoutes {
+		hdr := map[string]string{"Authorization": "Bearer " + opToken}
+		rr := do(h, rt.method, rt.path, rt.body, hdr)
+		if rr.Code != http.StatusServiceUnavailable {
+			t.Errorf("%s %s with an unconnected DB: %d, want 503", rt.method, rt.path, rr.Code)
+		}
+	}
+}
+
+// The gate is deliberately narrow: health and stats depend on process state,
+// not on storage, so they must keep answering. A blanket 503 would turn "no
+// database" into "the service is down", which is a different and false claim.
+func TestHealthAndStatsStayUpWithoutDB(t *testing.T) {
+	h := newTestRouter(t, func(d *Deps) { d.DB = nil })
+	for _, p := range []string{"/healthz", "/api/v1/health", "/api/v1/stats"} {
+		rr := do(h, http.MethodGet, p, "", nil)
+		if rr.Code != http.StatusOK {
+			t.Errorf("%s with no DB: %d, want 200", p, rr.Code)
+		}
+	}
+	rr := do(h, http.MethodGet, "/api/v1/health", "", nil)
+	if !strings.Contains(rr.Body.String(), `"database":false`) {
+		t.Errorf("health does not report the missing database honestly: %s", rr.Body.String())
+	}
+}
+
+// The routes that need no database keep answering, and they are exactly the
+// ones whose data source is not PostgreSQL:
+//
+//	health/healthz/stats - process state and fixture counters
+//	market/trade, market/close - Alpaca's paper API (market.Service's db field
+//	  is never read; market state lives at Alpaca, not in this database)
+//
+// The DoD wording is "business routes must not return 200". That is asserted
+// exactly where it carries meaning - the persisted routes above, which refuse
+// with 503 - and not by forcing these three to 503 as well. Turning "no
+// database" into "the whole service is down" would be a different and false
+// claim, and market/trade's 200 already says success:false in its body.
+func TestRoutesWithoutDatabaseKeepAnswering(t *testing.T) {
+	h := newTestRouter(t, func(d *Deps) {
+		d.Cfg.DemoPublicTrading = true
+		d.DB = nil
+	})
+	for _, p := range []string{"/healthz", "/api/v1/health", "/api/v1/stats"} {
+		if rr := do(h, http.MethodGet, p, "", nil); rr.Code != http.StatusOK {
+			t.Errorf("%s with no DB: %d, want 200", p, rr.Code)
+		}
+	}
+
+	// Alpaca is unreachable in this harness, so the trade must not be reported
+	// as a success. If someone ever made ExecuteTrade claim Success on an
+	// upstream failure, this is the assertion that catches it.
+	rr := do(h, http.MethodPost, "/api/v1/market/trade", `{"symbol":"NVDA","side":"buy","notionalUSD":10,"leverage":1}`, nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("market/trade: %d %s", rr.Code, rr.Body.String())
+	}
+	var res struct {
+		Success bool   `json:"success"`
+		Order   any    `json:"order"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &res); err != nil {
+		t.Fatalf("unmarshal trade result: %v", err)
+	}
+	if res.Success {
+		t.Errorf("trade reported success while Alpaca is unreachable: %s", rr.Body.String())
+	}
+	if res.Order != nil {
+		t.Errorf("failed trade carries an order: %s", rr.Body.String())
+	}
+	if res.Message == "" {
+		t.Errorf("failed trade carries no reason: %s", rr.Body.String())
+	}
+}
+
 // ==================== BENCHMARKS ====================
 
 func BenchmarkRouterHealthz(b *testing.B) {
@@ -289,4 +422,3 @@ func BenchmarkRouterStats(b *testing.B) {
 		}
 	}
 }
-

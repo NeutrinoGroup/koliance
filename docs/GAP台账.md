@@ -7,8 +7,9 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：2026-10-11 · 分支 `docs/ai-infrastructure-roadmap`（`98a0ad8`）
-> **本轮**：**补登记 §5.1**——`项目目标.md §5` 的 P2 项与「五大核心领域」此前**只有正文、无编号**，
+> **最后更新**：2026-10-11 · 分支 `feat/w1-ai-infra-foundation`（`1f5f007`）
+> **本轮（W1）**：**GAP-43 / GAP-44 / GAP-49 关闭**（`docs/changes/027`）；新登记 **GAP-51**（迁移未真跑，🔴 阻塞于环境）与 **GAP-52**（DSN 脱敏残余暴露），见 **§5.2**。
+> **上一轮**：**补登记 §5.1**——`项目目标.md §5` 的 P2 项与「五大核心领域」此前**只有正文、无编号**，
 > 按本项目规矩「不在台账里 = 不存在」补为 **GAP-43~49**（§5.1 有逐条实测依据）；另补 **GAP-50**（§5）。
 > **编号避坑**：本分支新号一律从 **GAP-43** 起——**GAP-38~42 已被另一未合并分支
 > `feat/liquidation-bot-chain`（PR #11）占用**（实测见 §5.1 末注）。
@@ -102,14 +103,16 @@
 > 故本分支新号从 **GAP-43** 起，**中间的空档不是遗漏**。合并时两边的 §1 行序都会冲突，
 > **合并方需两边都保留**（§5.1 末注有详情）。
 
-| **GAP-43** | `settlement_ledger` 复式记账未建（无表、无代码） | 🟡 P2 | 🟠 | 见 §5.1（`ADR-004` D1 采纳其 DDL；`项目目标.md §5` 列 P2） |
-| **GAP-44** | ZK Verifier 抽象插槽不存在（`backend/internal/verifier/` 无此目录） | 🟡 P2 | 🟠 | 见 §5.1（`ADR-004` D1「只留接口」） |
+| **GAP-43** | `settlement_ledger` 复式记账未建（无表、无代码） | 🟡 P2 | ✅ | `docs/changes/027`——表 + 校验层 + 借贷平的断言判据均已落。**迁移未在真实 PG 上执行**，见 GAP-51 |
+| **GAP-44** | ZK Verifier 抽象插槽不存在（`backend/internal/verifier/` 无此目录） | 🟡 P2 | ✅ | `docs/changes/027`——接口 + no-op + 调用点（`POST /api/v1/verifier/verify`）齐 |
 | **GAP-45** | 清算结果大屏未接（`GET /api/v1/liquidations` 不存在） | 🟠 P1 | 🔴 | 见 §5.1；**阻塞于 GAP-26**（Bot 未接链、未部署） |
 | **GAP-46** | 信任证明未落链（`addTrust` 手填 proof，不消费 Steam/GitHub 证明） | 🟠 P1 | 🟠 | 见 §5.1 |
 | **GAP-47** | Steam / GitHub 证明不落库（Go 侧只进 `MemoryStore`） | 🟠 P1 | 🟠 | 见 §5.1 |
 | **GAP-48** | 授信额度纯装饰（各层硬编码，无链上 credit engine） | 🟠 P1 | 🟠 | 见 §5.1 |
-| **GAP-49** | 无 Supabase 时 DB 层静默降级内存态 | 🟠 P1 | 🟠 | 见 §5.1（此前只被 GAP-24 顺带提过，**未独立编号**） |
+| **GAP-49** | 无 Supabase 时 DB 层静默降级内存态 | 🟠 P1 | ✅ | `docs/changes/027`——`New` 返回错误、`main` 非零退出、落盘路由 `withDB` 守卫返回 503 |
 | **GAP-50** | 资金费**收费侧**（费率取负）无链上对拍 | 🟡 P2 | 🟠 | 见 §5（`docs/changes/021`「未做（明确）」） |
+| **GAP-51** | `005_settlement_ledger.sql` **未在真实 PostgreSQL 上执行过** | 🟠 P1 | 🔴 | **阻塞于环境**：本机无 docker、无 psql、无 DB 凭据。见 §5.2 |
+| **GAP-52** | `sanitizeDSNError` 残余暴露：既非 URL userinfo、又非 `password=` 锚点的口令回显不被脱敏 | 🟡 P2 | 🟠 | 见 §5.2（另：全库 Go 源码存在**既存** gofmt 债务，CI 不跑 gofmt） |
 
 ---
 
@@ -474,13 +477,16 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | --- | --- | --- | --- |
 | GAP-25 | `agentcard` 全局锁 → 需先写基准测试量化 | `backend/internal/agentcard` | 1 天 |
 | GAP-13 | 后端接 go-ethereum，`/health` 改为真实探活 | `backend/` | 1 天 |
-| GAP-43 | `settlement_ledger` 复式记账（RFC §4.2.2 DDL 可直接用） | 新建 `backend/migrations/00N_*.sql` | 0.5 天 |
-| GAP-44 | ZK Verifier 抽象插槽（空接口即够） | 新建 `backend/internal/verifier/` | 0.5 天 |
 | GAP-46 | 信任证明落链（证明哈希 → `Koliance.addTrust`） | `src/app/page.tsx` · `src/components/TrustAttestationCard.tsx` | 1 天 |
 | GAP-47 | Steam / GitHub 证明落 PG（现只进 `MemoryStore`） | `backend/internal/game/service.go` · `backend/internal/developer/github.go` | 1 天 |
 | GAP-48 | 授信额度口径统一（现四处硬编码且互不相同） | `src/lib/trustTier.ts` · `contracts/contracts/Koliance.sol` | 1~2 天 |
-| GAP-49 | DB 层降级须显式（现静默切内存态） | `backend/internal/platform/database/db.go` | 0.5 天 |
 | GAP-50 | 资金费收费侧链上对拍（需两腿簿子复现 skew） | `contracts/test/perp/` · `tests/` | 0.5 天 |
+
+> **本节原列的三项已于 W1 关闭，移出本表**（保留在 §1 状态总览作回归基线，不删）：
+> **GAP-43 / GAP-44 / GAP-49 → ✅**，依据 `docs/changes/027`。
+> **GAP-43 带一个残留**：迁移**未在真实 PG 上跑过**（GAP-51，🔴 阻塞于环境），故"表已能建"**不等于**"表已存在"。
+> **GAP-49 的口径**：`database.New` 无凭据即返回错误；`cmd/api` 非零退出；落盘路由加 `withDB` 守卫（503）。
+> `health` / `stats` / `market/*` **不在**守卫内——它们的数据源不是 PostgreSQL，一并 503 会把"没有数据库"说成"服务全挂"。
 
 > **GAP-45（清算大屏）不在此表**——它**有明确阻塞**（依赖 GAP-26 的 Bot 接链与部署），见 §5.1。
 
@@ -513,6 +519,36 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 > `GAP-38` / `GAP-39` / `GAP-40` / `GAP-41` / `GAP-42`。
 > 两个分支各自的台账**都改 `docs/GAP台账.md`**，合并时是**必然冲突**。
 > 故**本分支一律从 GAP-43 起**，且**不重排 §1 的既有行序**以减少冲突面。
+
+---
+
+### 5.2 W1 落地时暴露的两个新缺口（2026-10-11）
+
+**登记前检索**（D4）：`git grep -n "GAP-51\|GAP-52" -- .` 在本分支**零命中**；
+`docs/changes/` 编号 `022~026` 亦**零命中**（本分支从 `021` 直接跳到 `027`，见下方"编号说明"）。
+
+#### GAP-51 · `005_settlement_ledger.sql` 未在真实 PostgreSQL 上执行过（🔴 阻塞于环境）
+
+| 项 | 内容 |
+| --- | --- |
+| **缺口** | 迁移文件已落盘并**通过 SQL 静态审查**，但**从未被任何 PostgreSQL 实例执行过**。 |
+| **为何是缺口而非"已完成"** | 表结构、`CHECK`、触发器里可能的**方言/顺序/权限**问题**只有真跑才会暴露**。本仓已有先例：`docs/changes/021` 实测"两道门只跑一道会漏"。**"写了迁移"与"迁移能跑"是两件事。** |
+| **阻塞** | 本机**无 docker、无 psql、无 `DATABASE_URL`**（`docker version` 失败、`Get-Command psql` 为空、无 `.env`）——**实测**，非推断。 |
+| **解除条件** | 一次真实执行：`cd backend && DATABASE_URL=... go run cmd/migrate/main.go`（要求 exit 0 且 `[OK] All canonical migrations applied successfully!`）。任何 PG 实例均可。 |
+| **已做的替代验证（不构成解除）** | SQL 静态审查；Go 侧同一套不变量由 `internal/settlement` 以 23 个用例机械守住。**二者都不执行 DDL。** |
+| **一个已知的、静态审查**抓到**的坑（已修）** | 两个同时机 `BEFORE INSERT` 触发器按**名字母序**触发，`.._balance_after` 会**先于** `.._fill_seq` 运行 → 对 `NULL` 的 `ledger_seq` 取"前一笔"永远取不到 → 每一行都把自己的发生额当余额。**已改为单函数单触发器**消除名字序依赖（见该文件的注释）。**此坑正是"未跑过"的证据**：它不会被任何 Go 单测发现。 |
+
+#### GAP-52 · `sanitizeDSNError` 的残余暴露（🟠）
+
+| 项 | 内容 |
+| --- | --- |
+| **缺口** | 脱敏按**锚点**替换：① URL 的 userinfo（`postgres://user:pass@` → `postgres://REDACTED@`）② `password=<v>`。**若某条错误把口令以两种锚点之外的形式回显**，它不会被脱敏。 |
+| **为何不用兜底替换** | 第一版实现就是"把口令字符串全局替换"。它**更糟**：对单字符口令（`postgres://u:x@db.example`）会把 `db.example` 改成 `db.eREDACTEDample`；对口令含未转义 `@` 的 DSN，"被替换的字符串"只是首字符，**真口令原样留下**——即**判据看起来在防、实则没防**。故**刻意保留**这一残余暴露并登记，而不是用一个长度阈值把它盖住。 |
+| **解除条件** | 需要一条**既非 URL 也非 keyword** 的口令回显样本（当前未知是哪种 error 会这样）。若有，按锚点补规则并加用例。 |
+| **顺带发现（不单开号）** | 全库 Go 源码存在**既存** gofmt 债务（`internal/config/config.go`、`internal/model/types.go`、`internal/platform/stripeclient/stripe.go` 等**未被本次改动触及**的文件亦不合格）。CI（`.github/workflows/ci.yml`）**不跑 gofmt**，故它一直没红。本次**只**保证**自己新增/改动的文件** gofmt 干净，**未**顺手重排无关文件（那会把 diff 撑大且与 W1 无关）。 |
+
+**编号说明**：`docs/changes/` 从 `021` 跳到 `027`——`022~026` 为空号，**不是漏登**。
+本分支在不重排既有行序的前提下追加；若与他分支撞号，**合并方以先合并者为准重编**。
 
 ---
 

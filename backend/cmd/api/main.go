@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,13 +16,33 @@ import (
 	"github.com/koliance/backend/internal/market"
 	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
+	"github.com/koliance/backend/internal/verifier"
 )
 
 func main() {
 	cfg := config.Load()
 
-	// 1. Initialize Database
-	db := database.New(cfg.DatabaseURL)
+	// 1. Initialize Database.
+	//
+	// A missing or unreachable database is fatal. This used to fall back to an
+	// in-memory store with a single log line, so a deployment with no
+	// credentials served every business route from a store that persists
+	// nothing - indistinguishable from success from the outside (GAP-49).
+	// Refusing to start is the point: a process that cannot remember anything
+	// must not accept traffic.
+	if err := run(cfg); err != nil {
+		log.Fatalf("[Koliance] startup refused: %v", err)
+	}
+}
+
+func run(cfg *config.Config) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	db, err := database.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		return err
+	}
 	defer db.Close()
 
 	// 2. Initialize Steam Client & Service
@@ -44,6 +65,11 @@ func main() {
 	githubCli := developer.NewGitHubClient("")
 	devService := developer.NewService(githubCli)
 
+	// 7. Proof verifier slot (GAP-44). The no-op is what ADR-004 D1 kept from
+	// the RFC's ZK layer, so the endpoint answers 501 until a real proof system
+	// is wired in here - and only here.
+	proofVerifier := verifier.NewNoop()
+
 	handler := httpapi.NewRouter(httpapi.Deps{
 		Cfg:         cfg,
 		DB:          db,
@@ -53,6 +79,7 @@ func main() {
 		PriceOracle: priceOracle,
 		Stripe:      stripeCli,
 		Dev:         devService,
+		Verifier:    proofVerifier,
 	})
 
 	port := cfg.Port
@@ -72,10 +99,13 @@ func main() {
 	fmt.Printf("   ├─ Alpaca Paper API: Active (%s)\n", cfg.AlpacaBaseURL)
 	fmt.Printf("   ├─ Pyth Hermes Oracle: Active (%s)\n", cfg.PythHermesURL)
 	fmt.Printf("   ├─ Stripe Integration: Ready (Key loaded: %t)\n", cfg.StripeSecretKey != "")
+	fmt.Printf("   ├─ PostgreSQL: Connected (memory fallback removed, GAP-49)\n")
 	fmt.Printf("   ├─ CORS origins: %v\n", cfg.CORSAllowedOrigins)
+	fmt.Printf("   ├─ Proof verifier slot: %s (not wired, /api/v1/verifier/verify answers 501)\n", proofVerifier.Scheme())
 	fmt.Printf("   └─ Operator token configured: %t, public demo trading: %t\n", cfg.APIToken != "", cfg.DemoPublicTrading)
 
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("Server failed: %v", err)
+		return fmt.Errorf("server failed: %w", err)
 	}
+	return nil
 }

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 	"github.com/koliance/backend/internal/model"
 	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
+	"github.com/koliance/backend/internal/verifier"
 )
 
 // Deps are the services the router dispatches to.
@@ -27,6 +29,11 @@ type Deps struct {
 	PriceOracle *market.PriceOracle
 	Stripe      *stripeclient.Client
 	Dev         *developer.Service
+	// Verifier is the pluggable proof-verification slot (GAP-44). It is not
+	// optional: the zero value of a struct that embeds this field would panic
+	// on the verify route, so cmd/api always supplies at least the no-op
+	// (verifier.NewNoop), which answers 501.
+	Verifier verifier.Verifier
 }
 
 // Access model (see docs in backend/README.md):
@@ -53,6 +60,32 @@ func NewRouter(d Deps) http.Handler {
 			return fn
 		}
 		return operator(fn)
+	}
+	// WithDB marks the routes that cannot answer without a database.
+	//
+	// It is defence in depth behind the fail-closed startup in cmd/api, and it
+	// is the half a reader can check: cmd/api refusing to start is invisible
+	// from inside a test, whereas this predicate can be driven directly.
+	//
+	// It deliberately does NOT cover every route. `health`, `stats` and the
+	// Alpaca market reads run off process state or an external API and are
+	// correct without a database, so gating them would report an outage that
+	// is not there. What it does cover is every route whose handler persists
+	// through the DB handle - the ones that used to answer 200 while writing
+	// nothing (GAP-49).
+	withDB := func(fn http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if d.DB == nil {
+				jsonError(w, http.StatusServiceUnavailable, "database is not configured; this endpoint cannot serve requests without it")
+				return
+			}
+			if !d.DB.IsConnected {
+				w.Header().Set("Retry-After", "5")
+				jsonError(w, http.StatusServiceUnavailable, "database is not reachable; this endpoint refuses to serve from a non-durable store")
+				return
+			}
+			fn(w, r)
+		}
 	}
 
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
@@ -91,7 +124,7 @@ func NewRouter(d Deps) http.Handler {
 
 	// ==================== GAME ====================
 
-	h("/api/v1/game/steam/profile", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/game/steam/profile", methodOnly(http.MethodGet, withDB(func(w http.ResponseWriter, r *http.Request) {
 		identifier := r.URL.Query().Get("id")
 		if identifier == "" {
 			identifier = "76561198000000000" // Default fallback demo ID
@@ -102,9 +135,9 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, stats)
-	}))
+	})))
 
-	h("/api/v1/game/proof", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/game/proof", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			SteamID       string `json:"steamId"`
 			WalletAddress string `json:"walletAddress"`
@@ -123,7 +156,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)
-	}))
+	})))
 
 	// ==================== DEVELOPER (GITHUB) ====================
 
@@ -144,7 +177,7 @@ func NewRouter(d Deps) http.Handler {
 		jsonResponse(w, http.StatusOK, stats)
 	}))
 
-	h("/api/v1/developer/github/proof", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/developer/github/proof", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Username      string `json:"username"`
 			WalletAddress string `json:"walletAddress"`
@@ -170,11 +203,11 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)
-	}))
+	})))
 
 	// ==================== AGENTCARD ====================
 
-	h("/api/v1/agentcard/generate", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/agentcard/generate", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			WalletAddress  string   `json:"walletAddress"`
 			CardholderName string   `json:"cardholderName"`
@@ -201,7 +234,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, card)
-	}))
+	})))
 
 	h("/api/v1/agentcard/cards/", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
 		cardID := strings.TrimPrefix(r.URL.Path, "/api/v1/agentcard/cards/")
@@ -250,7 +283,7 @@ func NewRouter(d Deps) http.Handler {
 		jsonResponse(w, http.StatusOK, sk)
 	}))
 
-	h("/api/v1/agentcard/authorize", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/agentcard/authorize", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req agentcard.AuthorizeRequest
 		if !decodeJSON(w, r, &req) {
 			return
@@ -267,9 +300,9 @@ func NewRouter(d Deps) http.Handler {
 		default:
 			jsonResponse(w, http.StatusOK, resp)
 		}
-	}))
+	})))
 
-	h("/api/v1/agentcard/batch-settle", methodOnly(http.MethodPost, operator(func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/agentcard/batch-settle", methodOnly(http.MethodPost, withDB(operator(func(w http.ResponseWriter, r *http.Request) {
 		batchHash, count, volume := d.Cards.BatchSettle()
 		jsonResponse(w, http.StatusOK, map[string]interface{}{
 			"batchHash":    batchHash,
@@ -277,7 +310,7 @@ func NewRouter(d Deps) http.Handler {
 			"totalVolume":  volume,
 			"timestamp":    time.Now().UTC(),
 		})
-	})))
+	}))))
 
 	// ==================== MARKET ====================
 
@@ -421,5 +454,88 @@ func NewRouter(d Deps) http.Handler {
 		jsonResponse(w, http.StatusOK, map[string]interface{}{"customerId": cust.ID, "email": cust.Email})
 	})))
 
+	// ==================== VERIFIER ====================
+
+	// The proof-verification slot (GAP-44 / ADR-004 D1). The route exists so
+	// the slot has a caller: an interface with no call site is a narrative
+	// prop, and the whole point of keeping the interface was to have a seam.
+	//
+	// Status mapping is the load-bearing part:
+	//   nil                         -> 200 (a verifier checked it and approved)
+	//   ErrInvalidProof             -> 400 (checked, and it does not hold)
+	//   anything else (incl. no-op) -> 501 (nothing could check it)
+	// The no-op wired in cmd/api returns ErrNotImplemented, so this endpoint
+	// answers 501 on every request today. It never answers 200 by default.
+	h("/api/v1/verifier/verify", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Scheme       string `json:"scheme"`
+			Subject      string `json:"subject"`
+			Proof        string `json:"proof"`        // hex
+			PublicInputs string `json:"publicInputs"` // hex
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		subject := strings.TrimSpace(req.Subject)
+		if subject == "" {
+			jsonError(w, http.StatusBadRequest, "subject is required")
+			return
+		}
+		proof, err := decodeHexField(req.Proof)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "proof: "+err.Error())
+			return
+		}
+		publicInputs, err := decodeHexField(req.PublicInputs)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "publicInputs: "+err.Error())
+			return
+		}
+		if d.Verifier == nil {
+			// A deployment that forgot to wire the slot must say so rather
+			// than panic on a nil interface.
+			jsonError(w, http.StatusServiceUnavailable, "proof verifier is not configured")
+			return
+		}
+
+		vreq := verifier.Request{
+			Scheme:       verifier.Scheme(strings.ToUpper(strings.TrimSpace(req.Scheme))),
+			Subject:      subject,
+			Proof:        proof,
+			PublicInputs: publicInputs,
+		}
+		switch err := d.Verifier.Verify(r.Context(), vreq); {
+		case err == nil:
+			jsonResponse(w, http.StatusOK, map[string]interface{}{
+				"valid":  true,
+				"scheme": d.Verifier.Scheme(),
+			})
+		case errors.Is(err, verifier.ErrInvalidProof):
+			jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
+				"valid":  false,
+				"scheme": d.Verifier.Scheme(),
+				"error":  err.Error(),
+			})
+		default:
+			jsonError(w, http.StatusNotImplemented, err.Error())
+		}
+	}))
+
 	return mux
+}
+
+// decodeHexField accepts an optional "0x" prefix and an empty value. Hex is
+// the encoding because proof payloads are binary; a body that is not hex is a
+// client error, not a verification failure.
+func decodeHexField(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, errors.New("must be hex encoded")
+	}
+	return b, nil
 }
