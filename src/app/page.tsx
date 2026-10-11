@@ -39,9 +39,9 @@ import { TrustConstellation } from "@/components/TrustConstellation";
 import { ProductStudio } from "@/components/ProductStudio";
 import { MarketTerminal } from "@/components/MarketTerminal";
 import { IdentityCard } from "@/components/IdentityCard";
-import { CoreValueFramework } from "@/components/CoreValueFramework";
 import { KineticScrollBanner } from "@/components/KineticScrollBanner";
-import { ParallelBentoReactor } from "@/components/ParallelBentoReactor";
+import { QuantumProtocolStream } from "@/components/QuantumProtocolStream";
+import { MinimalistGatewayRails } from "@/components/MinimalistGatewayRails";
 import { TrustAttestationCard } from "@/components/TrustAttestationCard";
 import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
@@ -369,17 +369,17 @@ function MainContent() {
                 onExploreClick={() => setCurrentView("DETAIL")}
               />
 
-              {/* GSAP Showcase Kinetic Scroll Typography Marquee */}
+              {/* Kinetic Scroll Typography Marquee */}
               <KineticScrollBanner />
 
               {/* Scroll-Driven Agent Narrative Flow & Living Holographic Card */}
               <AgentNarrativeFlow onOpenConsole={() => setCurrentView("CONSOLE")} />
 
-              {/* Protocol Architecture Bento Highlights (3D Damped Tilt, Specular Sheen, Laser Scanlines) */}
-              <ParallelBentoReactor onSelectView={setCurrentView} />
+              {/* Full-Screen Pinned ScrollTrigger Protocol Trilogy */}
+              <QuantumProtocolStream />
 
-              {/* Core Problem Definition, 3 Pillars, Progression Pipeline & Feature Taxonomy */}
-              <CoreValueFramework />
+              {/* Minimalist Swiss Hairline Gateway Rails */}
+              <MinimalistGatewayRails onSelectView={setCurrentView} />
             </motion.div>
           )}
 
@@ -477,8 +477,8 @@ function MainContent() {
                 />
               </div>
 
-              {/* Core Value Framework: Problem Definition, Pipeline & Taxonomy */}
-              <CoreValueFramework />
+              {/* Minimalist Gateway Rails */}
+              <MinimalistGatewayRails onSelectView={setCurrentView} />
             </motion.div>
           )}
 
