@@ -52,8 +52,8 @@ import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 // ----------------------------------------------------------------- config
 
 const RPC_URL = process.env.RPC_URL || "https://testnet-rpc.monad.xyz";
-const REGISTRY = (process.env.SESSION_KEY_REGISTRY ||
-  "0xCb7f48F455a19778fC75afb0564aaA88b64FA004") as Hex;
+// Public contract address on Monad testnet (not a secret). gitleaks:allow
+const REGISTRY = (process.env.SESSION_KEY_REGISTRY || "0xCb7f48F455a19778fC75afb0564aaA88b64FA004") as Hex; // gitleaks:allow
 const KOLIANCE = (process.env.KOLIANCE_ADDRESS || "0x32fDd6B096EE14246b5b6971135286Bad01F4928") as Hex;
 const EXPLORER = "https://testnet.monadvision.com";
 const AGENT_FUNDING = parseEther(process.env.AGENT_FUNDING_MON || "0.25");
