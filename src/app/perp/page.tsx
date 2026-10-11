@@ -6,8 +6,9 @@ import { CursorTrail } from "@/components/CursorTrail";
 import { PositionPanel } from "@/components/PositionPanel";
 import { DemoControlPanel } from "@/components/DemoControlPanel";
 import { useRouter } from "next/navigation";
-import { createPublicClient, http, formatEther } from "viem";
+import { formatEther } from "viem";
 import { monadTestnet } from "@/lib/contract";
+import { createPerpPublicClient, perpChain, perpLocalDevAccount, PERP_IS_LOCAL } from "@/lib/perpChain";
 import { ExternalLink } from "lucide-react";
 
 /**
@@ -22,11 +23,7 @@ export default function PerpPage() {
   const [account, setAccount] = useState<`0x${string}` | null>(null);
   const [balance, setBalance] = useState("0.00");
 
-  const publicClient = createPublicClient({
-    chain: monadTestnet,
-    transport: http("https://testnet-rpc.monad.xyz", { batch: true }),
-    batch: { multicall: true },
-  });
+  const publicClient = createPerpPublicClient();
 
   const refreshBalance = useCallback(
     async (addr: `0x${string}`) => {
@@ -46,7 +43,7 @@ export default function PerpPage() {
     try {
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: `0x${monadTestnet.id.toString(16)}` }],
+        params: [{ chainId: `0x${perpChain.id.toString(16)}` }],
       });
     } catch (err: any) {
       // 4902 = chain not known to the wallet yet.
@@ -55,11 +52,11 @@ export default function PerpPage() {
           method: "wallet_addEthereumChain",
           params: [
             {
-              chainId: `0x${monadTestnet.id.toString(16)}`,
-              chainName: monadTestnet.name,
-              rpcUrls: monadTestnet.rpcUrls.default.http,
-              nativeCurrency: monadTestnet.nativeCurrency,
-              blockExplorerUrls: [monadTestnet.blockExplorers.default.url],
+              chainId: `0x${perpChain.id.toString(16)}`,
+              chainName: perpChain.name,
+              rpcUrls: perpChain.rpcUrls.default.http,
+              nativeCurrency: perpChain.nativeCurrency,
+              ...(PERP_IS_LOCAL ? {} : { blockExplorerUrls: [monadTestnet.blockExplorers.default.url] }),
             },
           ],
         });
@@ -68,6 +65,12 @@ export default function PerpPage() {
   };
 
   const handleConnect = async () => {
+    // Local rehearsal: sign with the configured Hardhat dev account, no wallet needed.
+    if (perpLocalDevAccount) {
+      setAccount(perpLocalDevAccount.address);
+      await refreshBalance(perpLocalDevAccount.address);
+      return;
+    }
     if (typeof window === "undefined" || !window.ethereum) {
       alert("Please install MetaMask, Rabby, or an EVM-compatible Web3 wallet!");
       return;
@@ -82,13 +85,20 @@ export default function PerpPage() {
         await refreshBalance(addr);
       }
       const chainIdHex = (await window.ethereum.request({ method: "eth_chainId" })) as string;
-      if (parseInt(chainIdHex, 16) !== monadTestnet.id) {
+      if (parseInt(chainIdHex, 16) !== perpChain.id) {
         await switchToMonad();
       }
     } catch (err) {
       console.error("Connect error:", err);
     }
   };
+
+  // Local rehearsal with a dev key: connect automatically, no wallet popup.
+  useEffect(() => {
+    if (!perpLocalDevAccount) return;
+    setAccount(perpLocalDevAccount.address);
+    void refreshBalance(perpLocalDevAccount.address);
+  }, [refreshBalance]);
 
   const handleDisconnect = () => {
     setAccount(null);
@@ -138,7 +148,7 @@ export default function PerpPage() {
         <div className="mb-6">
           <h1 className="text-2xl font-bold tracking-tight">Perp Terminal</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Monad Testnet · 链上永续合约 · 所有数字均读取自合约
+            {PERP_IS_LOCAL ? "Local Hardhat (31337)" : "Monad Testnet"} · 链上永续合约 · 所有数字均读取自合约
           </p>
         </div>
 

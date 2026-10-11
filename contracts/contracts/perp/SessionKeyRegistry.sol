@@ -48,7 +48,7 @@ contract SessionKeyRegistry is Ownable {
     ///   - `agentId` is an `address`, not `bytes32`, so it matches the
     ///     `session_key_address` column the off-chain side already stores.
     bytes32 public constant AGENT_DELEGATION_TYPEHASH = keccak256(
-        "AgentDelegation(address user,address agent,address sessionKey,uint256 maxSpendPerTx,uint256 dailySpendLimit,uint256 validUntil,uint256 nonce)"
+        "AgentDelegation(address user,address agent,address sessionKey,uint256 maxSpendPerTx,uint256 dailySpendLimit,uint256 maxTxPerWindow,uint256 txWindowSeconds,uint256 validUntil,uint256 nonce)"
     );
 
     bytes32 private constant NAME_HASH = keccak256("Koliance");
@@ -77,13 +77,35 @@ contract SessionKeyRegistry is Ownable {
         address sessionKey;
         uint256 maxSpendPerTx;
         uint256 dailySpendLimit;
+        /// Frequency limit: at most `maxTxPerWindow` spends in any
+        /// `txWindowSeconds` window. Signed by the user like every other cap,
+        /// so a relayer cannot loosen it.
+        uint256 maxTxPerWindow;
+        uint256 txWindowSeconds;
         uint256 validUntil;
         uint256 nonce;
         uint256 spentInWindow;
         uint256 windowStart;
+        uint256 txInWindow;
+        uint256 txWindowStart;
         bool exists;
         bool revoked;
         bool frozen;
+    }
+
+    /// The signed terms, exactly the fields of the EIP-712 `AgentDelegation`
+    /// struct in the same order. Passed as one calldata struct so the
+    /// registration entry point stays within the EVM stack limit.
+    struct DelegationTerms {
+        address user;
+        address agent;
+        address sessionKey;
+        uint256 maxSpendPerTx;
+        uint256 dailySpendLimit;
+        uint256 maxTxPerWindow;
+        uint256 txWindowSeconds;
+        uint256 validUntil;
+        uint256 nonce;
     }
 
     /// One active delegation per session key. A session key is ephemeral by
@@ -115,6 +137,8 @@ contract SessionKeyRegistry is Ownable {
         address indexed sessionKey,
         uint256 maxSpendPerTx,
         uint256 dailySpendLimit,
+        uint256 maxTxPerWindow,
+        uint256 txWindowSeconds,
         uint256 validUntil,
         uint256 nonce
     );
@@ -141,6 +165,12 @@ contract SessionKeyRegistry is Ownable {
     error DelegationExpired(address sessionKey, uint256 validUntil);
     error ExceededPerTxLimit(uint256 amount, uint256 limit);
     error ExceededDailyLimit(uint256 amount, uint256 windowSpent, uint256 limit);
+    /// The delegation's frequency limit: `txInWindow` spends already made in
+    /// the current `windowSeconds` window, which allows at most `limit`.
+    error ExceededRateLimit(uint256 txInWindow, uint256 limit, uint256 windowSeconds);
+    /// A delegation must bound frequency too: zero spends or a zero-length
+    /// window would mean either no authority or no limit.
+    error InvalidRateLimit(uint256 maxTxPerWindow, uint256 txWindowSeconds);
     error NotAuthorizedCaller(address caller);
     error ZeroAmount();
 
@@ -173,6 +203,8 @@ contract SessionKeyRegistry is Ownable {
         address sessionKey,
         uint256 maxSpendPerTx,
         uint256 dailySpendLimit,
+        uint256 maxTxPerWindow,
+        uint256 txWindowSeconds,
         uint256 validUntil,
         uint256 nonce
     ) public pure returns (bytes32) {
@@ -184,6 +216,8 @@ contract SessionKeyRegistry is Ownable {
                 sessionKey,
                 maxSpendPerTx,
                 dailySpendLimit,
+                maxTxPerWindow,
+                txWindowSeconds,
                 validUntil,
                 nonce
             )
@@ -197,6 +231,8 @@ contract SessionKeyRegistry is Ownable {
         address sessionKey,
         uint256 maxSpendPerTx,
         uint256 dailySpendLimit,
+        uint256 maxTxPerWindow,
+        uint256 txWindowSeconds,
         uint256 validUntil,
         uint256 nonce
     ) public view returns (bytes32) {
@@ -204,7 +240,9 @@ contract SessionKeyRegistry is Ownable {
             abi.encodePacked(
                 "\x19\x01",
                 domainSeparator(),
-                hashDelegation(user, agent, sessionKey, maxSpendPerTx, dailySpendLimit, validUntil, nonce)
+                hashDelegation(
+                    user, agent, sessionKey, maxSpendPerTx, dailySpendLimit, maxTxPerWindow, txWindowSeconds, validUntil, nonce
+                )
             )
         );
     }
@@ -219,71 +257,87 @@ contract SessionKeyRegistry is Ownable {
     ///      and pays the gas, so the user signs once and then walks away. The
     ///      signature is the authority, so a relayer cannot alter a field —
     ///      any edit changes the digest and the recovery fails.
-    function registerDelegation(
-        address user,
-        address agent,
-        address sessionKey,
-        uint256 maxSpendPerTx,
-        uint256 dailySpendLimit,
-        uint256 validUntil,
-        uint256 nonce,
-        bytes calldata signature
-    ) external {
-        if (user == address(0) || agent == address(0) || sessionKey == address(0)) revert ZeroAddress();
-        if (validUntil <= block.timestamp) revert ValidityInThePast(validUntil, block.timestamp);
-        if (nonceUsed[user][nonce] || nonce != userNonce[user]) {
-            if (nonceUsed[user][nonce]) revert NonceAlreadyUsed(user, nonce);
-            revert InvalidNonce(userNonce[user], nonce);
+    function registerDelegation(DelegationTerms calldata t, bytes calldata signature) external {
+        if (t.user == address(0) || t.agent == address(0) || t.sessionKey == address(0)) revert ZeroAddress();
+        if (t.validUntil <= block.timestamp) revert ValidityInThePast(t.validUntil, block.timestamp);
+        if (t.maxTxPerWindow == 0 || t.txWindowSeconds == 0) {
+            revert InvalidRateLimit(t.maxTxPerWindow, t.txWindowSeconds);
+        }
+        if (nonceUsed[t.user][t.nonce] || t.nonce != userNonce[t.user]) {
+            if (nonceUsed[t.user][t.nonce]) revert NonceAlreadyUsed(t.user, t.nonce);
+            revert InvalidNonce(userNonce[t.user], t.nonce);
         }
 
         // A user delegating to themselves grants nothing and only muddies the
         // audit trail.
-        if (agent == user || sessionKey == user) revert SelfDelegation();
+        if (t.agent == t.user || t.sessionKey == t.user) revert SelfDelegation();
 
-        bytes32 digest =
-            delegationDigest(user, agent, sessionKey, maxSpendPerTx, dailySpendLimit, validUntil, nonce);
-        _requireValidSignature(digest, user, signature);
+        _requireValidSignature(_termsDigest(t), t.user, signature);
 
-        Delegation storage existing = _delegations[sessionKey];
+        Delegation storage existing = _delegations[t.sessionKey];
         // S-1: Rebinding an existing session key to a different user is refused outright,
         // even if the previous delegation was revoked.
-        if (existing.exists && existing.user != user) {
-            revert SessionKeyAlreadyBound(sessionKey, existing.user);
+        if (existing.exists && existing.user != t.user) {
+            revert SessionKeyAlreadyBound(t.sessionKey, existing.user);
         }
 
         // S-2: If the session key already exists and is frozen, revert!
         // An agent must NOT be able to unfreeze itself by submitting a backup signature.
         if (existing.exists && existing.frozen) {
-            revert DelegationIsFrozen(sessionKey);
+            revert DelegationIsFrozen(t.sessionKey);
         }
 
-        nonceUsed[user][nonce] = true;
-        userNonce[user]++;
+        nonceUsed[t.user][t.nonce] = true;
+        userNonce[t.user]++;
 
-        // S-3: When re-registering an existing session key, retain spentInWindow and windowStart.
-        uint256 spentInWindow = 0;
-        uint256 windowStart = block.timestamp;
-        if (existing.exists) {
-            spentInWindow = existing.spentInWindow;
-            windowStart = existing.windowStart;
+        // S-3: When re-registering an existing session key, retain both the
+        // spend window and the frequency window, so re-signing cannot be used
+        // to reset either counter.
+        Delegation storage d = _delegations[t.sessionKey];
+        if (!existing.exists) {
+            d.windowStart = block.timestamp;
+            d.txWindowStart = block.timestamp;
+            d.spentInWindow = 0;
+            d.txInWindow = 0;
+            d.frozen = false;
         }
+        d.user = t.user;
+        d.agent = t.agent;
+        d.sessionKey = t.sessionKey;
+        d.maxSpendPerTx = t.maxSpendPerTx;
+        d.dailySpendLimit = t.dailySpendLimit;
+        d.maxTxPerWindow = t.maxTxPerWindow;
+        d.txWindowSeconds = t.txWindowSeconds;
+        d.validUntil = t.validUntil;
+        d.nonce = t.nonce;
+        d.exists = true;
+        d.revoked = false;
 
-        _delegations[sessionKey] = Delegation({
-            user: user,
-            agent: agent,
-            sessionKey: sessionKey,
-            maxSpendPerTx: maxSpendPerTx,
-            dailySpendLimit: dailySpendLimit,
-            validUntil: validUntil,
-            nonce: nonce,
-            spentInWindow: spentInWindow,
-            windowStart: windowStart,
-            exists: true,
-            revoked: false,
-            frozen: existing.exists ? existing.frozen : false
-        });
+        emit DelegationRegistered(
+            t.user,
+            t.agent,
+            t.sessionKey,
+            t.maxSpendPerTx,
+            t.dailySpendLimit,
+            t.maxTxPerWindow,
+            t.txWindowSeconds,
+            t.validUntil,
+            t.nonce
+        );
+    }
 
-        emit DelegationRegistered(user, agent, sessionKey, maxSpendPerTx, dailySpendLimit, validUntil, nonce);
+    function _termsDigest(DelegationTerms calldata t) private view returns (bytes32) {
+        return delegationDigest(
+            t.user,
+            t.agent,
+            t.sessionKey,
+            t.maxSpendPerTx,
+            t.dailySpendLimit,
+            t.maxTxPerWindow,
+            t.txWindowSeconds,
+            t.validUntil,
+            t.nonce
+        );
     }
 
     function _requireValidSignature(bytes32 digest, address expectedSigner, bytes calldata signature) private pure {
@@ -390,6 +444,16 @@ contract SessionKeyRegistry is Ownable {
 
         if (amount > d.maxSpendPerTx) revert ExceededPerTxLimit(amount, d.maxSpendPerTx);
 
+        // Frequency limit: roll the tx window forward if it has closed, then
+        // refuse once the window's allowance of spends is used up.
+        if (block.timestamp >= d.txWindowStart + d.txWindowSeconds) {
+            d.txWindowStart = block.timestamp;
+            d.txInWindow = 0;
+        }
+        if (d.txInWindow >= d.maxTxPerWindow) {
+            revert ExceededRateLimit(d.txInWindow, d.maxTxPerWindow, d.txWindowSeconds);
+        }
+
         // Roll the window forward if the previous one has closed.
         if (block.timestamp >= d.windowStart + ONE_DAY) {
             d.windowStart = block.timestamp;
@@ -401,6 +465,7 @@ contract SessionKeyRegistry is Ownable {
         }
 
         d.spentInWindow += amount;
+        d.txInWindow += 1;
 
         emit SpendAuthorized(sessionKey, msg.sender, amount, d.spentInWindow);
         return true;
@@ -475,8 +540,33 @@ contract SessionKeyRegistry is Ownable {
         if (amount > d.maxSpendPerTx) return false;
 
         // Mirror the roll the write path would perform, without performing it.
+        if (_txInCurrentWindow(d) >= d.maxTxPerWindow) return false;
+
         uint256 spent = block.timestamp >= d.windowStart + ONE_DAY ? 0 : d.spentInWindow;
         return spent + amount <= d.dailySpendLimit;
+    }
+
+    /// @notice How many more spends the frequency limit allows in the current window.
+    function remainingTxInWindow(address sessionKey) external view returns (uint256) {
+        Delegation storage d = _delegations[sessionKey];
+        if (!d.exists || d.revoked || d.frozen) return 0;
+
+        uint256 used = _txInCurrentWindow(d);
+        return d.maxTxPerWindow > used ? d.maxTxPerWindow - used : 0;
+    }
+
+    /// @notice Unix time at which the current frequency window closes and the
+    ///         spend count resets. Zero when there is no delegation.
+    function txWindowResetsAt(address sessionKey) external view returns (uint256) {
+        Delegation storage d = _delegations[sessionKey];
+        if (!d.exists) return 0;
+        return d.txWindowStart + d.txWindowSeconds;
+    }
+
+    /// @dev Spends counted against the frequency limit right now, mirroring the
+    ///      roll `_charge` would perform without performing it.
+    function _txInCurrentWindow(Delegation storage d) private view returns (uint256) {
+        return block.timestamp >= d.txWindowStart + d.txWindowSeconds ? 0 : d.txInWindow;
     }
 
     /// @notice The user who granted this session key its authority.
