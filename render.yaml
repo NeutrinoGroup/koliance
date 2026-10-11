@@ -8,6 +8,7 @@ services:
     plan: free
     region: singapore
     autoDeploy: true
+    healthCheckPath: /healthz
     envVars:
       - key: PORT
         value: 8080
