@@ -8,6 +8,17 @@ const nextConfig: NextConfig = {
     removeConsole: process.env.NODE_ENV === "production",
   },
   transpilePackages: ["gsap", "@gsap/react", "framer-motion", "lucide-react"],
+  webpack: (config) => {
+    config.resolve = config.resolve || {};
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      "@solana-program/system": false,
+      "@solana-program/token": false,
+      "@solana-program/memo": false,
+      "@solana/kit": false,
+    };
+    return config;
+  },
   async headers() {
     return [
       {
