@@ -24,7 +24,7 @@ describe("ContactModal & AI Builders Network Verification", () => {
 
     // Verify moonhotline
     expect(html).toContain("moonhotline");
-    expect(html).toContain("moonhotline@outlook.com");
+    expect(html).toContain("oodaleek@gmail.com");
     expect(html).toContain("[AI PROTOCOL BUILDER]");
 
     // Verify Yotoha Lin updated email
