@@ -129,7 +129,7 @@ export function EditProfileModal({
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative w-full max-w-lg rounded-lg bg-[#121624] border border-white/15 p-6 shadow-2xl overflow-hidden text-white"
+        className="relative w-full max-w-lg rounded-lg bg-[#121624] border border-white/15 p-6 shadow-2xl overflow-hidden text-white max-h-[90vh] overflow-y-auto"
       >
         {/* Glow */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px] pointer-events-none" />

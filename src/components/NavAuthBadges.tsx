@@ -311,15 +311,21 @@ export function NavAuthBadges({
       {/* Floating Integrated Account & Profile Center (Solid 100% Opaque #101420 Container) */}
       <AnimatePresence>
         {dropdownOpen && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: -6 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -6 }}
-            transition={{ duration: 0.15 }}
-            className="absolute right-0 mt-2 w-80 sm:w-88 rounded-2xl bg-[#101420] border border-white/25 p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.85)] z-50 text-white space-y-3"
-          >
-            {/* 1. User Header & Edit Profile Action */}
-            <div className="p-3 rounded-xl bg-[#172036] border border-blue-500/40 space-y-2.5 shadow-md">
+          <>
+            {/* Click-away backdrop to dismiss on both mobile and desktop */}
+            <div
+              className="fixed inset-0 z-40 bg-transparent"
+              onClick={() => setDropdownOpen(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: -6 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: -6 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-x-3 top-14 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-88 rounded-xl bg-[#101420] border border-white/25 p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.85)] z-50 text-white space-y-3 max-h-[85vh] overflow-y-auto"
+            >
+              {/* 1. User Header & Edit Profile Action */}
+              <div className="p-3 rounded-xl bg-[#172036] border border-blue-500/40 space-y-2.5 shadow-md">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-10 h-10 rounded-full overflow-hidden border border-blue-400 bg-[#1c2438] flex items-center justify-center shrink-0">
@@ -623,8 +629,9 @@ export function NavAuthBadges({
               </button>
             </div>
           </motion.div>
-        )}
-      </AnimatePresence>
+        </>
+      )}
+    </AnimatePresence>
 
       {/* Edit Profile Modal */}
       <EditProfileModal
