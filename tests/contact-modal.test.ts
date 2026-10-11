@@ -3,7 +3,7 @@ import React from "react";
 import { renderToString } from "react-dom/server";
 import { ContactModal } from "../src/components/ContactModal";
 
-describe("ContactModal & Core Team Verification", () => {
+describe("ContactModal & AI Builders Network Verification", () => {
   it("does not render when isOpen is false", () => {
     const html = renderToString(
       React.createElement(ContactModal, {
@@ -14,7 +14,7 @@ describe("ContactModal & Core Team Verification", () => {
     expect(html).toBe("");
   });
 
-  it("renders team members and verified email addresses from git history when open", () => {
+  it("renders updated team members and email addresses accurately", () => {
     const html = renderToString(
       React.createElement(ContactModal, {
         isOpen: true,
@@ -22,22 +22,40 @@ describe("ContactModal & Core Team Verification", () => {
       })
     );
 
-    // Verify all 3 core contributors and emails from git commit history
+    // Verify moonhotline
     expect(html).toContain("moonhotline");
     expect(html).toContain("moonhotline@outlook.com");
+    expect(html).toContain("[AI PROTOCOL BUILDER]");
 
-    expect(html).toContain("Yotoha");
-    expect(html).toContain("103411612+Yotoha0303@users.noreply.github.com");
+    // Verify Yotoha Lin updated email
+    expect(html).toContain("Yotoha Lin");
+    expect(html).toContain("player159263@gmail.com");
+    expect(html).toContain("[AI CONTRACT BUILDER]");
 
+    // Verify iasi777 updated email
     expect(html).toContain("iasi777");
-    expect(html).toContain("24803815+iasi777@users.noreply.github.com");
+    expect(html).toContain("iasi777work@gmail.com");
+    expect(html).toContain("[AI SECURITY BUILDER]");
 
     // Ecosystem developer email
     expect(html).toContain("developer@koliance.io");
 
-    // Modal headers and metadata
-    expect(html).toContain("Koliance Team &amp; Direct Contacts");
-    expect(html).toContain("[CORE CONTRIBUTORS]");
+    // Modal headers and AI builder network badge
+    expect(html).toContain("Koliance Team &amp; Contacts");
+    expect(html).toContain("[AI BUILDERS NETWORK]");
+  });
+
+  it("strictly ensures no internal scrollbar classes are added", () => {
+    const html = renderToString(
+      React.createElement(ContactModal, {
+        isOpen: true,
+        onClose: vi.fn(),
+      })
+    );
+
+    expect(html).not.toContain("overflow-y-auto");
+    expect(html).not.toContain("overflow-y-scroll");
+    expect(html).not.toContain("overflow-scroll");
   });
 
   it("strictly enforces zero unicode emojis policy in markup", () => {
