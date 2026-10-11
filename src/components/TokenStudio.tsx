@@ -16,6 +16,7 @@ import {
   Loader2,
   Flame,
   ShieldCheck,
+  History,
 } from "lucide-react";
 import {
   createPublicClient,
@@ -33,6 +34,7 @@ import {
   KOL_TOKEN_ADDRESS,
   KOL_TOKEN_ABI,
 } from "@/lib/contract";
+import { getAuditHistory, recordAuditEvent, AuditRecord } from "@/lib/audit";
 
 interface TokenStudioProps {
   account: `0x${string}` | null;
@@ -59,6 +61,16 @@ export function TokenStudio({
   const [isTransferring, setIsTransferring] = useState(false);
   const [isClaiming, setIsClaiming] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string; txHash?: string } | null>(null);
+  const [auditLogs, setAuditLogs] = useState<AuditRecord[]>([]);
+
+  useEffect(() => {
+    setAuditLogs(getAuditHistory(account).filter((r) => r.category === "KOL"));
+    const handleUpdate = () => {
+      setAuditLogs(getAuditHistory(account).filter((r) => r.category === "KOL"));
+    };
+    window.addEventListener("koliance_audit_updated", handleUpdate);
+    return () => window.removeEventListener("koliance_audit_updated", handleUpdate);
+  }, [account]);
 
   // Fetch token stats
   const fetchTokenData = React.useCallback(async () => {
@@ -176,6 +188,15 @@ export function TokenStudio({
         msg: "成功占领区块并领取 KOL 代币奖励！",
         txHash: hash,
       });
+      recordAuditEvent({
+        walletAddress: account,
+        category: "KOL",
+        action: "CLAIM_BLOCK_REWARD",
+        description: "Occupied Monad block & claimed KOL token mining reward",
+        amount: "+100.00 KOL",
+        tx_hash: hash,
+        status: "CONFIRMED_ON_MONAD",
+      });
       fetchTokenData();
       onRefreshBalance?.();
     } catch (err: any) {
@@ -265,6 +286,15 @@ export function TokenStudio({
         msg: `${transferType} 转账成功广播！`,
         txHash: hash,
       });
+      recordAuditEvent({
+        walletAddress: account,
+        category: "KOL",
+        action: "TRANSFER_KOL",
+        description: `Transferred ${amount.trim()} ${transferType} to ${cleanRecipient.slice(0, 8)}...${cleanRecipient.slice(-4)}`,
+        amount: `-${amount.trim()} ${transferType}`,
+        tx_hash: hash,
+        status: "CONFIRMED_ON_MONAD",
+      });
       setAmount("");
       fetchTokenData();
       onRefreshBalance?.();
@@ -281,18 +311,18 @@ export function TokenStudio({
 
   return (
     <div className="w-full max-w-6xl mx-auto px-4 py-8 space-y-8">
-      {/* Top Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#121624] via-[#101420] to-[#0a0d16] border border-white/10 p-6 sm:p-10 shadow-2xl">
+      {/* Top Banner - Architectural Geometry, Zero Bubble */}
+      <div className="relative overflow-hidden rounded-lg bg-gradient-to-br from-[#121624] via-[#101420] to-[#0a0d16] border border-white/10 p-6 sm:p-8 shadow-sm">
         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-mono">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-mono">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Monad Testnet (Chain ID: 10143)</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight flex items-center gap-3">
               <span>KOL 代币 (KOL)</span>
-              <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/30 text-emerald-400 font-normal">
+              <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-400 font-normal">
                 已部署
               </span>
             </h1>
@@ -300,7 +330,7 @@ export function TokenStudio({
               Koliance 原生代币，名称 <strong className="text-white">kol</strong>，符号 <strong className="text-white">KOL</strong>。
               总硬顶恒定 <strong className="text-white">2^30 (1,073,741,824)</strong> 枚，遵循比特币式每 2 年减半释放模型。
             </p>
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-mono">
+            <div className="p-3 rounded-md bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 font-mono">
               [DISCLAIMER] Koliance Testnet Utility Token (No Monetary Value) — Strictly for testing agent escrow fees and credit stake weight.
             </div>
           </div>
@@ -308,7 +338,7 @@ export function TokenStudio({
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <button
               onClick={handleAddToMetaMask}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-mono transition"
+              className="h-10 px-4 rounded-md bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-mono transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98]"
             >
               <PlusCircle className="w-4 h-4 text-purple-400" />
               <span>添加 KOL 到 MetaMask</span>
@@ -317,7 +347,7 @@ export function TokenStudio({
               href={`${monadTestnet.blockExplorers.default.url}/address/${KOL_TOKEN_ADDRESS}`}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-mono transition shadow-lg shadow-purple-600/30"
+              className="h-10 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white text-xs font-mono transition flex items-center justify-center gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98]"
             >
               <ExternalLink className="w-4 h-4" />
               <span>Monad Explorer 查看</span>
@@ -329,7 +359,7 @@ export function TokenStudio({
       {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Token Balance */}
-        <div className="p-5 rounded-2xl bg-[#141824]/90 border border-white/10 space-y-2">
+        <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
             <span>我的 KOL 余额</span>
             <Coins className="w-4 h-4 text-purple-400" />
@@ -343,10 +373,10 @@ export function TokenStudio({
         </div>
 
         {/* Total Supply */}
-        <div className="p-5 rounded-2xl bg-[#141824]/90 border border-white/10 space-y-2">
+        <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
             <span>当前已产出总量</span>
-            <Flame className="w-4 h-4 text-amber-400" />
+            <Coins className="w-4 h-4 text-purple-400" />
           </div>
           <div className="text-2xl font-bold text-white font-mono">
             {parseFloat(totalSupply).toFixed(2)}
@@ -357,7 +387,7 @@ export function TokenStudio({
         </div>
 
         {/* Current Era / Halving */}
-        <div className="p-5 rounded-2xl bg-[#141824]/90 border border-white/10 space-y-2">
+        <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
             <span>减半纪元 (Era)</span>
             <TrendingDown className="w-4 h-4 text-blue-400" />
@@ -371,7 +401,7 @@ export function TokenStudio({
         </div>
 
         {/* Reward Rate */}
-        <div className="p-5 rounded-2xl bg-[#141824]/90 border border-white/10 space-y-2">
+        <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
             <span>当前区块产出速率</span>
             <Clock className="w-4 h-4 text-emerald-400" />
@@ -390,7 +420,7 @@ export function TokenStudio({
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className={`p-4 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono ${
+          className={`p-4 rounded-md border flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono ${
             feedback.type === "success"
               ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
               : "bg-red-500/10 border-red-500/30 text-red-300"
@@ -421,21 +451,21 @@ export function TokenStudio({
       {/* Action Columns: Mining / Claiming + Transfer */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Occupy Block & Claim Reward */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-[#141824]/90 border border-white/10 space-y-6 flex flex-col justify-between">
+        <div className="p-6 rounded-lg bg-[#141824]/90 border border-white/10 space-y-6 flex flex-col justify-between shadow-sm">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-400/20 flex items-center justify-center text-amber-400">
-                <Pickaxe className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-md bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-purple-400">
+                <Pickaxe className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">占领区块 & 领取矿工奖励</h3>
+                <h3 className="text-base font-bold text-white font-mono">占领区块 & 领取矿工奖励</h3>
                 <p className="text-xs text-slate-400 font-mono">
                   claimBlockReward() · 链上实时铸造
                 </p>
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-black/40 border border-white/5 space-y-2 text-xs font-sans text-slate-300">
+            <div className="p-4 rounded-md bg-black/40 border border-white/5 space-y-2 text-xs font-sans text-slate-300">
               <p>
                 • <strong>占领机制：</strong> Monad 是 10,000 TPS 极速链，任何用户只要向合约发送一笔交易，即可将上一结算点到当前的区块代币奖励打包并转移到自己的钱包。
               </p>
@@ -448,7 +478,7 @@ export function TokenStudio({
           <button
             onClick={handleClaimReward}
             disabled={isClaiming || !account}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold text-sm transition shadow-lg shadow-amber-500/20 active:scale-98 disabled:opacity-50"
+            className="w-full h-10 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white font-mono text-xs font-semibold transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
           >
             {isClaiming ? (
               <>
@@ -467,14 +497,14 @@ export function TokenStudio({
         </div>
 
         {/* Right: Transfer Portal (KOL or MON) */}
-        <div className="p-6 sm:p-8 rounded-3xl bg-[#141824]/90 border border-white/10 space-y-6">
+        <div className="p-6 rounded-lg bg-[#141824]/90 border border-white/10 space-y-6 shadow-sm">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-purple-400">
-                <Send className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-md bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-purple-400">
+                <Send className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">链上转账控制台</h3>
+                <h3 className="text-base font-bold text-white font-mono">链上转账控制台</h3>
                 <p className="text-xs text-slate-400 font-mono">
                   支持转账 KOL 与 原生 MON
                 </p>
@@ -482,13 +512,13 @@ export function TokenStudio({
             </div>
 
             {/* Switch Currency Tab */}
-            <div className="flex items-center gap-1 p-1 bg-black/50 border border-white/10 rounded-xl">
+            <div className="flex items-center gap-1 p-1 bg-black/50 border border-white/10 rounded-md">
               <button
                 type="button"
                 onClick={() => setTransferType("KOL")}
-                className={`px-3 py-1 rounded-lg text-xs font-mono transition ${
+                className={`px-3 py-1 rounded-md text-xs font-mono transition cursor-pointer ${
                   transferType === "KOL"
-                    ? "bg-purple-600 text-white font-bold"
+                    ? "bg-purple-600 text-white font-bold shadow-xs"
                     : "text-slate-400 hover:text-white"
                 }`}
               >
@@ -497,9 +527,9 @@ export function TokenStudio({
               <button
                 type="button"
                 onClick={() => setTransferType("MON")}
-                className={`px-3 py-1 rounded-lg text-xs font-mono transition ${
+                className={`px-3 py-1 rounded-md text-xs font-mono transition cursor-pointer ${
                   transferType === "MON"
-                    ? "bg-purple-600 text-white font-bold"
+                    ? "bg-purple-600 text-white font-bold shadow-xs"
                     : "text-slate-400 hover:text-white"
                 }`}
               >
@@ -516,7 +546,7 @@ export function TokenStudio({
                 placeholder="0x..."
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
+                className="w-full px-3.5 py-2.5 rounded-md bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
                 required
               />
             </div>
@@ -534,7 +564,7 @@ export function TokenStudio({
                       setAmount(Math.max(0, balNum - 0.005).toFixed(4));
                     }
                   }}
-                  className="text-[11px] text-purple-300 hover:text-purple-200 underline"
+                  className="text-[11px] text-purple-300 hover:text-purple-200 underline cursor-pointer"
                 >
                   全部可用 ({transferType === "KOL" ? parseFloat(tokenBalance).toFixed(4) : nativeBalance})
                 </button>
@@ -546,7 +576,7 @@ export function TokenStudio({
                   placeholder="0.0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="w-full px-3.5 py-2.5 pr-16 rounded-xl bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
+                  className="w-full px-3.5 py-2.5 pr-16 rounded-md bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
                   required
                 />
                 <span className="absolute right-3.5 top-2.5 text-xs font-mono text-purple-300 font-bold pointer-events-none">
@@ -558,7 +588,7 @@ export function TokenStudio({
             <button
               type="submit"
               disabled={isTransferring || !account}
-              className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs sm:text-sm transition shadow-lg shadow-purple-600/25 active:scale-98 disabled:opacity-50"
+              className="w-full h-10 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white font-mono text-xs font-semibold transition-all shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
             >
               {isTransferring ? (
                 <>
@@ -575,6 +605,82 @@ export function TokenStudio({
               )}
             </button>
           </form>
+        </div>
+      </div>
+
+      {/* Traceable KOL Acquisition & Transaction History (KOL 获取与交易记录) */}
+      <div className="p-6 rounded-lg bg-[#141824]/90 border border-white/10 space-y-4 shadow-sm">
+        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+          <div className="flex items-center gap-2">
+            <History className="w-4 h-4 text-purple-400" />
+            <h3 className="text-sm font-bold text-white font-mono">My KOL Acquisition & Transaction History (获取与交易记录)</h3>
+          </div>
+          <span className="text-xs font-mono text-slate-400">Verifiable Monad Block Proofs</span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left font-mono text-xs">
+            <thead>
+              <tr className="border-b border-white/10 text-slate-400">
+                <th className="pb-2.5 font-medium">TIMESTAMP (UTC)</th>
+                <th className="pb-2.5 font-medium">EVENT TYPE</th>
+                <th className="pb-2.5 font-medium">DESCRIPTION</th>
+                <th className="pb-2.5 font-medium">AMOUNT</th>
+                <th className="pb-2.5 font-medium">MONAD TX HASH</th>
+                <th className="pb-2.5 font-medium text-right">STATUS</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {auditLogs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                    暂无 KOL 获取或交易记录。点击上方「占领区块并领取 KOL」体验链上铸造。
+                  </td>
+                </tr>
+              ) : (
+                auditLogs.map((item) => (
+                  <tr key={item.id} className="hover:bg-white/[0.02] transition">
+                    <td className="py-3 text-slate-400 whitespace-nowrap">
+                      {new Date(item.timestamp).toISOString().replace("T", " ").slice(0, 19)}
+                    </td>
+                    <td className="py-3">
+                      <span className="text-[10px] px-2 py-0.5 rounded-md font-bold bg-purple-500/10 text-purple-300 border border-purple-500/20">
+                        {item.action}
+                      </span>
+                    </td>
+                    <td className="py-3 text-white font-sans max-w-[280px]">
+                      <span className="truncate block">{item.description}</span>
+                    </td>
+                    <td className="py-3 font-bold whitespace-nowrap">
+                      <span className={item.amount?.startsWith("+") ? "text-emerald-400" : "text-purple-300"}>
+                        {item.amount || "N/A"}
+                      </span>
+                    </td>
+                    <td className="py-3 font-mono">
+                      {item.tx_hash ? (
+                        <a
+                          href={`https://testnet.monadexplorer.com/tx/${item.tx_hash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-purple-300 hover:text-purple-200 flex items-center gap-1 group"
+                        >
+                          <span>{item.tx_hash.slice(0, 8)}...{item.tx_hash.slice(-4)}</span>
+                          <ExternalLink className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
+                        </a>
+                      ) : (
+                        <span className="text-slate-600">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-right whitespace-nowrap">
+                      <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                        [CONFIRMED]
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

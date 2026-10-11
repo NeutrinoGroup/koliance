@@ -50,7 +50,7 @@ export function IdentityCard({ account, identity, isLoading, onRegister }: Ident
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
-      className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-monad-500/30 relative overflow-hidden"
+      className="glass-panel-glow rounded-lg p-6 sm:p-8 border border-monad-500/30 relative overflow-hidden shadow-sm"
     >
       {/* Background ambient glow */}
       <div className="absolute -top-24 -right-24 w-60 h-60 bg-monad-500/20 rounded-full blur-[80px] pointer-events-none" />
@@ -58,8 +58,8 @@ export function IdentityCard({ account, identity, isLoading, onRegister }: Ident
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-monad-500/20 border border-monad-500/40 flex items-center justify-center text-monad-300">
-            <Fingerprint className="w-6 h-6 text-monad-400" />
+          <div className="w-10 h-10 rounded-md bg-monad-500/20 border border-monad-500/40 flex items-center justify-center text-monad-300">
+            <Fingerprint className="w-5 h-5 text-monad-400" />
           </div>
           <div>
             <h3 className="text-xl font-bold text-white flex items-center gap-2">
@@ -73,12 +73,12 @@ export function IdentityCard({ account, identity, isLoading, onRegister }: Ident
 
         {/* Identity Status Pill */}
         {identity?.exists ? (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-mono">
             <CheckCircle2 className="w-3.5 h-3.5" />
             Verified Identity
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-monad-500/10 border border-monad-500/30 text-monad-300 text-xs font-mono">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-monad-500/10 border border-monad-500/30 text-monad-300 text-xs font-mono">
             Unregistered
           </span>
         )}

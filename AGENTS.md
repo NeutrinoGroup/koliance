@@ -88,3 +88,34 @@ go test -race ./...
 - **Exact Precision**: On-chain smart contract verdicts are the authoritative source of truth.
 - Financial arithmetic must use integer / BigInt representation (Wei / 6-decimal USDC / 18-decimal shares).
 - Off-chain estimations in TypeScript and Go must match on-chain liquidation thresholds within zero truncation drift (GAP-06 / GAP-14).
+
+---
+
+## 6. Strict Geometric Directive: Ban on Oval/Pill Cards & Buttons (拒接椭圆形卡片与按钮)
+
+To maintain a top-tier developer SaaS aesthetic (comparable to Stripe, Vercel, Linear, and Supabase):
+
+1. **Zero Oval / Capsule / Pill Geometry**:
+   - **Interactive Buttons**: MUST use modern rectangular geometry with micro-radii: `rounded-md` (6px / 0.375rem).
+   - **Cards & Modals**: MUST use architectural geometry: `rounded-lg` (8px / 0.5rem) or `rounded-xl` (12px / 0.75rem).
+   - **Strictly FORBIDDEN**: `rounded-full` on buttons/badges/cards, `rounded-3xl` (24px) or bubbly `rounded-2xl` on cards and buttons.
+2. **Modern Button Component Specification (shadcn/ui Standard)**:
+   - Base sizing: `h-9` or `h-10` with `px-4 py-2 text-xs font-mono font-medium`.
+   - Hairline borders: `border border-white/10` or `border border-purple-500/30`.
+   - Inset highlight: `shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]`.
+   - Press micro-interaction: `active:scale-[0.98] transition-all`.
+   - Palette: Zero yellow/amber. Use deep Monad purple (`#836ef9`), cyber cyan (`#00f2fe`), emerald (`#10b981`), or slate.
+
+---
+
+## 7. Traceability & User Operation Audit Directive (操作可追溯与交易历史)
+
+All user-facing workflows must maintain complete audit transparency:
+
+1. **Operation Traceability (操作可追溯)**:
+   - Every state-altering user action (quota claims, package purchases, agent wallet bindings, key rotations, trust attestations) must produce a timestamped audit record.
+   - History must be accessible and inspectable directly within the user console.
+2. **Transaction & Acquisition History (每笔交易与KOL获取历史)**:
+   - Full visibility into KOL Token acquisition events (block claims, mining rewards, transfers).
+   - Full visibility into autonomous payment streams, including Order Hash, on-chain TX Hash, Monad testnet consensus state, and receipt links.
+   - All records must persist per user account (syncing local state with backend telemetry).

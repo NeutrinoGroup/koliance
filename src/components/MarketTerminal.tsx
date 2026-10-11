@@ -21,7 +21,6 @@ import {
   Cpu,
   Info,
   Sliders,
-  Zap,
   Check,
   AlertCircle,
   Send,
@@ -299,7 +298,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
   return (
     <div className="w-full space-y-6 font-sans">
       {/* 1. Ticker Tape Header */}
-      <div className="rounded-2xl bg-[#121622]/90 border border-white/[0.08] p-3 shadow-md backdrop-blur-md overflow-x-auto">
+      <div className="rounded-md bg-[#121622]/90 border border-white/[0.08] p-3 shadow-md backdrop-blur-md overflow-x-auto">
         <div className="flex items-center gap-6 min-w-max text-xs font-mono">
           <div className="flex items-center gap-2 text-slate-400 font-bold uppercase tracking-wider pr-3 border-r border-white/10">
             <Activity className="w-3.5 h-3.5 text-white animate-pulse" />
@@ -313,7 +312,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               <button
                 key={item.symbol}
                 onClick={() => setSelectedSymbol(item.symbol)}
-                className={`flex items-center gap-2 px-2.5 py-1 rounded-xl transition ${
+                className={`flex items-center gap-2 px-2.5 py-1 rounded-md transition ${
                   isSelected
                     ? "bg-white text-black font-bold shadow-sm"
                     : "hover:bg-white/[0.06] text-slate-300"
@@ -331,9 +330,9 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       </div>
 
       {/* 2. Alpaca Live Account Status Banner (KISS) */}
-      <div className="rounded-3xl bg-gradient-to-r from-[#141b2d] via-[#162238] to-[#121a2b] border border-emerald-500/30 p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 font-mono">
+      <div className="rounded-lg bg-gradient-to-r from-[#141b2d] via-[#162238] to-[#121a2b] border border-emerald-500/30 p-5 shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-4 font-mono">
         <div className="flex items-center gap-3">
-          <span className="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shadow-sm">
+          <span className="w-10 h-10 rounded-md bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shadow-sm">
             <DollarSign className="w-5 h-5" />
           </span>
           <div>
@@ -349,7 +348,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs bg-black/40 px-5 py-3 rounded-2xl border border-white/10 shrink-0">
+        <div className="flex flex-wrap items-center gap-4 sm:gap-6 text-xs bg-black/40 px-5 py-3 rounded-md border border-white/10 shrink-0">
           <div>
             <span className="text-slate-400 text-[10px] block uppercase">可用现金余额</span>
             <strong className="text-white text-sm font-black">${alpacaCash} USD</strong>
@@ -373,12 +372,12 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       </div>
 
       {/* 3. Search & Range Bar */}
-      <div className="rounded-3xl bg-[#121622]/90 border border-white/[0.08] p-5 sm:p-6 shadow-xl backdrop-blur-xl space-y-4">
+      <div className="rounded-lg bg-[#121622]/90 border border-white/[0.08] p-5 sm:p-6 shadow-xl backdrop-blur-xl space-y-4">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-3">
               <span>{selectedSymbol}</span>
-              <span className="text-xs px-2.5 py-0.5 rounded-lg bg-white/10 text-white border border-white/20 font-mono">
+              <span className="text-xs px-2.5 py-0.5 rounded-md bg-white/10 text-white border border-white/20 font-mono">
                 {marketData?.meta.exchangeName || "NASDAQ"}
               </span>
             </h2>
@@ -395,8 +394,8 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               verify what is on screen.
             */}
             {marketData?.dataCaveat && (
-              <p className="mt-1.5 inline-flex items-start gap-1.5 rounded-md border border-amber-400/30 bg-amber-400/5 px-2 py-1 text-[10px] leading-relaxed text-amber-200/90">
-                <span className="font-mono uppercase tracking-wider text-amber-300/90">
+              <p className="mt-1.5 inline-flex items-start gap-1.5 rounded-md border border-purple-400/30 bg-purple-400/5 px-2 py-1 text-[10px] leading-relaxed text-purple-200/90">
+                <span className="font-mono uppercase tracking-wider text-purple-300/90">
                   {marketData.source}
                 </span>
                 <span>{marketData.dataCaveat}</span>
@@ -410,7 +409,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               <button
                 key={item.symbol}
                 onClick={() => setSelectedSymbol(item.symbol)}
-                className={`px-3 py-1.5 rounded-xl font-mono text-xs transition ${
+                className={`px-3 py-1.5 rounded-md font-mono text-xs transition ${
                   selectedSymbol === item.symbol
                     ? "bg-white text-black font-bold shadow-sm"
                     : "bg-white/[0.06] hover:bg-white/10 text-slate-300"
@@ -431,12 +430,12 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="Search US Stock (e.g. MSFT, GOOGL, AMD, SPY)..."
-              className="w-full pl-11 pr-4 py-2.5 rounded-2xl bg-[#0d1017] border border-white/10 text-xs sm:text-sm text-white placeholder-slate-400 font-mono focus:outline-none focus:border-white/30 transition"
+              className="w-full pl-11 pr-4 py-2.5 rounded-md bg-[#0d1017] border border-white/10 text-xs sm:text-sm text-white placeholder-slate-400 font-mono focus:outline-none focus:border-white/30 transition"
             />
           </div>
           <button
             type="submit"
-            className="px-6 py-2.5 rounded-2xl bg-white hover:bg-slate-100 text-black font-semibold text-xs sm:text-sm font-mono transition shadow-sm active:scale-95"
+            className="h-10 px-6 rounded-md bg-white hover:bg-slate-100 text-black font-semibold text-xs sm:text-sm font-mono transition shadow-sm active:scale-[0.98]"
           >
             Search
           </button>
@@ -446,7 +445,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       {/* 4. Chart & Alpaca Execution Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column (7 cols): Real-Time Chart & Price Metrics */}
-        <div className="lg:col-span-7 rounded-3xl bg-[#121622]/90 border border-white/[0.08] p-6 space-y-6 shadow-xl backdrop-blur-xl">
+        <div className="lg:col-span-7 rounded-lg bg-[#121622]/90 border border-white/[0.08] p-6 space-y-6 shadow-xl backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-white/[0.08] pb-4">
             <div>
               <div className="text-3xl sm:text-4xl font-black font-mono text-white">
@@ -513,11 +512,11 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
         </div>
 
         {/* Right Column (5 cols): ALPACA 1-CLICK LEVERAGED TRADE PANEL (KISS) */}
-        <div className="lg:col-span-5 rounded-3xl bg-[#121622]/90 border border-emerald-500/30 p-6 space-y-5 shadow-2xl backdrop-blur-xl font-mono flex flex-col justify-between">
+        <div className="lg:col-span-5 rounded-lg bg-[#121622]/90 border border-emerald-500/30 p-6 space-y-5 shadow-2xl backdrop-blur-xl font-mono flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-emerald-400" />
+                <Activity className="w-4 h-4 text-emerald-400" />
                 <h3 className="font-bold text-sm text-white">Alpaca 多空下单控制台 (KISS)</h3>
               </div>
               <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
@@ -531,7 +530,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => setTradeSide("buy")}
-                  className={`py-3 rounded-2xl font-bold text-xs transition border flex items-center justify-center gap-1.5 ${
+                  className={`py-2.5 rounded-md font-bold text-xs transition border flex items-center justify-center gap-1.5 ${
                     tradeSide === "buy"
                       ? "bg-emerald-500 text-black border-emerald-400 shadow-[0_0_20px_rgba(52,211,153,0.4)]"
                       : "bg-white/[0.04] text-slate-300 border-white/10 hover:border-white/30"
@@ -543,7 +542,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
 
                 <button
                   onClick={() => setTradeSide("sell")}
-                  className={`py-3 rounded-2xl font-bold text-xs transition border flex items-center justify-center gap-1.5 ${
+                  className={`py-2.5 rounded-md font-bold text-xs transition border flex items-center justify-center gap-1.5 ${
                     tradeSide === "sell"
                       ? "bg-red-500 text-white border-red-400 shadow-[0_0_20px_rgba(248,113,113,0.4)]"
                       : "bg-white/[0.04] text-slate-300 border-white/10 hover:border-white/30"
@@ -563,7 +562,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
                   <button
                     key={lev}
                     onClick={() => setTradeLeverage(lev)}
-                    className={`py-2 rounded-xl text-xs font-bold transition border ${
+                    className={`py-2 rounded-md text-xs font-bold transition border ${
                       tradeLeverage === lev
                         ? "bg-white text-black border-white"
                         : "bg-white/[0.04] text-slate-300 border-white/10 hover:border-white/20"
@@ -583,7 +582,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
                   <button
                     key={amt}
                     onClick={() => setTradeAmount(amt)}
-                    className={`py-2 rounded-xl text-xs font-bold transition border ${
+                    className={`py-2 rounded-md text-xs font-bold transition border ${
                       tradeAmount === amt
                         ? "bg-cyan-400 text-black border-cyan-400"
                         : "bg-white/[0.04] text-slate-300 border-white/10 hover:border-white/20"
@@ -598,12 +597,12 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
                 value={tradeAmount}
                 onChange={(e) => setTradeAmount(Number(e.target.value))}
                 min={1}
-                className="w-full mt-1.5 px-3 py-2 rounded-xl bg-[#0d1017] border border-white/10 text-white text-xs focus:outline-none focus:border-white/30"
+                className="w-full mt-1.5 px-3 py-2 rounded-md bg-[#0d1017] border border-white/10 text-white text-xs focus:outline-none focus:border-white/30"
               />
             </div>
 
             {/* Exact USD Calculation & Leverage Breakdown Box */}
-            <div className="p-3.5 rounded-2xl bg-black/60 border border-white/10 space-y-2 text-xs">
+            <div className="p-3.5 rounded-md bg-black/60 border border-white/10 space-y-2 text-xs">
               <div className="flex items-center justify-between text-slate-300">
                 <span>占用保证金 (Margin):</span>
                 <span className="text-white font-bold">${tradeAmount.toFixed(2)} USD</span>
@@ -637,10 +636,10 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
             <button
               onClick={handleExecuteAlpacaTrade}
               disabled={tradeLoading || tradeAmount <= 0}
-              className={`w-full py-3.5 rounded-2xl font-bold text-xs transition shadow-lg flex items-center justify-center gap-2 active:scale-95 ${
+              className={`w-full h-10 rounded-md font-mono text-xs font-semibold transition border flex items-center justify-center gap-2 active:scale-[0.98] ${
                 tradeSide === "buy"
-                  ? "bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20"
-                  : "bg-red-500 hover:bg-red-400 text-white shadow-red-500/20"
+                  ? "bg-emerald-500 hover:bg-emerald-400 text-black border-emerald-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
+                  : "bg-red-500 hover:bg-red-400 text-white border-red-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
               }`}
             >
               {tradeLoading ? (
@@ -661,7 +660,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
             {/* Toast Feedback */}
             {tradeToast && (
               <div
-                className={`p-3 rounded-2xl text-xs flex items-center gap-2 border ${
+                className={`p-3 rounded-md text-xs flex items-center gap-2 border ${
                   tradeToast.type === "success"
                     ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                     : "bg-red-500/20 text-red-300 border-red-500/40"
@@ -680,7 +679,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               {recentOrders.map((ord) => (
                 <div
                   key={ord.id}
-                  className="p-2 rounded-xl bg-black/40 border border-white/[0.06] flex items-center justify-between text-[11px]"
+                  className="p-2 rounded-md bg-black/40 border border-white/[0.06] flex items-center justify-between text-[11px]"
                 >
                   <div className="flex items-center gap-2">
                     <span
@@ -704,7 +703,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       </div>
 
       {/* 5. Alpaca Active Open Positions Table */}
-      <div className="rounded-3xl bg-[#121622]/90 border border-white/[0.08] p-6 shadow-xl backdrop-blur-xl space-y-4 font-mono">
+      <div className="rounded-lg bg-[#121622]/90 border border-white/[0.08] p-6 shadow-xl backdrop-blur-xl space-y-4 font-mono">
         <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
           <div className="flex items-center gap-2">
             <Layers className="w-4 h-4 text-cyan-400" />

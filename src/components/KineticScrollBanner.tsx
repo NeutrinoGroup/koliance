@@ -3,7 +3,6 @@
 import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
-import { Zap, ShieldCheck, Cpu } from "lucide-react";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -29,7 +28,7 @@ export function KineticScrollBanner() {
           trigger: container,
           start: "top bottom",
           end: "bottom top",
-          scrub: 0.8,
+          scrub: 1.2,
         },
       });
 
@@ -44,7 +43,24 @@ export function KineticScrollBanner() {
             trigger: container,
             start: "top bottom",
             end: "bottom top",
-            scrub: 0.8,
+            scrub: 1.2,
+          },
+        }
+      );
+
+      // Progressive disclosure: Fade & expand into view on scroll entry
+      gsap.fromTo(
+        container,
+        { opacity: 0.2, filter: "blur(6px)" },
+        {
+          opacity: 1,
+          filter: "blur(0px)",
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: container,
+            start: "top 90%",
+            end: "top 40%",
+            scrub: 0.5,
           },
         }
       );
@@ -72,22 +88,22 @@ export function KineticScrollBanner() {
   return (
     <div
       ref={containerRef}
-      className="relative w-full overflow-hidden py-10 select-none pointer-events-none border-y border-white/[0.06] bg-black/40"
+      className="relative w-full overflow-hidden py-12 select-none pointer-events-none border-y border-white/[0.06] bg-black/40 [mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)] [-webkit-mask-image:linear-gradient(to_right,transparent,black_15%,black_85%,transparent)] will-change-transform will-change-opacity"
     >
       {/* Background cyber grid gradient */}
-      <div className="absolute inset-0 bg-[radial-gradient(#836ef9_1px,transparent_1px)] [background-size:24px_24px] opacity-15" />
+      <div className="absolute inset-0 bg-[radial-gradient(#836ef9_1px,transparent_1px)] [background-size:24px_24px] opacity-10" />
 
       {/* Track 1: Right-to-Left Kinetic Scroll Stream */}
-      <div className="flex whitespace-nowrap mb-3 will-change-transform" ref={track1Ref}>
+      <div className="flex whitespace-nowrap mb-4 will-change-transform" ref={track1Ref}>
         {[...Array(4)].map((_, groupIdx) => (
           <div key={`group1-${groupIdx}`} className="flex items-center gap-6 shrink-0 pr-6">
             {marqueeText1.map((item, idx) => (
-              <span key={`t1-${groupIdx}-${idx}`} className="inline-flex items-center gap-3">
-                <span className="text-2xl sm:text-3xl md:text-4xl font-black tracking-tight text-white/90 uppercase font-mono">
+              <span key={`t1-${groupIdx}-${idx}`} className="inline-flex items-center gap-4">
+                <span className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tight text-white/90 uppercase font-mono">
                   {item}
                 </span>
-                <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-cyan-400/20 text-cyan-400">
-                  <Zap className="w-3.5 h-3.5" />
+                <span className="text-cyan-400/40 text-xl font-mono select-none">
+                  {"//"}
                 </span>
               </span>
             ))}
@@ -100,12 +116,12 @@ export function KineticScrollBanner() {
         {[...Array(4)].map((_, groupIdx) => (
           <div key={`group2-${groupIdx}`} className="flex items-center gap-6 shrink-0 pr-6">
             {marqueeText2.map((item, idx) => (
-              <span key={`t2-${groupIdx}-${idx}`} className="inline-flex items-center gap-3">
-                <span className="text-xl sm:text-2xl md:text-3xl font-extrabold tracking-tight text-monad-400/80 uppercase font-mono">
+              <span key={`t2-${groupIdx}-${idx}`} className="inline-flex items-center gap-4">
+                <span className="text-xl sm:text-2xl md:text-4xl font-extrabold tracking-tight text-monad-400/80 uppercase font-mono">
                   {item}
                 </span>
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-purple-500/20 text-purple-300">
-                  <ShieldCheck className="w-3 h-3" />
+                <span className="text-purple-400/40 text-lg font-mono select-none">
+                  {"//"}
                 </span>
               </span>
             ))}
@@ -115,3 +131,5 @@ export function KineticScrollBanner() {
     </div>
   );
 }
+
+export default KineticScrollBanner;

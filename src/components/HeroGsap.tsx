@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
-import { Sparkles, ShieldCheck, Zap, Activity, ArrowRight, Layers, Globe } from "lucide-react";
+import { ArrowRight, Globe } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { EnergyCoreBackdrop } from "@/components/EnergyCoreBackdrop";
 
@@ -19,7 +19,6 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
   const subtextRef = useRef<HTMLParagraphElement>(null);
   const badgeRef = useRef<HTMLDivElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
-  const statsRef = useRef<HTMLDivElement>(null);
 
   // 1. GSAP Particle Constellation Canvas
   useEffect(() => {
@@ -88,7 +87,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
 
       const maxDistSq = 10000; // 100^2
 
-      // Draw connection lines with squared distance check (no Math.sqrt)
+      // Draw connection lines with squared distance check
       for (let i = 0; i < particles.length; i++) {
         for (let j = i + 1; j < particles.length; j++) {
           const dx = particles[i].x - particles[j].x;
@@ -107,7 +106,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
         }
       }
 
-      // Draw particles (fast fill without heavy shadowBlur)
+      // Draw particles
       for (const p of particles) {
         p.x += p.vx;
         p.y += p.vy;
@@ -162,12 +161,6 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
           { opacity: 0, y: 20, scale: 0.95 },
           { opacity: 1, y: 0, scale: 1, duration: 0.7 },
           "-=0.5"
-        )
-        .fromTo(
-          statsRef.current,
-          { opacity: 0, y: 30 },
-          { opacity: 1, y: 0, duration: 0.8 },
-          "-=0.4"
         );
     }, containerRef);
 
@@ -175,7 +168,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
   }, []);
 
   return (
-    <div ref={containerRef} className="relative pt-32 pb-20 overflow-hidden flex flex-col items-center text-center px-4">
+    <div ref={containerRef} className="relative pt-36 pb-28 overflow-hidden flex flex-col items-center text-center px-4">
       {/* 3D Crystalline Energy Core Blurred Ambient Backdrop */}
       <div className="absolute top-[38%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1100px] max-w-[98vw] h-[720px] pointer-events-none -z-20">
         <EnergyCoreBackdrop
@@ -197,30 +190,30 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       <div className="absolute top-1/3 left-1/4 w-[350px] h-[350px] bg-cyber-accent/15 rounded-full blur-[120px] pointer-events-none -z-10" />
 
       {/* Futuristic Monad Badge & Language Switcher */}
-      <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
         <div
           ref={badgeRef}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-panel border border-monad-400/40 text-xs text-monad-200 shadow-glow"
+          className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-lg glass-panel border border-monad-400/30 text-xs text-monad-200 shadow-glow"
         >
-          <Sparkles className="w-3.5 h-3.5 text-cyber-accent animate-spin" style={{ animationDuration: "6s" }} />
-          <span className="font-semibold tracking-wide text-white">{t("vision.hero_tag")}</span>
-          <span className="text-monad-400">|</span>
-          <span className="text-monad-300 font-mono">{t("vision.hero_engine")}</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
+          <span className="font-semibold tracking-wider text-white uppercase text-[11px] font-mono">{t("vision.hero_tag")}</span>
+          <span className="text-monad-500">{"//"}</span>
+          <span className="text-monad-300 font-mono text-[11px]">{t("vision.hero_engine")}</span>
         </div>
 
         <button
           onClick={() => setLang(lang === "en" ? "zh" : "en")}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-panel border border-white/10 hover:border-white/30 text-xs font-mono text-slate-300 hover:text-white transition cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg glass-panel border border-white/10 hover:border-white/30 text-xs font-mono text-slate-300 hover:text-white transition cursor-pointer"
         >
           <Globe className="w-3.5 h-3.5 text-cyan-400" />
-          <span>{lang === "en" ? "EN / 中文" : "中文 / EN"}</span>
+          <span>{lang === "en" ? "EN / ZH" : "ZH / EN"}</span>
         </button>
       </div>
 
       {/* Kinetic Headline */}
       <h1
         ref={headlineRef}
-        className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight max-w-4xl text-white leading-[1.1] mb-6"
+        className="text-4xl sm:text-6xl md:text-7xl lg:text-8xl font-extrabold tracking-tight max-w-5xl text-white leading-[1.08] mb-8"
       >
         {t("vision.title_prefix")}{" "}
         <span className="text-gradient">{t("vision.title_highlight")}</span>
@@ -229,7 +222,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       {/* Subtitle */}
       <p
         ref={subtextRef}
-        className="max-w-3xl text-base sm:text-lg text-monad-200/80 mb-10 font-normal leading-relaxed"
+        className="max-w-2xl text-base sm:text-lg text-monad-200/80 mb-12 font-normal leading-relaxed font-sans"
       >
         {t("vision.subtitle")}
       </p>
@@ -237,76 +230,22 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       {/* Call to Actions */}
       <div
         ref={buttonsRef}
-        className="flex flex-wrap items-center justify-center gap-4 mb-16"
+        className="flex flex-wrap items-center justify-center gap-4"
       >
         <button
           onClick={onRegisterClick}
-          className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-xl bg-gradient-to-r from-monad-600 via-monad-500 to-monad-600 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-sm shadow-glow hover:shadow-glow-lg transition-all duration-300 active:scale-95"
+          className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-xl bg-gradient-to-r from-monad-600 via-monad-500 to-monad-600 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-xs tracking-wider uppercase font-mono shadow-glow hover:shadow-glow-lg transition-all duration-300 active:scale-95"
         >
-          <ShieldCheck className="w-4 h-4 text-cyber-accent" />
           <span>{t("vision.register")}</span>
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
         </button>
 
         <button
           onClick={onExploreClick}
-          className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-xl glass-panel hover:bg-monad-900/40 border border-monad-500/30 hover:border-monad-400/60 text-monad-200 hover:text-white font-medium text-sm transition-all duration-300"
+          className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl glass-panel hover:bg-monad-900/40 border border-white/15 hover:border-monad-400/60 text-monad-200 hover:text-white font-medium text-xs tracking-wider uppercase font-mono transition-all duration-300"
         >
-          <Layers className="w-4 h-4" />
           <span>{t("vision.explore")}</span>
         </button>
-      </div>
-
-      {/* Live Monad Network Benchmarks */}
-      <div
-        ref={statsRef}
-        className="grid grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-4xl"
-      >
-        <div className="glass-panel rounded-2xl p-4 border border-monad-500/20 text-left">
-          <div className="flex items-center justify-between text-monad-400 text-xs mb-1 font-mono">
-            <span>NETWORK SPEED</span>
-            <Zap className="w-3.5 h-3.5 text-yellow-400" />
-          </div>
-          <div className="text-2xl font-bold text-white font-mono flex items-baseline gap-1">
-            <span>10,000</span>
-            <span className="text-xs text-emerald-400 font-normal">TPS</span>
-          </div>
-          <p className="text-[11px] text-monad-300/60 mt-1">Parallelized EVM</p>
-        </div>
-
-        <div className="glass-panel rounded-2xl p-4 border border-monad-500/20 text-left">
-          <div className="flex items-center justify-between text-monad-400 text-xs mb-1 font-mono">
-            <span>FINALITY</span>
-            <Activity className="w-3.5 h-3.5 text-cyber-accent" />
-          </div>
-          <div className="text-2xl font-bold text-white font-mono flex items-baseline gap-1">
-            <span>~1.0</span>
-            <span className="text-xs text-cyber-accent font-normal">SEC</span>
-          </div>
-          <p className="text-[11px] text-monad-300/60 mt-1">Single-slot finality</p>
-        </div>
-
-        <div className="glass-panel rounded-2xl p-4 border border-monad-500/20 text-left">
-          <div className="flex items-center justify-between text-monad-400 text-xs mb-1 font-mono">
-            <span>CONSENSUS</span>
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          </div>
-          <div className="text-2xl font-bold text-white font-mono">
-            <span>MonadBFT</span>
-          </div>
-          <p className="text-[11px] text-monad-300/60 mt-1">Pipelined execution</p>
-        </div>
-
-        <div className="glass-panel rounded-2xl p-4 border border-monad-500/20 text-left">
-          <div className="flex items-center justify-between text-monad-400 text-xs mb-1 font-mono">
-            <span>COMPATIBILITY</span>
-            <Layers className="w-3.5 h-3.5 text-monad-300" />
-          </div>
-          <div className="text-2xl font-bold text-white font-mono">
-            <span>100% EVM</span>
-          </div>
-          <p className="text-[11px] text-monad-300/60 mt-1">Solidity 0.8.31 Native</p>
-        </div>
       </div>
     </div>
   );

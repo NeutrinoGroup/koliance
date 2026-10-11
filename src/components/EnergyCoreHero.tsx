@@ -4,7 +4,6 @@ import React, { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Activity,
-  Zap,
   Shield,
   Layers,
   Sparkles,
@@ -565,7 +564,7 @@ export function EnergyCoreHero({ onLaunchDApps, onExploreDetails }: EnergyCoreHe
                 className="p-1.5 rounded-xl bg-white/[0.03] hover:bg-white/[0.08] border border-white/[0.06] transition group"
                 title="DeFi"
               >
-                <Zap className="w-4 h-4 text-cyan-300 group-hover:text-white mx-auto mb-0.5" />
+                <Activity className="w-4 h-4 text-cyan-300 group-hover:text-white mx-auto mb-0.5" />
                 <span className="text-[9px] font-mono text-slate-400 group-hover:text-white block">DeFi</span>
               </button>
 
@@ -603,7 +602,7 @@ export function EnergyCoreHero({ onLaunchDApps, onExploreDetails }: EnergyCoreHe
           >
             <div className="text-[11px] font-mono text-slate-400 uppercase tracking-wider flex items-center justify-between">
               <span>Performance</span>
-              <Zap className="w-3.5 h-3.5 text-cyan-400" />
+              <Activity className="w-3.5 h-3.5 text-cyan-400" />
             </div>
 
             <div className="space-y-1.5 text-xs font-mono">

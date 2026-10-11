@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/koliance/backend/internal/agentapi"
 	"github.com/koliance/backend/internal/agentcard"
 	"github.com/koliance/backend/internal/config"
 	"github.com/koliance/backend/internal/developer"
@@ -45,6 +46,9 @@ func main() {
 	githubCli := developer.NewGitHubClient("")
 	devService := developer.NewService(githubCli)
 
+	// 7. Initialize Autonomous Agent API & Quota Service
+	agentAPIService := agentapi.NewService(db)
+
 	handler := httpapi.NewRouter(httpapi.Deps{
 		Cfg:          cfg,
 		DB:           db,
@@ -55,6 +59,7 @@ func main() {
 		Stripe:       stripeCli,
 		Dev:          devService,
 		Liquidations: liquidation.NewPG(db.Pool),
+		AgentAPI:     agentAPIService,
 	})
 
 	port := cfg.Port

@@ -219,11 +219,11 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
   // ==================== 1. UNBOUND STATE: DYNAMIC AUTH / CONNECT PANEL ====================
   if (!githubConnected || !devStats) {
     return (
-      <div className="rounded-3xl bg-gradient-to-r from-[#171b28] via-[#1a233a] to-[#141b2d] border border-indigo-500/30 p-5 sm:p-6 shadow-2xl relative overflow-hidden font-mono text-white">
+      <div className="rounded-lg bg-gradient-to-r from-[#171b28] via-[#1a2334] to-[#141b2d] border border-indigo-500/30 p-5 sm:p-6 shadow-2xl relative overflow-hidden font-mono text-white">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-1.5">
             <div className="flex items-center gap-2.5">
-              <span className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-indigo-400">
+              <span className="w-8 h-8 rounded-md bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-indigo-400">
                 <Code2 className="w-4 h-4" />
               </span>
               <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
@@ -243,7 +243,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
             <button
               onClick={handleGitHubOAuthRedirect}
               disabled={loading}
-              className="px-5 py-3 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-extrabold text-xs sm:text-sm font-mono transition shadow-[0_0_25px_rgba(99,102,241,0.4)] flex items-center gap-2 active:scale-95 disabled:opacity-50"
+              className="h-10 px-4 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-mono text-xs font-semibold border border-indigo-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] flex items-center gap-2 active:scale-[0.98] transition disabled:opacity-50"
             >
               {loading ? (
                 <>
@@ -261,7 +261,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
             {/* 2. Custom Input Toggle (Identical to Steam) */}
             <button
               onClick={() => setShowCustomInput(!showCustomInput)}
-              className="px-4 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-mono transition"
+              className="h-10 px-4 rounded-md bg-white/[0.06] hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-mono transition"
             >
               {showCustomInput ? "收起输入框" : "输入 GitHub 昵称 / 链接"}
             </button>
@@ -277,12 +277,12 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                 value={usernameInput}
                 onChange={(e) => setUsernameInput(e.target.value)}
                 placeholder="输入你的 GitHub 账号或链接 (如 moonhotline, torvalds, vitalikbuterin)"
-                className="flex-1 px-4 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-400"
+                className="flex-1 px-4 py-2.5 rounded-md bg-black/50 border border-white/10 text-white text-xs focus:outline-none focus:border-indigo-400"
               />
               <button
                 type="submit"
                 disabled={loading || !usernameInput.trim()}
-                className="px-5 py-2.5 rounded-xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs transition"
+                className="h-10 px-5 rounded-md bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition"
               >
                 {loading ? "查询中..." : "绑定此账号"}
               </button>
@@ -293,7 +293,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
               <button
                 type="button"
                 onClick={() => loadProfile("moonhotline")}
-                className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-indigo-300 transition flex items-center gap-1"
+                className="px-2.5 py-1 rounded-md bg-white/[0.06] hover:bg-white/10 text-indigo-300 transition flex items-center gap-1"
               >
                 <Code2 className="w-3 h-3 text-indigo-400" />
                 <span>@moonhotline (Koliance 核心开发)</span>
@@ -301,15 +301,15 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
               <button
                 type="button"
                 onClick={() => loadProfile("torvalds")}
-                className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-amber-300 transition flex items-center gap-1"
+                className="px-2.5 py-1 rounded-md bg-white/[0.06] hover:bg-white/10 text-purple-300 transition flex items-center gap-1"
               >
-                <Star className="w-3 h-3 text-amber-400" />
+                <Star className="w-3 h-3 text-purple-400" />
                 <span>@torvalds (Linux 之父)</span>
               </button>
               <button
                 type="button"
                 onClick={() => loadProfile("vitalikbuterin")}
-                className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-emerald-300 transition flex items-center gap-1"
+                className="px-2.5 py-1 rounded-md bg-white/[0.06] hover:bg-white/10 text-emerald-300 transition flex items-center gap-1"
               >
                 <Award className="w-3 h-3 text-emerald-400" />
                 <span>@vitalikbuterin (以太坊创始人)</span>
@@ -320,7 +320,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
 
         {/* Notice or Feedback */}
         {notice && (
-          <div className="mt-3 p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-mono flex items-center gap-2">
+          <div className="mt-3 p-3 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-xs font-mono flex items-center gap-2">
             <Info className="w-4 h-4 shrink-0" />
             <span>{notice}</span>
           </div>
@@ -334,7 +334,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-lg rounded-3xl bg-[#141824] border border-indigo-500/40 p-6 space-y-4 shadow-2xl relative text-white font-mono"
+                className="w-full max-w-lg rounded-lg bg-[#141824] border border-indigo-500/40 p-6 space-y-4 shadow-2xl relative text-white font-mono"
               >
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <div className="flex items-center gap-2">
@@ -343,13 +343,13 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                   </div>
                   <button
                     onClick={() => setOauthModalOpen(false)}
-                    className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+                    className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-xs space-y-2">
+                <div className="p-3.5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-xs space-y-2">
                   <span className="text-indigo-300 font-bold block flex items-center gap-1.5">
                     <Info className="w-3.5 h-3.5" />
                     <span>为什么需要 Client ID？</span>
@@ -361,7 +361,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                     href={githubCreateAppUrl}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/50 border border-indigo-400/40 text-indigo-200 text-xs font-bold transition"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-indigo-500/30 hover:bg-indigo-500/50 border border-indigo-400/40 text-indigo-200 text-xs font-bold transition"
                   >
                     <span>在 GitHub 创建 OAuth App (已预填名称与回调地址)</span>
                     <ExternalLink className="w-3.5 h-3.5" />
@@ -376,7 +376,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                       value={clientIdInput}
                       onChange={(e) => setClientIdInput(e.target.value)}
                       placeholder="如 Ov23li98..."
-                      className="w-full px-4 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white focus:outline-none focus:border-indigo-400 font-mono text-xs"
+                      className="w-full px-4 py-2.5 rounded-md bg-black/60 border border-white/10 text-white focus:outline-none focus:border-indigo-400 font-mono text-xs"
                     />
                   </div>
 
@@ -387,7 +387,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                       value={clientSecretInput}
                       onChange={(e) => setClientSecretInput(e.target.value)}
                       placeholder="用于后端安全换取 Token"
-                      className="w-full px-4 py-2.5 rounded-xl bg-black/60 border border-white/10 text-white focus:outline-none focus:border-indigo-400 font-mono text-xs"
+                      className="w-full px-4 py-2.5 rounded-md bg-black/60 border border-white/10 text-white focus:outline-none focus:border-indigo-400 font-mono text-xs"
                     />
                   </div>
                 </div>
@@ -396,7 +396,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                   <button
                     onClick={handleSaveOAuthAndRedirect}
                     disabled={!clientIdInput.trim()}
-                    className="flex-1 py-3 rounded-2xl bg-indigo-500 hover:bg-indigo-400 text-white font-bold text-xs transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    className="flex-1 h-10 rounded-md bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <Key className="w-4 h-4" />
                     <span>保存并立即跳转至 GitHub 授权</span>
@@ -406,7 +406,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
                       setOauthModalOpen(false);
                       setShowCustomInput(true);
                     }}
-                    className="px-4 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/10 text-slate-300 text-xs transition"
+                    className="h-10 px-4 rounded-md bg-white/[0.06] hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-mono transition"
                   >
                     免配直接查账号
                   </button>
@@ -421,7 +421,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
 
   // ==================== 2. BOUND STATE: VERIFIED DEVELOPER WALL ====================
   return (
-    <div className="w-full rounded-3xl bg-gradient-to-b from-[#111520] via-[#0d1017] to-[#080a0f] border border-indigo-500/30 p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.85)] space-y-6 font-mono text-white relative overflow-hidden">
+    <div className="w-full rounded-lg bg-gradient-to-b from-[#111520] via-[#0d1017] to-[#080a0f] border border-indigo-500/30 p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.85)] space-y-6 font-mono text-white relative overflow-hidden">
       {/* Background Cyber Ambient Glows */}
       <div className="absolute top-0 right-1/3 w-80 h-80 bg-indigo-500/10 rounded-full blur-[90px] pointer-events-none" />
       <div className="absolute bottom-0 right-0 w-80 h-80 bg-purple-500/10 rounded-full blur-[90px] pointer-events-none" />
@@ -434,7 +434,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
             <img
               src={devStats.avatarUrl || "https://avatars.githubusercontent.com/u/228437717?v=4"}
               alt="GitHub Avatar"
-              className="w-14 h-14 rounded-2xl border-2 border-indigo-400/80 shadow-[0_0_20px_rgba(99,102,241,0.4)] object-cover"
+              className="w-14 h-14 rounded-md border-2 border-indigo-400/80 shadow-[0_0_20px_rgba(99,102,241,0.4)] object-cover"
             />
             <span
               className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-[#111520]"
@@ -480,7 +480,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
 
         {/* Stats Badges */}
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <div className="px-3.5 py-2 rounded-2xl bg-black/50 border border-white/10 flex items-center gap-2">
+          <div className="px-3.5 py-2 rounded-md bg-black/50 border border-white/10 flex items-center gap-2">
             <Code2 className="w-4 h-4 text-indigo-400" />
             <div>
               <span className="text-[10px] text-slate-400 block uppercase leading-none">开源仓库</span>
@@ -488,15 +488,15 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
             </div>
           </div>
 
-          <div className="px-3.5 py-2 rounded-2xl bg-black/50 border border-white/10 flex items-center gap-2">
-            <Star className="w-4 h-4 text-amber-400 fill-amber-400/20" />
+          <div className="px-3.5 py-2 rounded-md bg-black/50 border border-white/10 flex items-center gap-2">
+            <Star className="w-4 h-4 text-purple-400 fill-purple-400/20" />
             <div>
               <span className="text-[10px] text-slate-400 block uppercase leading-none">累计星标</span>
               <strong className="text-white text-sm font-black">{devStats.totalStars} Stars</strong>
             </div>
           </div>
 
-          <div className="px-3.5 py-2 rounded-2xl bg-black/50 border border-purple-500/30 flex items-center gap-2">
+          <div className="px-3.5 py-2 rounded-md bg-black/50 border border-purple-500/30 flex items-center gap-2">
             <Award className="w-4 h-4 text-purple-400" />
             <div>
               <span className="text-[10px] text-purple-400/80 block uppercase leading-none">BUIDL 评级</span>
@@ -512,7 +512,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
           <button
             onClick={handleMintProof}
             disabled={mintLoading || !!buidlProof}
-            className="px-6 py-3 rounded-2xl bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 hover:opacity-95 text-white font-extrabold text-xs sm:text-sm transition shadow-[0_0_25px_rgba(99,102,241,0.4)] flex items-center gap-2 active:scale-95 disabled:opacity-60"
+            className="h-10 px-5 rounded-md bg-indigo-600 hover:bg-indigo-500 border border-indigo-400/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] flex items-center gap-2 active:scale-[0.98] transition disabled:opacity-60"
           >
             {mintLoading ? (
               <>
@@ -549,7 +549,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
           ).map((lang) => (
             <span
               key={lang}
-              className="px-2 py-0.5 rounded-lg text-[10px] font-bold bg-white/[0.05] border border-white/10 text-cyan-300"
+              className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-white/[0.05] border border-white/10 text-cyan-300"
             >
               {lang}
             </span>
@@ -565,7 +565,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
         ).map((repo) => (
           <div
             key={repo.id || repo.name}
-            className="p-4 rounded-2xl bg-[#141824]/90 border border-white/10 hover:border-indigo-400/60 transition-all duration-300 shadow-[0_8px_20px_rgba(0,0,0,0.6)] hover:shadow-[0_15px_35px_rgba(99,102,241,0.25)] hover:scale-[1.02] hover:-translate-y-0.5 flex flex-col justify-between group select-none"
+            className="p-4 rounded-md bg-[#141824]/90 border border-white/10 hover:border-indigo-400/60 transition-all duration-300 shadow-[0_8px_20px_rgba(0,0,0,0.6)] hover:shadow-[0_15px_35px_rgba(99,102,241,0.25)] hover:scale-[1.02] hover:-translate-y-0.5 flex flex-col justify-between group select-none"
           >
             <div>
               <div className="flex items-center justify-between gap-2 mb-2">
@@ -600,8 +600,8 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
               </div>
 
               <div className="flex items-center gap-3">
-                <span className="flex items-center gap-1 text-amber-300 font-bold">
-                  <Star className="w-3 h-3 fill-amber-300/30" />
+                <span className="flex items-center gap-1 text-purple-300 font-bold">
+                  <Star className="w-3 h-3 fill-purple-300/30" />
                   <span>{repo.stargazers_count || 0}</span>
                 </span>
                 <span className="flex items-center gap-1 text-slate-400">
@@ -619,7 +619,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-xs space-y-1.5 font-mono"
+          className="p-4 rounded-md bg-indigo-500/10 border border-indigo-500/30 text-xs space-y-1.5 font-mono"
         >
           <div className="flex items-center justify-between">
             <span className="font-bold text-indigo-300 flex items-center gap-1.5">

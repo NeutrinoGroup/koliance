@@ -4,12 +4,13 @@ import React, { useState } from "react";
 import { motion } from "framer-motion";
 import {
   Shield,
-  Zap,
+  Globe,
   Network,
   CreditCard,
   TrendingUp,
   Coins,
   Activity,
+  Terminal,
 } from "lucide-react";
 import { BrandIcon } from "@/components/BrandIcon";
 import { NavAuthBadges } from "@/components/NavAuthBadges";
@@ -21,7 +22,8 @@ export type NavView =
   | "MARKET"
   | "AGENTCARD"
   | "TOKEN"
-  | "PERP";
+  | "PERP"
+  | "CONSOLE";
 
 interface NavbarProps {
   currentView: NavView;
@@ -42,7 +44,8 @@ export function Navbar({
 }: NavbarProps) {
 
   const navItems: Array<{ id: NavView; label: string; icon: React.ReactNode; badge?: string }> = [
-    { id: "INDEX", label: "INDEX", icon: <Zap className="w-3.5 h-3.5" /> },
+    { id: "INDEX", label: "INDEX", icon: <Globe className="w-3.5 h-3.5" /> },
+    { id: "CONSOLE", label: "CONSOLE", icon: <Terminal className="w-3.5 h-3.5" />, badge: "API" },
     { id: "TOKEN", label: "TOKEN", icon: <Coins className="w-3.5 h-3.5" />, badge: "KOL" },
     { id: "DETAIL", label: "DETAIL", icon: <Network className="w-3.5 h-3.5" />, badge: "AGENT" },
     { id: "PRODUCT", label: "PRODUCT", icon: <Shield className="w-3.5 h-3.5" /> },

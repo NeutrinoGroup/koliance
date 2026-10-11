@@ -22,13 +22,13 @@ import {
   Activity,
   CheckCircle2,
   Terminal,
-  Zap,
   Network,
   ArrowRight,
   Database,
   Lock,
   CreditCard,
   Coins,
+  Mail,
 } from "lucide-react";
 import { BrandIcon } from "@/components/BrandIcon";
 import { Navbar, NavView } from "@/components/Navbar";
@@ -39,13 +39,18 @@ import { TrustConstellation } from "@/components/TrustConstellation";
 import { ProductStudio } from "@/components/ProductStudio";
 import { MarketTerminal } from "@/components/MarketTerminal";
 import { IdentityCard } from "@/components/IdentityCard";
-import { CoreValueFramework } from "@/components/CoreValueFramework";
 import { KineticScrollBanner } from "@/components/KineticScrollBanner";
-import { ParallelBentoReactor } from "@/components/ParallelBentoReactor";
+import { QuantumProtocolStream } from "@/components/QuantumProtocolStream";
+import { MinimalistGatewayRails } from "@/components/MinimalistGatewayRails";
 import { TrustAttestationCard } from "@/components/TrustAttestationCard";
 import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
+import { ContactModal } from "@/components/ContactModal";
 import { TokenStudio } from "@/components/TokenStudio";
+import { DeveloperConsole } from "@/components/DeveloperConsole";
+import { AgentNarrativeFlow } from "@/components/AgentNarrativeFlow";
+import { QuantumBootLoader } from "@/components/QuantumBootLoader";
+import { AgentCardShowcase } from "@/components/AgentCardShowcase";
 import {
   monadTestnet,
   KOLIANCE_ADDRESS,
@@ -67,6 +72,7 @@ function MainContent() {
   const [balance, setBalance] = useState("0.00");
   const [chainId, setChainId] = useState<number | null>(null);
   const [networkModalOpen, setNetworkModalOpen] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
 
   const {
     address: authAddress,
@@ -340,6 +346,14 @@ function MainContent() {
             router.push("/market");
             return;
           }
+          if (view === "CONSOLE") {
+            router.push("/console");
+            return;
+          }
+          if (view === "TOKEN") {
+            router.push("/token");
+            return;
+          }
           setCurrentView(view);
         }}
         account={account}
@@ -367,14 +381,20 @@ function MainContent() {
                 onExploreClick={() => setCurrentView("DETAIL")}
               />
 
-              {/* GSAP Showcase Kinetic Scroll Typography Marquee */}
+              {/* Kinetic Scroll Typography Marquee */}
               <KineticScrollBanner />
 
-              {/* Protocol Architecture Bento Highlights (3D Damped Tilt, Specular Sheen, Laser Scanlines) */}
-              <ParallelBentoReactor onSelectView={setCurrentView} />
+              {/* Scroll-Driven Agent Narrative Flow & Living Holographic Card */}
+              <AgentNarrativeFlow onOpenConsole={() => setCurrentView("CONSOLE")} />
 
-              {/* Core Problem Definition, 3 Pillars, Progression Pipeline & Feature Taxonomy */}
-              <CoreValueFramework />
+              {/* Full-Screen Pinned ScrollTrigger Protocol Trilogy */}
+              <QuantumProtocolStream />
+
+              {/* Minimalist Swiss Hairline Gateway Rails */}
+              <MinimalistGatewayRails onSelectView={setCurrentView} />
+
+              {/* Grand Finale: 6-Card Circulating Neural Asset Matrix (100% Full-Width Stage) */}
+              <AgentCardShowcase />
             </motion.div>
           )}
 
@@ -428,7 +448,7 @@ function MainContent() {
               />
 
               {/* Direct On-Chain Contract Studio Drawer/Section */}
-              <div className="rounded-3xl bg-[#121622]/90 border border-white/10 p-6 space-y-6 shadow-xl">
+              <div className="rounded-lg bg-[#121622]/90 border border-white/10 p-6 space-y-6 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
                   <div>
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -444,7 +464,7 @@ function MainContent() {
                     href={`${monadTestnet.blockExplorers.default.url}/address/${KOLIANCE_ADDRESS}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3.5 py-1.5 rounded-xl bg-[#181d2c] border border-white/10 text-xs font-mono text-white hover:border-purple-400 transition flex items-center gap-1.5 self-start sm:self-auto"
+                    className="px-3.5 py-1.5 rounded-md bg-[#181d2c] border border-white/10 text-xs font-mono text-white hover:border-purple-400 transition flex items-center gap-1.5 self-start sm:self-auto"
                   >
                     <span>Sourcify Verified</span>
                     <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
@@ -472,8 +492,8 @@ function MainContent() {
                 />
               </div>
 
-              {/* Core Value Framework: Problem Definition, Pipeline & Taxonomy */}
-              <CoreValueFramework />
+              {/* Minimalist Gateway Rails */}
+              <MinimalistGatewayRails onSelectView={setCurrentView} />
             </motion.div>
           )}
 
@@ -506,6 +526,20 @@ function MainContent() {
                 className="w-full h-full border-0"
                 title="AI Card Scanner // Neural Asset Processor"
               />
+            </motion.div>
+          )}
+
+          {/* TAB 8: CONSOLE (Developer API, Quota Recharge, Playground & Telemetry) */}
+          {currentView === "CONSOLE" && (
+            <motion.div
+              key="view-console"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.35, ease: "easeInOut" }}
+              className="pt-20 max-w-7xl mx-auto px-4 sm:px-6 py-4"
+            >
+              <DeveloperConsole currentAccount={account} />
             </motion.div>
           )}
         </AnimatePresence>
@@ -556,15 +590,13 @@ function MainContent() {
                 <span>Explorer</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <a
-                href="https://github.com/monad-developers/hardhat3-monad"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:text-white transition flex items-center gap-1"
+              <button
+                onClick={() => setContactModalOpen(true)}
+                className="hover:text-white transition flex items-center gap-1.5 text-slate-300 hover:text-cyan-300 cursor-pointer"
               >
-                <Github className="w-3.5 h-3.5" />
-                <span>Hardhat</span>
-              </a>
+                <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Contact</span>
+              </button>
             </div>
           </div>
         </footer>
@@ -576,13 +608,42 @@ function MainContent() {
         onClose={() => setNetworkModalOpen(false)}
         onSwitch={handleSwitchNetwork}
       />
+
+      {/* Contact & Team Modal */}
+      <ContactModal
+        isOpen={contactModalOpen}
+        onClose={() => setContactModalOpen(false)}
+      />
     </div>
   );
 }
 
 export default function Home() {
+  const [booting, setBooting] = useState(true);
+  const [bootKey, setBootKey] = useState(0);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Trigger on Ctrl+A or Cmd+A (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setBootKey((prev) => prev + 1);
+        setBooting(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#0d1017] text-white flex items-center justify-center font-mono">Loading Koliance...</div>}>
+    <Suspense fallback={<QuantumBootLoader />}>
+      {booting && (
+        <QuantumBootLoader
+          key={bootKey}
+          onComplete={() => setBooting(false)}
+        />
+      )}
       <MainContent />
     </Suspense>
   );

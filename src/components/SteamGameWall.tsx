@@ -120,7 +120,7 @@ export function SteamGameWall({
     displayGames.find((g) => g.appId === selectedGameId) || displayGames[0];
 
   return (
-    <div className="w-full rounded-3xl bg-gradient-to-b from-[#141824] via-[#10131d] to-[#0c0e15] border border-cyan-500/30 p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] space-y-6 font-mono text-white relative overflow-hidden">
+    <div className="w-full rounded-lg bg-gradient-to-b from-[#141824] via-[#10131d] to-[#0c0e15] border border-cyan-500/30 p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.8)] space-y-6 font-mono text-white relative overflow-hidden">
       {/* Background Cyber Ambient Lights */}
       <div className="absolute top-0 right-1/4 w-96 h-96 bg-cyan-500/10 rounded-full blur-[100px] pointer-events-none" />
       <div className="absolute bottom-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[100px] pointer-events-none" />
@@ -133,7 +133,7 @@ export function SteamGameWall({
             <img
               src={avatar || "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg"}
               alt="Steam Avatar"
-              className="w-14 h-14 rounded-2xl border-2 border-cyan-400/80 shadow-[0_0_20px_rgba(34,211,238,0.4)] object-cover"
+              className="w-14 h-14 rounded-md border-2 border-cyan-400/80 shadow-[0_0_20px_rgba(34,211,238,0.4)] object-cover"
             />
             <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 border-2 border-[#141824]" title="Online" />
           </div>
@@ -160,7 +160,7 @@ export function SteamGameWall({
 
         {/* Stats Badges */}
         <div className="flex flex-wrap items-center gap-3 text-xs">
-          <div className="px-3.5 py-2 rounded-2xl bg-black/50 border border-white/10 flex items-center gap-2">
+          <div className="px-3.5 py-2 rounded-md bg-black/50 border border-white/10 flex items-center gap-2">
             <Clock className="w-4 h-4 text-cyan-400" />
             <div>
               <span className="text-[10px] text-slate-400 block uppercase leading-none">累计总时长</span>
@@ -168,7 +168,7 @@ export function SteamGameWall({
             </div>
           </div>
 
-          <div className="px-3.5 py-2 rounded-2xl bg-black/50 border border-white/10 flex items-center gap-2">
+          <div className="px-3.5 py-2 rounded-md bg-black/50 border border-white/10 flex items-center gap-2">
             <Gamepad2 className="w-4 h-4 text-purple-400" />
             <div>
               <span className="text-[10px] text-slate-400 block uppercase leading-none">游戏库藏品</span>
@@ -176,11 +176,11 @@ export function SteamGameWall({
             </div>
           </div>
 
-          <div className="px-3.5 py-2 rounded-2xl bg-black/50 border border-amber-500/30 flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-amber-400" />
+          <div className="px-3.5 py-2 rounded-md bg-black/50 border border-purple-500/30 flex items-center gap-2">
+            <Trophy className="w-4 h-4 text-purple-400" />
             <div>
-              <span className="text-[10px] text-amber-400/80 block uppercase leading-none">信用评级</span>
-              <strong className="text-amber-300 text-sm font-black">
+              <span className="text-[10px] text-purple-400/80 block uppercase leading-none">信用评级</span>
+              <strong className="text-purple-300 text-sm font-black">
                 {gameProof ? gameProof.trustScoreTier : "PLATINUM 宗师"}
               </strong>
             </div>
@@ -192,7 +192,7 @@ export function SteamGameWall({
           <button
             onClick={() => onMintProof(activeGame)}
             disabled={proofLoading || !!gameProof}
-            className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-500 via-indigo-500 to-cyan-500 hover:opacity-95 text-white font-extrabold text-xs sm:text-sm transition shadow-[0_0_25px_rgba(168,85,247,0.4)] flex items-center gap-2 active:scale-95 disabled:opacity-60"
+            className="h-10 px-5 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-400/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] flex items-center gap-2 active:scale-[0.98] transition disabled:opacity-60"
           >
             {proofLoading ? (
               <>
@@ -217,7 +217,7 @@ export function SteamGameWall({
       {/* Mode Toggle & Currently Selected Asset Info */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs pt-1">
         <div className="flex items-center gap-2 text-slate-300">
-          <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
+          <Flame className="w-4 h-4 text-purple-400 animate-pulse" />
           <span>
             当前锚定游戏资产：
             <strong className="text-cyan-300 ml-1">{activeGame.name}</strong>
@@ -226,10 +226,10 @@ export function SteamGameWall({
         </div>
 
         {/* View Switcher: Marquee vs Grid */}
-        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10 self-start sm:self-auto">
+        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-md border border-white/10 self-start sm:self-auto">
           <button
             onClick={() => setViewMode("marquee")}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
               viewMode === "marquee"
                 ? "bg-cyan-400 text-black shadow-sm"
                 : "text-slate-400 hover:text-white"
@@ -240,7 +240,7 @@ export function SteamGameWall({
           </button>
           <button
             onClick={() => setViewMode("grid")}
-            className={`px-3 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
+            className={`px-3 py-1 rounded-md text-xs font-bold transition flex items-center gap-1.5 ${
               viewMode === "grid"
                 ? "bg-cyan-400 text-black shadow-sm"
                 : "text-slate-400 hover:text-white"
@@ -255,7 +255,7 @@ export function SteamGameWall({
       {/* ==================== 1. INFINITE ROLLING GAME MARQUEE ==================== */}
       {viewMode === "marquee" ? (
         <div
-          className="relative w-full py-4 overflow-hidden rounded-2xl marquee-stage perspective-stage"
+          className="relative w-full py-4 overflow-hidden rounded-md marquee-stage perspective-stage"
           style={{
             perspective: 1600,
             transformStyle: "preserve-3d",
@@ -284,7 +284,7 @@ export function SteamGameWall({
                   <div
                     key={`r1-${game.appId}-${idx}`}
                     onClick={() => onSelectGame(game)}
-                    className={`relative w-64 h-36 rounded-2xl overflow-hidden cursor-pointer shrink-0 transition-all duration-300 select-none border group/card shadow-[0_8px_22px_rgba(0,0,0,0.6)] ${
+                    className={`relative w-64 h-36 rounded-md overflow-hidden cursor-pointer shrink-0 transition-all duration-300 select-none border group/card shadow-[0_8px_22px_rgba(0,0,0,0.6)] ${
                       isSelected
                         ? "border-cyan-400 ring-4 ring-cyan-400/40 z-30 shadow-[0_15px_35px_rgba(34,211,238,0.5)] scale-105"
                         : "border-white/15 hover:border-cyan-400 hover:scale-105 hover:-translate-y-1 hover:z-30 hover:shadow-[0_15px_35px_rgba(34,211,238,0.4)]"
@@ -343,7 +343,7 @@ export function SteamGameWall({
                   <div
                     key={`r2-${game.appId}-${idx}`}
                     onClick={() => onSelectGame(game)}
-                    className={`relative w-64 h-36 rounded-2xl overflow-hidden cursor-pointer shrink-0 transition-all duration-300 select-none border group/card shadow-[0_8px_22px_rgba(0,0,0,0.6)] ${
+                    className={`relative w-64 h-36 rounded-md overflow-hidden cursor-pointer shrink-0 transition-all duration-300 select-none border group/card shadow-[0_8px_22px_rgba(0,0,0,0.6)] ${
                       isSelected
                         ? "border-cyan-400 ring-4 ring-cyan-400/40 z-30 shadow-[0_15px_35px_rgba(34,211,238,0.5)] scale-105"
                         : "border-white/15 hover:border-cyan-400 hover:scale-105 hover:-translate-y-1 hover:z-30 hover:shadow-[0_15px_35px_rgba(34,211,238,0.4)]"
@@ -367,8 +367,8 @@ export function SteamGameWall({
 
                     {/* Top Pill */}
                     <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between pointer-events-none">
-                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-black/80 backdrop-blur-md text-amber-300 border border-amber-400/30 shadow-sm flex items-center gap-1">
-                        <Flame className="w-3 h-3 text-amber-400" />
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-black/80 backdrop-blur-md text-purple-300 border border-purple-400/30 shadow-sm flex items-center gap-1">
+                        <Flame className="w-3 h-3 text-purple-400" />
                         <span>{game.hoursPlayed.toFixed(0)}h 时长</span>
                       </span>
 
@@ -404,7 +404,7 @@ export function SteamGameWall({
               <div
                 key={`grid-${game.appId}`}
                 onClick={() => onSelectGame(game)}
-                className={`relative h-36 rounded-2xl overflow-hidden cursor-pointer transition-all duration-300 group select-none border ${
+                className={`relative h-36 rounded-md overflow-hidden cursor-pointer transition-all duration-300 group select-none border ${
                   isSelected
                     ? "border-cyan-400 ring-2 ring-cyan-400/50 shadow-lg"
                     : "border-white/10 hover:border-cyan-400/60 hover:scale-[1.02]"

@@ -75,7 +75,7 @@ export function AgentThesisReactor() {
             <div
               key={p.id}
               onClick={() => setActivePillar(p.id as 0 | 1 | 2)}
-              className={`rounded-3xl p-7 transition-all duration-300 cursor-pointer space-y-5 relative overflow-hidden border shadow-xl flex flex-col justify-between ${
+              className={`rounded-lg p-7 transition-all duration-300 cursor-pointer space-y-5 relative overflow-hidden border shadow-xl flex flex-col justify-between ${
                 isSelected
                   ? "bg-[#141928] border-cyan-400/80 shadow-[0_15px_40px_rgba(0,242,254,0.15)] ring-1 ring-cyan-400/40"
                   : "bg-[#101422]/80 border-white/[0.08] hover:border-white/20 hover:bg-[#121626]"
@@ -84,7 +84,7 @@ export function AgentThesisReactor() {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div
-                    className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-transform ${
+                    className={`w-12 h-12 rounded-md flex items-center justify-center transition-transform ${
                       isSelected
                         ? "bg-cyan-500/20 text-cyan-300 scale-105"
                         : "bg-white/[0.05] text-slate-400"
@@ -102,7 +102,7 @@ export function AgentThesisReactor() {
                   <p className="text-xs text-slate-400 font-mono leading-relaxed">{p.desc}</p>
                 </div>
 
-                <div className="p-3.5 rounded-xl bg-black/40 border border-white/[0.08] text-xs font-mono text-cyan-300 leading-relaxed">
+                <div className="p-3.5 rounded-md bg-black/40 border border-white/[0.08] text-xs font-mono text-cyan-300 leading-relaxed">
                   {p.solution}
                 </div>
               </div>
@@ -121,7 +121,7 @@ export function AgentThesisReactor() {
       </div>
 
       {/* Economic Participation Pipeline Bus */}
-      <div className="rounded-3xl bg-[#0c0f18] border border-white/[0.08] p-6 sm:p-8 space-y-6 shadow-2xl relative overflow-hidden">
+      <div className="rounded-lg bg-[#0c0f18] border border-white/[0.08] p-6 sm:p-8 space-y-6 shadow-2xl relative overflow-hidden">
         {/* Dynamic Glowing Bus Trace */}
         <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-cyan-500 via-purple-500 to-emerald-500 opacity-60" />
 
@@ -137,7 +137,7 @@ export function AgentThesisReactor() {
           {pipelineSteps.map((st) => (
             <div
               key={st.num}
-              className="group relative p-4 rounded-2xl bg-white/[0.02] border border-white/[0.06] hover:border-cyan-400/40 hover:bg-white/[0.04] transition-all space-y-2"
+              className="group relative p-4 rounded-md bg-white/[0.02] border border-white/[0.06] hover:border-cyan-400/40 hover:bg-white/[0.04] transition-all space-y-2"
             >
               <div className="flex items-center justify-between">
                 <span className="text-xs font-mono font-bold text-cyan-400">STAGE {st.num}</span>
