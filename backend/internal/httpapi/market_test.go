@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -86,9 +88,99 @@ func withCreds(c *config.Config) {
 
 // ==================== FAIL CLOSED WITHOUT CREDENTIALS ====================
 
+// jsonTree decodes a body with numbers kept in their literal form and returns
+// the value together with every JSON number reachable in it, as text.
+//
+// Numbers are collected from the *parsed tree*, so a number nested inside an
+// object or an array is seen; a `json.Unmarshal` into a struct would lose both
+// the unknown keys and the literals.
+func jsonTree(t *testing.T, label string, body []byte) (any, []string) {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	var v any
+	if err := dec.Decode(&v); err != nil {
+		t.Fatalf("%s: body is not JSON: %v (%s)", label, err, string(body))
+	}
+	var nums []string
+	var walk func(any)
+	walk = func(x any) {
+		switch n := x.(type) {
+		case json.Number:
+			nums = append(nums, n.String())
+		case map[string]any:
+			for _, e := range n {
+				walk(e)
+			}
+		case []any:
+			for _, e := range n {
+				walk(e)
+			}
+		}
+	}
+	walk(v)
+	sort.Strings(nums)
+	return v, nums
+}
+
+// assertRefusal pins the shape of a refusal: exactly one top-level key `error`,
+// whose value is a plain string naming the missing configuration, and no JSON
+// number anywhere in the body.
+//
+// Why the shape and not a word list: the defect issue #14 guards against is a
+// refusal that still carries a quote. `lastKnownRegularMarketPrice`,
+// `realtimePrices`, `gainers`, `meta` — any key at all — is that defect, and
+// enumerating the ones we happened to think of cannot catch the one we did not.
+// The `error` value must be a string for the same reason: a raw number would be
+// a price with a reassuring label, and a number embedded in the message text
+// would be a price wearing a sentence.
+func assertRefusal(t *testing.T, label string, body []byte) {
+	t.Helper()
+
+	v, nums := jsonTree(t, label, body)
+	obj, isObj := v.(map[string]any)
+	if !isObj {
+		t.Errorf("%s: refusal body is a %T, want a JSON object: %s", label, v, string(body))
+	} else {
+		keys := make([]string, 0, len(obj))
+		for k := range obj {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		if len(keys) != 1 || keys[0] != "error" {
+			t.Errorf("%s: top-level keys = %v, want exactly [error] — a refusal is an error and nothing else", label, keys)
+		}
+		if e, present := obj["error"]; present {
+			if _, isString := e.(string); !isString {
+				t.Errorf("%s: error = %#v, want a string", label, e)
+			}
+		}
+	}
+
+	// Checked outside the object branch: a top-level array of quotes is not a
+	// refusal either, and its numbers must still be reported. (Guarding both
+	// checks behind one condition and shadowing `nums` inside it is how this
+	// kind of assertion goes blind.)
+	if len(nums) != 0 {
+		t.Errorf("%s: refusal body carries JSON number(s) %v — a refusal carries no number", label, nums)
+	}
+
+	// The refusal still has to be actionable: #14 is about not inventing data,
+	// not about hiding why there is none. Asserted as a property (some error
+	// message names the variable) rather than as the exact `jsonError` wording.
+	var payload struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil || !strings.Contains(payload.Error, "ALPACA_API_KEY") {
+		t.Errorf("%s: refusal does not name the missing configuration: %s", label, body)
+	}
+}
+
 // The headline negative judgement for issue #14. Asserts the status AND the
-// absence of a payload: a 503 whose body still carried a price series would
-// pass a status-only check and be exactly the defect.
+// shape of the body: a 503 whose body still carried a price series — or a
+// single price field — would pass a status-only check and be exactly the
+// defect.
 func TestMarketReadEndpointsRefuseWithoutCredentials(t *testing.T) {
 	proxied := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,18 +200,39 @@ func TestMarketReadEndpointsRefuseWithoutCredentials(t *testing.T) {
 		if rr.Code != http.StatusServiceUnavailable {
 			t.Errorf("GET %s without credentials: %d, want 503", path, rr.Code)
 		}
-		body := rr.Body.String()
-		if !strings.Contains(body, "ALPACA_API_KEY") {
-			t.Errorf("GET %s: body does not name the missing configuration: %s", path, body)
-		}
-		for _, forbidden := range []string{"150", "TSLA", "realtimePrices", "gainers", "feedId"} {
-			if strings.Contains(body, forbidden) {
-				t.Errorf("GET %s leaked market payload %q: %s", path, forbidden, body)
-			}
-		}
+		assertRefusal(t, "GET "+path, rr.Body.Bytes())
 	}
 	if proxied {
 		t.Error("an upstream request was made although no credentials are configured")
+	}
+}
+
+// Positive control for the shape assertion above: it must be able to see a
+// payload when there is one, or "no keys, no numbers" would also be its verdict
+// on a measurement that reads nothing at all — the trap the progress-page hook
+// and the empty-denominator coverage record describe (AGENTS.md §8).
+func TestRefusalShapeMeasurementSeesARealPayload(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(twoBarPayload))
+	}))
+	t.Cleanup(srv.Close)
+
+	h := newMarketRouter(t, marketDeps{apiURL: srv.URL, dataURL: srv.URL, override: withCreds})
+
+	rr := do(h, http.MethodGet, "/api/v1/market/prices", "", nil)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("prices with credentials: %d (%s)", rr.Code, rr.Body.String())
+	}
+	// /prices is a JSON array, /movers an object: the measurement must see the
+	// numbers in both shapes, so it is exercised on both.
+	for _, path := range []string{"/api/v1/market/prices", "/api/v1/market/movers"} {
+		body := do(h, http.MethodGet, path, "", nil).Body.Bytes()
+		v, nums := jsonTree(t, "control "+path, body)
+		if len(nums) == 0 {
+			t.Errorf("control %s: no JSON number found in a body that quotes two instruments (%T) — the measurement is blind", path, v)
+		} else {
+			t.Logf("control %s: %T numbers=%v", path, v, nums)
+		}
 	}
 }
 
@@ -321,15 +434,21 @@ func TestTradeAndCloseReportMissingCredentialsAs503(t *testing.T) {
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Errorf("trade without credentials: %d, want 503 (%s)", rr.Code, rr.Body.String())
 	}
+	// Same shape as the read endpoints: a fill price or a qty would be a number
+	// this deployment never observed. Asserted on the body, not only on the
+	// status — the response is the thing a client renders.
+	assertRefusal(t, "POST /api/v1/market/trade", rr.Body.Bytes())
 	// The old shape was a 200 carrying `success:false`, which reads as "the
 	// broker rejected the order".
 	if strings.Contains(rr.Body.String(), `"success"`) {
 		t.Errorf("body = %s, want a plain error rather than an order result", rr.Body.String())
 	}
 
-	if rr := do(h, http.MethodPost, "/api/v1/market/close", `{"symbol":"NVDA"}`, nil); rr.Code != http.StatusServiceUnavailable {
+	rr = do(h, http.MethodPost, "/api/v1/market/close", `{"symbol":"NVDA"}`, nil)
+	if rr.Code != http.StatusServiceUnavailable {
 		t.Errorf("close without credentials: %d, want 503", rr.Code)
 	}
+	assertRefusal(t, "POST /api/v1/market/close", rr.Body.Bytes())
 }
 
 // Validation must still bite before anything credential-related is considered:
