@@ -45,36 +45,39 @@ export async function POST(request: NextRequest) {
 
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET || DEFAULT_GOOGLE_CLIENT_SECRET;
 
-    // Handle instant sandbox demo verification
+    // Handle sandbox demo verification with explicit synthetic flag and zero credit allocation
     if (id_token === "demo_verified_google_identity") {
       const demoWallet = wallet_address || "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7";
       const demoUser = {
         id: "did:koliance:google:109842839210492819283",
         email: "alexander.dev@google.com",
-        name: "Alexander (Google Architect)",
+        name: "Alexander (Demo Synthetic)",
         picture: "https://lh3.googleusercontent.com/a/default-user=s96-c",
-        bio: "Core Architect & Monad Parallel Smart Contract Developer",
+        bio: "Demo Sandbox Account (No on-chain credit)",
         wallet_address: demoWallet,
-        trust_tier: "GOOGLE VERIFIED ARCHITECT",
-        credit_allowance_usd: 1200,
+        trust_tier: "UNVERIFIED SYNTHETIC DEMO",
+        credit_allowance_usd: 0,
       };
 
-      await syncUserToDatabase(demoUser, true);
+      await syncUserToDatabase(demoUser, false);
 
       return NextResponse.json(
         {
           success: true,
+          synthetic: true,
+          dataCaveat: "Synthetic demo identity: Strictly 0 USD credit allocated by on-chain credit engine.",
           profile: {
             id: demoUser.id,
             googleId: "109842839210492819283",
             email: demoUser.email,
-            emailVerified: true,
+            emailVerified: false,
+            synthetic: true,
             name: demoUser.name,
             picture: demoUser.picture,
             bio: demoUser.bio,
             walletAddress: demoWallet,
             trustTier: demoUser.trust_tier,
-            creditAllowanceUSD: 1200,
+            creditAllowanceUSD: 0,
           },
         },
         { headers: corsHeaders }

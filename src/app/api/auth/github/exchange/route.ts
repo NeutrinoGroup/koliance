@@ -3,6 +3,7 @@ import {
   GITHUB_STATE_COOKIE,
   GITHUB_STATE_COOKIE_PATH,
   stateMatchesCookie,
+  isTrustedRelayOrigin,
 } from "@/lib/oauthState";
 
 const corsHeaders = {
@@ -69,7 +70,21 @@ export async function POST(request: NextRequest) {
       code,
     };
     if (redirect_uri) {
-      tokenRequestBody.redirect_uri = redirect_uri;
+      try {
+        const parsed = new URL(redirect_uri);
+        if (!isTrustedRelayOrigin(parsed.origin)) {
+          return NextResponse.json(
+            { error: "Untrusted redirect_uri: only whitelisted Koliance domains permitted" },
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        tokenRequestBody.redirect_uri = redirect_uri;
+      } catch {
+        return NextResponse.json(
+          { error: "Malformed redirect_uri format" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
     }
 
     const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
