@@ -1,14 +1,22 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useRef } from "react";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowRight } from "lucide-react";
 import { NavView } from "@/components/Navbar";
+
+if (typeof window !== "undefined") {
+  gsap.registerPlugin(ScrollTrigger);
+}
 
 interface MinimalistGatewayRailsProps {
   onSelectView: (view: NavView) => void;
 }
 
 export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+
   const rails = [
     {
       index: "01",
@@ -44,8 +52,41 @@ export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsP
     },
   ];
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const items = container.querySelectorAll<HTMLElement>(".gateway-rail-row");
+
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        items,
+        {
+          opacity: 0,
+          y: 40,
+          filter: "blur(8px)",
+        },
+        {
+          opacity: 1,
+          y: 0,
+          filter: "blur(0px)",
+          duration: 0.9,
+          stagger: 0.14,
+          ease: "power2.out",
+          scrollTrigger: {
+            trigger: container,
+            start: "top 80%",
+            toggleActions: "play none none reverse",
+          },
+        }
+      );
+    }, container);
+
+    return () => ctx.revert();
+  }, []);
+
   return (
-    <section className="max-w-7xl mx-auto px-4 sm:px-8 py-24 space-y-12 select-none">
+    <section ref={containerRef} className="max-w-7xl mx-auto px-4 sm:px-8 py-24 space-y-12 select-none">
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
         <div className="space-y-1">
           <div className="text-[11px] font-mono tracking-widest text-cyan-400 uppercase">
@@ -65,7 +106,7 @@ export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsP
           <div
             key={rail.index}
             onClick={() => onSelectView(rail.view)}
-            className="group relative py-8 sm:py-10 flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer transition-all duration-300 hover:pl-4"
+            className="gateway-rail-row group relative py-8 sm:py-10 flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer transition-all duration-300 hover:pl-4 will-change-transform"
           >
             {/* Background Hover Glow Sweep */}
             <div className="pointer-events-none absolute inset-0 bg-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10 rounded-2xl" />
@@ -104,3 +145,5 @@ export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsP
     </section>
   );
 }
+
+export default MinimalistGatewayRails;

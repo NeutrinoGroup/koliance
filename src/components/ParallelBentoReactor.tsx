@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from "react";
 import gsap from "gsap";
-import { Network, Shield, CreditCard, Coins, ArrowRight, Zap, Activity } from "lucide-react";
+import { Network, Shield, CreditCard, Coins, ArrowRight, Activity } from "lucide-react";
 import { NavView } from "@/components/Navbar";
 
 interface ParallelBentoReactorProps {
@@ -180,8 +180,8 @@ export function ParallelBentoReactor({ onSelectView }: ParallelBentoReactorProps
       {/* Section Header with Parallel Pipeline Bus */}
       <div className="relative flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-monad-500/10 border border-monad-500/30 text-monad-300 text-xs font-mono uppercase tracking-widest">
-            <Zap className="w-3.5 h-3.5 text-yellow-400" />
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-monad-500/10 border border-monad-500/30 text-monad-300 text-xs font-mono uppercase tracking-widest">
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
             <span>Monad Parallel Execution Mesh</span>
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">

@@ -286,7 +286,7 @@ export function TokenStudio({
         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-mono">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-purple-500/10 border border-purple-500/20 text-purple-300 text-xs font-mono">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Monad Testnet (Chain ID: 10143)</span>
             </div>
@@ -300,7 +300,7 @@ export function TokenStudio({
               Koliance 原生代币，名称 <strong className="text-white">kol</strong>，符号 <strong className="text-white">KOL</strong>。
               总硬顶恒定 <strong className="text-white">2^30 (1,073,741,824)</strong> 枚，遵循比特币式每 2 年减半释放模型。
             </p>
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-mono">
+            <div className="p-3 rounded-xl bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 font-mono">
               [DISCLAIMER] Koliance Testnet Utility Token (No Monetary Value) — Strictly for testing agent escrow fees and credit stake weight.
             </div>
           </div>
@@ -346,7 +346,7 @@ export function TokenStudio({
         <div className="p-5 rounded-2xl bg-[#141824]/90 border border-white/10 space-y-2">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
             <span>当前已产出总量</span>
-            <Flame className="w-4 h-4 text-amber-400" />
+            <Coins className="w-4 h-4 text-purple-400" />
           </div>
           <div className="text-2xl font-bold text-white font-mono">
             {parseFloat(totalSupply).toFixed(2)}
@@ -424,7 +424,7 @@ export function TokenStudio({
         <div className="p-6 sm:p-8 rounded-3xl bg-[#141824]/90 border border-white/10 space-y-6 flex flex-col justify-between">
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-400/20 flex items-center justify-center text-amber-400">
+              <div className="w-10 h-10 rounded-2xl bg-purple-500/10 border border-purple-400/20 flex items-center justify-center text-purple-400">
                 <Pickaxe className="w-5 h-5" />
               </div>
               <div>
@@ -448,7 +448,7 @@ export function TokenStudio({
           <button
             onClick={handleClaimReward}
             disabled={isClaiming || !account}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black font-bold text-sm transition shadow-lg shadow-amber-500/20 active:scale-98 disabled:opacity-50"
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-sm transition shadow-lg shadow-purple-900/30 active:scale-98 disabled:opacity-50"
           >
             {isClaiming ? (
               <>

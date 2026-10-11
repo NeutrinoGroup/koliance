@@ -22,7 +22,6 @@ import {
   Activity,
   CheckCircle2,
   Terminal,
-  Zap,
   Network,
   ArrowRight,
   Database,
@@ -48,6 +47,7 @@ import { NetworkModal } from "@/components/NetworkModal";
 import { TokenStudio } from "@/components/TokenStudio";
 import { DeveloperConsole } from "@/components/DeveloperConsole";
 import { AgentNarrativeFlow } from "@/components/AgentNarrativeFlow";
+import { GlassBackground } from "@/components/GlassBackground";
 import {
   monadTestnet,
   KOLIANCE_ADDRESS,
@@ -361,8 +361,11 @@ function MainContent() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.35, ease: "easeInOut" }}
-              className="w-full"
+              className="relative w-full overflow-hidden"
             >
+              {/* WebGPU / WebGL Ambient Glass Background */}
+              <GlassBackground />
+
               {/* Official Production Hero with Vision and Language Switcher */}
               <HeroGsap
                 onRegisterClick={() => setCurrentView("PRODUCT")}

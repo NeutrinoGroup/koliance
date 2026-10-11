@@ -12,8 +12,9 @@ if (typeof window !== "undefined") {
 export function QuantumProtocolStream() {
   const { t } = useLanguage();
   const sectionRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [activePhase, setActivePhase] = useState<0 | 1 | 2>(0);
+  const cardsContainerRef = useRef<HTMLDivElement>(null);
+  const progressBarRef = useRef<HTMLDivElement>(null);
+  const [activePhaseIndex, setActivePhaseIndex] = useState<number>(0);
 
   const phases = [
     {
@@ -47,37 +48,88 @@ export function QuantumProtocolStream() {
 
   useEffect(() => {
     const section = sectionRef.current;
-    const container = containerRef.current;
-    if (!section || !container) return;
+    const cardsContainer = cardsContainerRef.current;
+    const progressBar = progressBarRef.current;
+    if (!section || !cardsContainer) return;
+
+    const cards = Array.from(cardsContainer.querySelectorAll<HTMLElement>(".quantum-phase-card"));
 
     const ctx = gsap.context(() => {
-      ScrollTrigger.create({
-        trigger: section,
-        start: "top top",
-        end: "+=220%",
-        pin: true,
-        scrub: 0.6,
-        onUpdate: (self) => {
-          const progress = self.progress;
-          if (progress < 0.33) {
-            setActivePhase(0);
-          } else if (progress < 0.66) {
-            setActivePhase(1);
-          } else {
-            setActivePhase(2);
-          }
+      // Set initial state: card 0 fully visible, cards 1 & 2 invisible and lower down
+      gsap.set(cards[0], { opacity: 1, y: 0, filter: "blur(0px)", pointerEvents: "auto" });
+      gsap.set(cards.slice(1), { opacity: 0, y: 50, filter: "blur(12px)", pointerEvents: "none" });
+
+      const tl = gsap.timeline({
+        scrollTrigger: {
+          trigger: section,
+          start: "top top",
+          end: "+=300%",
+          pin: true,
+          scrub: 0.8,
+          onUpdate: (self) => {
+            const p = self.progress;
+            if (progressBar) {
+              progressBar.style.width = `${Math.min(100, Math.max(0, p * 100))}%`;
+            }
+            if (p < 0.35) {
+              setActivePhaseIndex(0);
+            } else if (p < 0.70) {
+              setActivePhaseIndex(1);
+            } else {
+              setActivePhaseIndex(2);
+            }
+          },
         },
       });
+
+      // Segment 1 -> Transition from Card 0 to Card 1
+      tl.to(cards[0], {
+        opacity: 0,
+        y: -40,
+        filter: "blur(12px)",
+        pointerEvents: "none",
+        duration: 1,
+        ease: "power2.inOut",
+      })
+      .fromTo(
+        cards[1],
+        { opacity: 0, y: 50, filter: "blur(12px)", pointerEvents: "none" },
+        { opacity: 1, y: 0, filter: "blur(0px)", pointerEvents: "auto", duration: 1, ease: "power2.inOut" },
+        "-=0.6"
+      )
+      // Pause on Card 1
+      .to({}, { duration: 0.5 })
+      // Segment 2 -> Transition from Card 1 to Card 2
+      .to(cards[1], {
+        opacity: 0,
+        y: -40,
+        filter: "blur(12px)",
+        pointerEvents: "none",
+        duration: 1,
+        ease: "power2.inOut",
+      })
+      .fromTo(
+        cards[2],
+        { opacity: 0, y: 50, filter: "blur(12px)", pointerEvents: "none" },
+        { opacity: 1, y: 0, filter: "blur(0px)", pointerEvents: "auto", duration: 1, ease: "power2.inOut" },
+        "-=0.6"
+      )
+      // Rest on Card 2
+      .to({}, { duration: 0.5 });
+
     }, section);
 
     return () => ctx.revert();
-  }, []);
+  }, [t]);
 
-  const cur = phases[activePhase];
+  const activePhase = phases[activePhaseIndex];
 
   return (
-    <section ref={sectionRef} className="relative w-full min-h-screen bg-transparent flex flex-col justify-center px-4 sm:px-8 py-20 select-none">
-      <div ref={containerRef} className="max-w-7xl mx-auto w-full space-y-16">
+    <section
+      ref={sectionRef}
+      className="relative w-full h-screen bg-transparent flex flex-col justify-center px-4 sm:px-8 select-none overflow-hidden"
+    >
+      <div className="max-w-7xl mx-auto w-full flex flex-col justify-between h-[82vh] py-6">
         {/* Top Minimalist Hairline Metadata */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6 font-mono text-xs text-slate-400">
           <div className="flex items-center gap-3">
@@ -87,54 +139,75 @@ export function QuantumProtocolStream() {
             </span>
           </div>
           <div className="flex items-center gap-6 text-[11px] text-slate-400 tracking-wider">
-            <span>{cur.coordinates}</span>
+            <span className="transition-all duration-300 font-mono text-slate-300">
+              {activePhase.coordinates}
+            </span>
             <span className="text-white/20">{"//"}</span>
-            <span className="text-cyan-400 font-bold">PHASE [{cur.index}/03]</span>
+            <span className="text-cyan-400 font-bold">
+              PHASE [{activePhase.index}/03]
+            </span>
           </div>
         </div>
 
-        {/* Big Kinetic Phase Typography */}
-        <div className="space-y-6">
-          <div className="text-xs font-mono tracking-widest text-monad-400 uppercase">
-            {cur.spec}
-          </div>
-          <h2 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter text-white leading-none uppercase font-mono">
-            {cur.code}
-          </h2>
-          <div className="max-w-3xl space-y-4 pt-4">
-            <p className="text-lg sm:text-2xl text-slate-300 font-light leading-relaxed">
-              {cur.question}
-            </p>
-            <div className="pt-2 text-sm sm:text-base font-mono text-cyan-300 leading-relaxed border-l-2 border-cyan-400 pl-4 bg-cyan-950/10 py-2">
-              {cur.solution}
+        {/* Central Stage: Overlapping Progressive Disclosure Cards */}
+        <div ref={cardsContainerRef} className="relative flex-1 flex items-center justify-center my-6">
+          {phases.map((phase) => (
+            <div
+              key={phase.index}
+              className="quantum-phase-card absolute inset-0 flex flex-col justify-center space-y-6 will-change-transform will-change-opacity"
+            >
+              <div className="text-xs font-mono tracking-widest text-monad-400 uppercase">
+                {phase.spec}
+              </div>
+              <h2 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter text-white leading-none uppercase font-mono">
+                {phase.code}
+              </h2>
+              <div className="max-w-3xl space-y-4 pt-4">
+                <p className="text-lg sm:text-2xl text-slate-300 font-light leading-relaxed">
+                  {phase.question}
+                </p>
+                <div className="pt-2 text-sm sm:text-base font-mono text-cyan-300 leading-relaxed border-l-2 border-cyan-400 pl-4 bg-cyan-950/20 py-2.5 backdrop-blur-sm rounded-r-lg">
+                  {phase.solution}
+                </div>
+              </div>
             </div>
-          </div>
+          ))}
         </div>
 
-        {/* Phase Indicator Track */}
-        <div className="pt-8 border-t border-white/[0.08] flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-          <div className="flex items-center gap-4">
-            {phases.map((p, idx) => (
-              <button
-                key={p.index}
-                onClick={() => setActivePhase(idx as 0 | 1 | 2)}
-                className={`text-xs font-mono px-4 py-2 rounded-full border transition-all cursor-pointer ${
-                  activePhase === idx
-                    ? "bg-white text-black border-white font-bold"
-                    : "bg-transparent text-slate-400 border-white/10 hover:border-white/30"
-                }`}
-              >
-                {p.index} {"//"} {p.code}
-              </button>
-            ))}
+        {/* Progressive Hairline Timeline Tracker */}
+        <div className="space-y-4 pt-6 border-t border-white/[0.08]">
+          <div className="w-full h-0.5 bg-white/10 rounded-full overflow-hidden">
+            <div
+              ref={progressBarRef}
+              className="h-full bg-gradient-to-r from-cyan-400 via-monad-400 to-purple-500 w-0 transition-[width] duration-75"
+            />
           </div>
 
-          <div className="font-mono text-xs text-slate-400 flex items-center gap-2">
-            <span className="text-cyan-400 font-semibold">[SPECIFICATION]</span>
-            <span>{cur.metric}</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="flex items-center gap-3">
+              {phases.map((p, idx) => (
+                <div
+                  key={p.index}
+                  className={`text-xs font-mono px-3.5 py-1.5 rounded-full border transition-all duration-300 ${
+                    activePhaseIndex === idx
+                      ? "bg-white text-black border-white font-bold shadow-glow"
+                      : "bg-transparent text-slate-500 border-white/10"
+                  }`}
+                >
+                  {p.index} {"//"} {p.code}
+                </div>
+              ))}
+            </div>
+
+            <div className="font-mono text-xs text-slate-400 flex items-center gap-2">
+              <span className="text-cyan-400 font-semibold">[SPECIFICATION]</span>
+              <span className="text-slate-300">{activePhase.metric}</span>
+            </div>
           </div>
         </div>
       </div>
     </section>
   );
 }
+
+export default QuantumProtocolStream;
