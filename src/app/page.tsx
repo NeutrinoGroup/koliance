@@ -47,6 +47,7 @@ import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
 import { TokenStudio } from "@/components/TokenStudio";
 import { DeveloperConsole } from "@/components/DeveloperConsole";
+import { AgentNarrativeFlow } from "@/components/AgentNarrativeFlow";
 import {
   monadTestnet,
   KOLIANCE_ADDRESS,
@@ -370,6 +371,9 @@ function MainContent() {
 
               {/* GSAP Showcase Kinetic Scroll Typography Marquee */}
               <KineticScrollBanner />
+
+              {/* Scroll-Driven Agent Narrative Flow & Living Holographic Card */}
+              <AgentNarrativeFlow onOpenConsole={() => setCurrentView("CONSOLE")} />
 
               {/* Protocol Architecture Bento Highlights (3D Damped Tilt, Specular Sheen, Laser Scanlines) */}
               <ParallelBentoReactor onSelectView={setCurrentView} />
