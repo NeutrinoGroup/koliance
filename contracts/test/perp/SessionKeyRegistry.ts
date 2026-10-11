@@ -661,4 +661,48 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       "DelegationIsFrozen",
     );
   });
+
+  it("S-3: retains spentInWindow and windowStart when re-registering the same session key", async function () {
+    nonce = 800n;
+    await reset();
+    await register();
+
+    const half = MAX_PER_TX; // 100 USDC
+    await registry.write.authorizeSpend([sessionKey, half], { account: agent.account });
+
+    const before = await registry.read.getDelegation([sessionKey]);
+    assert.equal(before.spentInWindow, half);
+
+    const nextNonce = await registry.read.userNonce([user.account.address]);
+    const updatedValidUntil = (await validUntil()) + ONE_DAY * 3n;
+    const { message, signature } = await sign(user.account, {
+      nonce: nextNonce,
+      validUntil: updatedValidUntil,
+    });
+
+    await registry.write.registerDelegation(
+      [
+        message.user as `0x${string}`,
+        message.agent as `0x${string}`,
+        message.sessionKey as `0x${string}`,
+        message.maxSpendPerTx as bigint,
+        message.dailySpendLimit as bigint,
+        message.validUntil as bigint,
+        message.nonce as bigint,
+        signature,
+      ],
+      { account: user.account },
+    );
+
+    const after = await registry.read.getDelegation([sessionKey]);
+    assert.equal(after.spentInWindow, half);
+    assert.equal(after.windowStart, before.windowStart);
+
+    await registry.write.authorizeSpend([sessionKey, half], { account: agent.account });
+
+    await expectRevert(
+      registry.write.authorizeSpend([sessionKey, half], { account: agent.account }),
+      "ExceededDailyLimit",
+    );
+  });
 });
