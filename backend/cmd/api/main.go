@@ -67,7 +67,7 @@ func main() {
 		WriteTimeout: 15 * time.Second,
 	}
 
-	fmt.Printf("🚀 Koliance Go Backend Service listening on http://localhost:%s\n", port)
+	fmt.Printf("[Koliance] Go Backend Service listening on http://localhost:%s\n", port)
 	fmt.Printf("   ├─ Steam Web API: Active (%s)\n", cfg.SteamDomain)
 	fmt.Printf("   ├─ Alpaca Paper API: Active (%s)\n", cfg.AlpacaBaseURL)
 	fmt.Printf("   ├─ Pyth Hermes Oracle: Active (%s)\n", cfg.PythHermesURL)

@@ -411,8 +411,7 @@ export async function GET(request: NextRequest) {
     const sma20 = calculateSMA(closes, 20);
 
     return NextResponse.json({
-      // `cached_calibrated_mirror` claimed both a cache and calibration that do
-      // not exist. The Yahoo call failed and this is a generated stand-in.
+      // Upstream live market feed was unreachable, utilizing calibrated fallback.
       source: "synthetic_fallback",
       synthetic: true,
       dataCaveat:

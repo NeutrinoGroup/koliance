@@ -197,7 +197,7 @@ ${mdRows}
 1. **Pyth Hermes Price Feed**: Consistently sub-second (~100-300ms) with zero error rate, suitable for on-demand price updates.
 2. **Monad RPC Testnet**: Ultra-fast block retrieval (~50-150ms), reflecting parallel EVM execution capabilities.
 3. **Dynamic JWKS**: Fast key verification endpoint with high availability and edge caching.
-4. **Rate Limit Policy**: External rate-limited feeds (CoinGecko / Yahoo / Nansen) must be insulated behind Redis cache buffers.
+4. **Rate Limit Policy**: External rate-limited feeds (CoinGecko / Alpaca / Nansen) must be insulated behind Redis cache buffers.
 `;
 
   fs.writeFileSync(mdOut, mdContent, "utf-8");
