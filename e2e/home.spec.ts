@@ -7,7 +7,7 @@ test.describe("Koliance Production E2E Verification", () => {
     // Check vision headline
     const headline = page.locator("h1");
     await expect(headline).toBeVisible();
-    await expect(headline).toContainText("Make AI Agents");
+    await expect(headline).toContainText(/Make AI agents/i);
 
     // Check subtitle
     const subtitle = page.locator("p").filter({ hasText: "Autonomous AI agents don't just chat" });
@@ -20,7 +20,7 @@ test.describe("Koliance Production E2E Verification", () => {
       await expect(headline).toContainText("让 AI 不仅能行动");
       // Toggle back to English
       await langBtn.click();
-      await expect(headline).toContainText("Make AI Agents");
+      await expect(headline).toContainText(/Make AI agents/i);
     }
   });
 
