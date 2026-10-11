@@ -88,10 +88,17 @@ func NewRouter(d Deps) http.Handler {
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		connected := d.DB != nil && d.DB.IsConnected
-		// Probed, not asserted. Every key below is the outcome of a call made on
-		// this request; the four that used to be literal `true` were an
-		// integration status badge produced by a process that had never
-		// contacted the integration (GAP-13).
+		// Probed, not asserted. The four remote integrations below are the
+		// outcome of a call made on this request; each used to be a literal
+		// `true` — an integration status badge produced by a process that had
+		// never contacted the integration (GAP-13). `agentcard` was a fifth
+		// literal `true` and is now the wiring fact described below.
+		//
+		// The last three keys have no upstream to call, so none of them appears
+		// in `probes`/`degraded`; each still names the fact it is derived from:
+		// `stripe` = the configured key, `database` = the connection state, and
+		// `agentcard` = `Deps.Cards`, whose absence is the nil dereference that
+		// every /api/v1/agentcard/* handler would take.
 		probes := runHealthProbes(ctx, cfg, d.PriceOracle)
 		jsonResponse(w, http.StatusOK, map[string]interface{}{
 			"status":    "healthy",
@@ -103,7 +110,7 @@ func NewRouter(d Deps) http.Handler {
 				"github":    probes.GitHub.OK,
 				"alpaca":    probes.Alpaca.OK,
 				"pyth":      probes.Pyth.OK,
-				"agentcard": true,
+				"agentcard": d.Cards != nil,
 				"stripe":    cfg.StripeSecretKey != "",
 				"database":  connected,
 			},

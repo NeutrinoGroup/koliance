@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"sort"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/koliance/backend/internal/agentcard"
 	"github.com/koliance/backend/internal/config"
 	"github.com/koliance/backend/internal/market"
 )
@@ -70,7 +72,11 @@ func newMarketRouter(t *testing.T, d marketDeps) http.Handler {
 	oracle.SetSymbols([]string{"NVDA", "TSLA"})
 
 	return NewRouter(Deps{
-		Cfg:         cfg,
+		Cfg: cfg,
+		// Wired exactly as cmd/api does. A nil here would make every
+		// /api/v1/agentcard/* handler panic, and services.agentcard reports that
+		// fact — so the stub router has to carry it (docs/changes/034 §2).
+		Cards:       agentcard.NewService(agentcard.NewPermissionGuard(), nil),
 		Market:      market.NewService(alp, oracle, nil),
 		PriceOracle: oracle,
 	})
@@ -133,7 +139,32 @@ func jsonTree(t *testing.T, label string, body []byte) (any, []string) {
 // enumerating the ones we happened to think of cannot catch the one we did not.
 // The `error` value must be a string for the same reason: a raw number would be
 // a price with a reassuring label, and a number embedded in the message text
-// would be a price wearing a sentence.
+// would be a price wearing a sentence. That second half is not a comment — it
+// is asserted, by `priceShapedInText` just below. (It used to be only a
+// comment, and the claim outran the code; see docs/changes/034 §1.)
+// priceShapedInText matches a number in an error MESSAGE that a price could be
+// read off, as opposed to a digit an operator's prose may legitimately carry.
+//
+// It exists to make the assertion below real rather than aspirational: the
+// first version of `assertRefusal` documented "a number embedded in the message
+// text would be a price wearing a sentence" while asserting only that the
+// `error` value was a JSON *string* — which a refusal carrying
+// "…(last known NVDA close 999.99)" satisfies exactly. Measured: that injection
+// left the whole suite green (docs/changes/034 §4.1).
+//
+// The alternation is a property, not a word list. A word list cannot catch the
+// price we did not think of (docs/changes/030 §2):
+//
+//	\d+\.\d{2,}  a decimal with two or more places — 999.99, 7.1429, 1.0013
+//	\d{3,}       three or more consecutive digits     — 150, 999, 1042
+//
+// Deliberately NOT matched: `2/2`, single digits, and one-decimal fractions.
+// Legitimate operator prose uses those ("probe failed after 4s"), and refusing
+// a refusal only because it is informative would be the wrong trade. The
+// refusal strings in this package carry no digits at all — they name
+// ALPACA_API_KEY / ALPACA_API_SECRET — so the narrow form costs nothing.
+var priceShapedInText = regexp.MustCompile(`\d+\.\d{2,}|\d{3,}`)
+
 func assertRefusal(t *testing.T, label string, body []byte) {
 	t.Helper()
 
@@ -154,6 +185,9 @@ func assertRefusal(t *testing.T, label string, body []byte) {
 		if e, present := obj["error"]; present {
 			if _, isString := e.(string); !isString {
 				t.Errorf("%s: error = %#v, want a string", label, e)
+			} else if m := priceShapedInText.FindString(e.(string)); m != "" {
+				t.Errorf("%s: error message contains %q — a price hidden in a refusal's own prose is still a price served without a source: %s",
+					label, m, string(body))
 			}
 		}
 	}
@@ -608,6 +642,70 @@ func TestHealthProbesEveryRemoteIntegration(t *testing.T) {
 	if serviceFlag(t, body, "database") {
 		t.Error("services.database = true with no database")
 	}
+}
+
+// The fifth literal `true`: `services.agentcard` was a constant, so replacing it
+// with an unrelated expression (`cfg.StripeSecretKey != ""`) left every test
+// green. This is the judgement that notices.
+//
+// Both directions, because a one-directional assertion is satisfied by a
+// constant of the right polarity — the same defect wearing a different value.
+// The positive half is also the reason the key stays in `services` at all:
+// `agentcard` is a LOCAL module with no upstream, so it must not be smuggled
+// into `probes` (which would fabricate a probe), but its absence would be a nil
+// dereference on every /api/v1/agentcard/* route.
+//
+// The second case deliberately configures Stripe: it pins that the two keys are
+// not the same fact, so the flag cannot be re-derived from a neighbour's
+// expression and still pass.
+func TestHealthAgentcardFlagFollowsTheWiring(t *testing.T) {
+	t.Run("wired service reports true", func(t *testing.T) {
+		h := newMarketRouter(t, marketDeps{apiURL: "http://127.0.0.1:1", dataURL: "http://127.0.0.1:1"})
+
+		if !serviceFlag(t, decodeHealth(t, do(h, http.MethodGet, "/healthz", "", nil)), "agentcard") {
+			t.Error("services.agentcard = false although Deps.Cards is wired into the router")
+		}
+	})
+
+	t.Run("absent service reports false even with Stripe configured", func(t *testing.T) {
+		// Same hermeticity rule as newMarketRouter: the two probes that take no
+		// cfg are pointed at a dead port, so this case never touches the network.
+		origSteam, origGitHub := steamProbeBaseURL, githubProbeBaseURL
+		steamProbeBaseURL, githubProbeBaseURL = "http://127.0.0.1:1", "http://127.0.0.1:1"
+		t.Cleanup(func() { steamProbeBaseURL, githubProbeBaseURL = origSteam, origGitHub })
+
+		cfg := &config.Config{
+			CORSAllowedOrigins: config.ParseOrigins(config.DefaultCORSOrigins),
+			APIToken:           opToken,
+			PythHermesURL:      "http://127.0.0.1:1",
+			AlpacaBaseURL:      "http://127.0.0.1:1",
+			AlpacaDataURL:      "http://127.0.0.1:1",
+			StripeSecretKey:    "sk_test_not_a_probe_for_agentcard",
+		}
+		oracle := market.NewPriceOracle("", "")
+		oracle.SetSymbols([]string{"NVDA"})
+
+		probeCache.Lock()
+		probeCache.entries = map[string]cachedProbe{}
+		probeCache.Unlock()
+
+		// Cards is deliberately nil. Every /api/v1/agentcard/* handler would
+		// panic on the nil dereference, so `/health` must not advertise it.
+		h := NewRouter(Deps{
+			Cfg:         cfg,
+			Market:      market.NewService(market.NewAlpacaClient(cfg.AlpacaBaseURL, "", ""), oracle, nil),
+			PriceOracle: oracle,
+		})
+
+		body := decodeHealth(t, do(h, http.MethodGet, "/healthz", "", nil))
+		if serviceFlag(t, body, "agentcard") {
+			t.Error("services.agentcard = true although Deps.Cards is nil — the flag is not derived from the wiring")
+		}
+		// ... while the key next to it is true for its own, documented reason.
+		if !serviceFlag(t, body, "stripe") {
+			t.Error("services.stripe = false although STRIPE_SECRET_KEY is set — the two keys are not the same fact, and this test cannot tell a swapped expression from a correct one unless both are pinned")
+		}
+	})
 }
 
 // The probe is cached for probeTTL, and the cache must expire. A cache that
