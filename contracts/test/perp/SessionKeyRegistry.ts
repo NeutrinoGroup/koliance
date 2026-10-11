@@ -633,4 +633,32 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       "InvalidNonce",
     );
   });
+
+  it("S-2: refuses re-registration if the existing session key is frozen", async function () {
+    nonce = 700n;
+    await reset();
+    await register();
+
+    await registry.write.freeze([sessionKey], { account: deployer.account });
+
+    const nextNonce = await registry.read.userNonce([user.account.address]);
+    const { message, signature } = await sign(user.account, { nonce: nextNonce });
+
+    await expectRevert(
+      registry.write.registerDelegation(
+        [
+          message.user as `0x${string}`,
+          message.agent as `0x${string}`,
+          message.sessionKey as `0x${string}`,
+          message.maxSpendPerTx as bigint,
+          message.dailySpendLimit as bigint,
+          message.validUntil as bigint,
+          message.nonce as bigint,
+          signature,
+        ],
+        { account: user.account },
+      ),
+      "DelegationIsFrozen",
+    );
+  });
 });
