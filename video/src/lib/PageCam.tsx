@@ -63,7 +63,7 @@ export const PageCam: React.FC<{
 
   if (!has3D) {
     return (
-      <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#faf7f2' }}>
+      <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#0a0d14' }}>
         <div
           style={{
             position: 'absolute', width: 1920, height: pageH,
@@ -88,7 +88,7 @@ export const PageCam: React.FC<{
   const persp = lerp(a.persp ?? 1400, b.persp ?? 1400, t);
 
   return (
-    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#faf7f2' }}>
+    <AbsoluteFill style={{ overflow: 'hidden', backgroundColor: '#0a0d14' }}>
       <div
         style={{
           position: 'absolute', inset: 0,
