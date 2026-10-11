@@ -72,4 +72,44 @@ describe("KolToken (kol / ICON)", async function () {
     assert.equal(recipientBalance, sendAmount);
     assert.equal(afterMinerBalance, initialMinerBalance - sendAmount);
   });
+
+  it("Should calculate accurate cross-epoch piecewise halving and respect minReward protection", async function () {
+    const kolToken = await viem.deployContract("KolToken");
+
+    const rateEra0 = await kolToken.read.rewardRatePerSecondForEra([0n]);
+    const rateEra1 = await kolToken.read.rewardRatePerSecondForEra([1n]);
+    assert.equal(rateEra1, rateEra0 / 2n, "Era 1 rate should be halved from Era 0");
+
+    const halvingPeriod = await kolToken.read.HALVING_PERIOD();
+    const startTime = await kolToken.read.startTime();
+
+    // Cross-epoch reward: 730 days of Era 0 + 10 days of Era 1
+    const t0 = startTime;
+    const t1 = startTime + halvingPeriod + 10n * 86400n;
+    const calculatedReward = await kolToken.read.calculateReward([t0, t1]);
+
+    const expectedEra0 = halvingPeriod * rateEra0;
+    const expectedEra1 = 10n * 86400n * rateEra1;
+    assert.equal(calculatedReward, expectedEra0 + expectedEra1, "Cross-epoch reward should match piecewise sum");
+
+    // Advance 5 seconds and test front-running protection (minReward)
+    await testClient.increaseTime({ seconds: 5 });
+    await testClient.mine({ blocks: 1 });
+
+    const minerContract = await viem.getContractAt(
+      "KolToken",
+      kolToken.address,
+      { client: { wallet: minerClient } }
+    );
+
+    // Call with exorbitant minReward to verify rejection
+    let reverted = false;
+    try {
+      await minerContract.write.claimBlockReward([10n ** 30n]);
+    } catch (err: any) {
+      reverted = true;
+      assert.ok(String(err).includes("Reward below minimum"));
+    }
+    assert.ok(reverted, "Should reject claim if reward is below minReward");
+  });
 });
