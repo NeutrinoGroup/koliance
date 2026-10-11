@@ -54,7 +54,8 @@ const BUMP_STEPS = [-1500n, -1000n, -500n, 500n, 1000n, 1500n] as const;
 
 const CLIENT = createPublicClient({
   chain: monadTestnet,
-  transport: http("https://testnet-rpc.monad.xyz"),
+  transport: http("https://testnet-rpc.monad.xyz", { batch: true }),
+  batch: { multicall: true },
 });
 
 interface LiquidationRow {
@@ -66,8 +67,8 @@ interface LiquidationRow {
   txHash: string;
 }
 
-/** How far back to scan for the event tail. Kept bounded so a fresh RPC cannot be asked for a huge range. */
-const LOOKBACK_BLOCKS = 5_000n;
+/** How far back to scan for the event tail. Monad RPC limits eth_getLogs to 100 blocks. */
+const LOOKBACK_BLOCKS = 100n;
 
 function fmtUsd(v: bigint): string {
   return Number(formatUnits(v, USD_DECIMALS)).toLocaleString(undefined, {
@@ -126,23 +127,35 @@ export function DemoControlPanel({ account }: { account: `0x${string}` | null })
         functionName: "nextPositionId",
       })) as bigint;
 
-      const rows: { id: bigint; liquidatable: boolean }[] = [];
-      for (let id = 1n; id <= next; id++) {
-        const open = (await CLIENT.readContract({
-          address: PERP_ADDRESSES.positionManager,
-          abi: POSITION_MANAGER_ABI,
-          functionName: "isOpen",
-          args: [id],
-        })) as boolean;
-        if (!open) continue;
-        const liquidatable = (await CLIENT.readContract({
-          address: PERP_ADDRESSES.positionManager,
-          abi: POSITION_MANAGER_ABI,
-          functionName: "isLiquidatable",
-          args: [id],
-        })) as boolean;
-        rows.push({ id, liquidatable });
-      }
+      const count = Number(next - 1n);
+      const candidateIds = Array.from(
+        { length: count > 0 ? count : 0 },
+        (_, i) => BigInt(i + 1)
+      );
+
+      const openStates = await Promise.all(
+        candidateIds.map((id) =>
+          CLIENT.readContract({
+            address: PERP_ADDRESSES.positionManager,
+            abi: POSITION_MANAGER_ABI,
+            functionName: "isOpen",
+            args: [id],
+          }) as Promise<boolean>
+        )
+      );
+
+      const activeIds = candidateIds.filter((_, idx) => openStates[idx]);
+      const rows = await Promise.all(
+        activeIds.map(async (id) => {
+          const liquidatable = (await CLIENT.readContract({
+            address: PERP_ADDRESSES.positionManager,
+            abi: POSITION_MANAGER_ABI,
+            functionName: "isLiquidatable",
+            args: [id],
+          })) as boolean;
+          return { id, liquidatable };
+        })
+      );
       setPositions(rows);
     } catch {
       setPositions([]);

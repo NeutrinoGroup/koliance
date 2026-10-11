@@ -24,7 +24,8 @@ export default function PerpPage() {
 
   const publicClient = createPublicClient({
     chain: monadTestnet,
-    transport: http("https://testnet-rpc.monad.xyz"),
+    transport: http("https://testnet-rpc.monad.xyz", { batch: true }),
+    batch: { multicall: true },
   });
 
   const refreshBalance = useCallback(

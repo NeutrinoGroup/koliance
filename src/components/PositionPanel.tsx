@@ -55,6 +55,12 @@ import {
 const RPC = "https://testnet-rpc.monad.xyz";
 const E6 = 10n ** 6n;
 
+const CLIENT = createPublicClient({
+  chain: monadTestnet,
+  transport: http(RPC, { batch: true }),
+  batch: { multicall: true },
+});
+
 /** The feed the demo trades. DemoOracle prices it; Pyth uses the same id. */
 const ACTIVE_FEED = FEEDS.NVDA;
 
@@ -145,30 +151,28 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
     if (!PERP_IS_CONFIGURED) return;
     const who = accountRef.current;
     try {
-      const client = createPublicClient({ chain: monadTestnet, transport: http(RPC) });
-
       const [assets, reserved, available, nextId, mark] = await Promise.all([
-        client.readContract({
+        CLIENT.readContract({
           address: PERP_ADDRESSES.vault,
           abi: VAULT_ABI,
           functionName: "totalAssets",
         }),
-        client.readContract({
+        CLIENT.readContract({
           address: PERP_ADDRESSES.positionManager,
           abi: POSITION_MANAGER_ABI,
           functionName: "reservedAssets",
         }),
-        client.readContract({
+        CLIENT.readContract({
           address: PERP_ADDRESSES.vault,
           abi: VAULT_ABI,
           functionName: "availableAssets",
         }),
-        client.readContract({
+        CLIENT.readContract({
           address: PERP_ADDRESSES.positionManager,
           abi: POSITION_MANAGER_ABI,
           functionName: "nextPositionId",
         }),
-        client.readContract({
+        CLIENT.readContract({
           address: PERP_ADDRESSES.oracle,
           abi: DEMO_ORACLE_ABI,
           functionName: "getPrice",
@@ -179,17 +183,16 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
       setPoolAssets(assets);
       setPoolReserved(reserved);
       setPoolAvailable(available);
-      const markPrice = (mark as readonly [bigint, bigint])[0];
 
       if (who) {
         const [bal, alw] = await Promise.all([
-          client.readContract({
+          CLIENT.readContract({
             address: PERP_ADDRESSES.usdc,
             abi: MOCK_USDC_ABI,
             functionName: "balanceOf",
             args: [who],
           }),
-          client.readContract({
+          CLIENT.readContract({
             address: PERP_ADDRESSES.usdc,
             abi: MOCK_USDC_ABI,
             functionName: "allowance",
@@ -201,95 +204,91 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
       }
 
       // Ids are contiguous from 1, so the scan is bounded by nextPositionId.
-      const found: PositionRow[] = [];
-      for (let id = 1n; id < nextId; id++) {
-        const open = await client.readContract({
-          address: PERP_ADDRESSES.positionManager,
-          abi: POSITION_MANAGER_ABI,
-          functionName: "isOpen",
-          args: [id],
-        });
-        if (!open) continue;
+      const count = Number(nextId - 1n);
+      const candidateIds = Array.from(
+        { length: count > 0 ? count : 0 },
+        (_, i) => BigInt(i + 1)
+      );
 
-        const pos = (await client.readContract({
-          address: PERP_ADDRESSES.positionManager,
-          abi: POSITION_MANAGER_ABI,
-          functionName: "getPosition",
-          args: [id],
-        })) as unknown as OnChainPosition;
+      const openStates = await Promise.all(
+        candidateIds.map((id) =>
+          CLIENT.readContract({
+            address: PERP_ADDRESSES.positionManager,
+            abi: POSITION_MANAGER_ABI,
+            functionName: "isOpen",
+            args: [id],
+          }) as Promise<boolean>
+        )
+      );
 
-        // Verdict, equity and funding all come from the chain. Deriving them
-        // here would be a second implementation of a rule that already exists,
-        // and it would drift the moment funding is involved.
-        const [pnl, equity, funding, liquidatable] = await Promise.all([
-          client.readContract({
-            address: PERP_ADDRESSES.positionManager,
-            abi: POSITION_MANAGER_ABI,
-            functionName: "unrealizedPnl",
-            args: [id],
-          }),
-          client.readContract({
-            address: PERP_ADDRESSES.positionManager,
-            abi: POSITION_MANAGER_ABI,
-            functionName: "positionEquity",
-            args: [id],
-          }),
-          client.readContract({
-            address: PERP_ADDRESSES.positionManager,
-            abi: POSITION_MANAGER_ABI,
-            functionName: "fundingOwed",
-            args: [id],
-          }),
-          client.readContract({
-            address: PERP_ADDRESSES.positionManager,
-            abi: POSITION_MANAGER_ABI,
-            functionName: "isLiquidatable",
-            args: [id],
-          }),
-        ]);
+      const activeIds = candidateIds.filter((_, idx) => openStates[idx]);
 
-        const math = {
-          collateralUsd: pos.collateralUsd,
-          entryPrice: pos.entryPrice,
-          leverageBps: (pos.sizeUsd * BPS_DENOMINATOR) / (pos.collateralUsd || 1n),
-          isLong: pos.isLong,
-        };
-        found.push({
-          id,
-          pos,
-          pnl,
-          equity,
-          funding,
-          // Margin ratio against the read equity, not a recomputed one.
-          marginBps:
-            pos.sizeUsd === 0n
-              ? 0n
-              : (equity > 0n ? equity : 0n) * BPS_DENOMINATOR / pos.sizeUsd,
-          // Still a mirror: there is no per-position getter on chain. The price
-          // formula itself is now checked against the chain by
-          // contracts/test/perp/LiquidationParity.ts (GAP-06): 60 vectors, each
-          // replayed on chain, including that the advertised price is the exact
-          // boundary. tests/perp.test.ts alone was not sufficient — its
-          // round-trip assertion is funding-blind and self-consistent.
-          //
-          // The two figures below answer different questions and are both shown
-          // on purpose (GAP-37). `liquidatable` is the chain's verdict and
-          // INCLUDES funding; `liqPriceWithFunding` is the boundary that verdict
-          // implies, and `liqPrice` is where the price would have to be with no
-          // cost of carry at all. The two prices can differ while the verdict
-          // agrees with the funding-aware one — which is the point, and why the
-          // panel labels them rather than picking silently.
-          //
-          // Both come from the same rearrangement GAP-06 pins to the chain; the
-          // funding-aware pair is additionally pinned by
-          // contracts/test/perp/FundingLiquidationParity.ts with funding actually
-          // accruing, so neither number is an unverified mirror.
-          liqPrice: liquidationPrice(math),
-          liqPriceWithFunding: liquidationPriceWithFunding(math, funding),
-          liquidatable,
-        });
-      }
+      const found = await Promise.all(
+        activeIds.map(async (id) => {
+          const [pos, pnl, equity, funding, liquidatable] = await Promise.all([
+            CLIENT.readContract({
+              address: PERP_ADDRESSES.positionManager,
+              abi: POSITION_MANAGER_ABI,
+              functionName: "getPosition",
+              args: [id],
+            }) as unknown as Promise<OnChainPosition>,
+            CLIENT.readContract({
+              address: PERP_ADDRESSES.positionManager,
+              abi: POSITION_MANAGER_ABI,
+              functionName: "unrealizedPnl",
+              args: [id],
+            }),
+            CLIENT.readContract({
+              address: PERP_ADDRESSES.positionManager,
+              abi: POSITION_MANAGER_ABI,
+              functionName: "positionEquity",
+              args: [id],
+            }),
+            CLIENT.readContract({
+              address: PERP_ADDRESSES.positionManager,
+              abi: POSITION_MANAGER_ABI,
+              functionName: "fundingOwed",
+              args: [id],
+            }),
+            CLIENT.readContract({
+              address: PERP_ADDRESSES.positionManager,
+              abi: POSITION_MANAGER_ABI,
+              functionName: "isLiquidatable",
+              args: [id],
+            }),
+          ]);
+
+          const math = {
+            collateralUsd: pos.collateralUsd,
+            entryPrice: pos.entryPrice,
+            leverageBps: (pos.sizeUsd * BPS_DENOMINATOR) / (pos.collateralUsd || 1n),
+            isLong: pos.isLong,
+          };
+
+          return {
+            id,
+            pos,
+            pnl,
+            equity,
+            funding,
+            marginBps:
+              pos.sizeUsd === 0n
+                ? 0n
+                : (equity > 0n ? equity : 0n) * BPS_DENOMINATOR / pos.sizeUsd,
+            liqPrice: liquidationPrice(math),
+            liqPriceWithFunding: liquidationPriceWithFunding(math, funding),
+            liquidatable,
+          } as PositionRow;
+        })
+      );
+
       setRows(found);
+      setFeedback((prev) =>
+        prev?.type === "error" &&
+        (prev.msg.includes("RPC") || prev.msg.includes("读取链上状态失败"))
+          ? null
+          : prev
+      );
     } catch (err: unknown) {
       const e = err as { shortMessage?: string; message?: string };
       setFeedback({
@@ -481,7 +480,7 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* ---- open form ---- */}
-        <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+        <div className="rounded-lg border border-white/10 bg-black/30 p-5 shadow-sm">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="font-semibold text-white">开仓</h3>
             <button
@@ -595,7 +594,7 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
         </div>
 
         {/* ---- positions ---- */}
-        <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+        <div className="rounded-lg border border-white/10 bg-black/30 p-5 shadow-sm">
           <h3 className="mb-4 font-semibold text-white">
             持仓 <span className="text-white/40">({rows.length})</span>
           </h3>
