@@ -128,7 +128,7 @@ export function ArchitectureTopologyMatrix() {
         {tiers.map((tier) => (
           <div
             key={tier.id}
-            className="rounded-3xl p-6 bg-[#111523]/80 border border-white/[0.08] hover:border-white/20 transition-all duration-300 space-y-4 shadow-xl flex flex-col justify-between"
+            className="rounded-lg p-6 bg-[#111523]/80 border border-white/[0.08] hover:border-white/20 transition-all duration-300 space-y-4 shadow-xl flex flex-col justify-between"
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
@@ -149,7 +149,7 @@ export function ArchitectureTopologyMatrix() {
                       key={item.key}
                       onMouseEnter={() => setHoveredNode(item.key)}
                       onMouseLeave={() => setHoveredNode(null)}
-                      className={`p-3.5 rounded-2xl transition-all duration-200 border cursor-pointer space-y-1.5 ${
+                      className={`p-3.5 rounded-md transition-all duration-200 border cursor-pointer space-y-1.5 ${
                         isHovered
                           ? "bg-white/[0.08] border-cyan-400/60 shadow-[0_0_20px_rgba(0,242,254,0.15)] translate-x-1"
                           : "bg-white/[0.02] border-white/[0.05] hover:border-white/10"

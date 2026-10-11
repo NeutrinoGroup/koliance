@@ -28,6 +28,7 @@ import {
   Lock,
   CreditCard,
   Coins,
+  Mail,
 } from "lucide-react";
 import { BrandIcon } from "@/components/BrandIcon";
 import { Navbar, NavView } from "@/components/Navbar";
@@ -44,10 +45,12 @@ import { MinimalistGatewayRails } from "@/components/MinimalistGatewayRails";
 import { TrustAttestationCard } from "@/components/TrustAttestationCard";
 import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
+import { ContactModal } from "@/components/ContactModal";
 import { TokenStudio } from "@/components/TokenStudio";
 import { DeveloperConsole } from "@/components/DeveloperConsole";
 import { AgentNarrativeFlow } from "@/components/AgentNarrativeFlow";
 import { QuantumBootLoader } from "@/components/QuantumBootLoader";
+import { AgentCardShowcase } from "@/components/AgentCardShowcase";
 import {
   monadTestnet,
   KOLIANCE_ADDRESS,
@@ -69,6 +72,7 @@ function MainContent() {
   const [balance, setBalance] = useState("0.00");
   const [chainId, setChainId] = useState<number | null>(null);
   const [networkModalOpen, setNetworkModalOpen] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
 
   const {
     address: authAddress,
@@ -388,6 +392,9 @@ function MainContent() {
 
               {/* Minimalist Swiss Hairline Gateway Rails */}
               <MinimalistGatewayRails onSelectView={setCurrentView} />
+
+              {/* Grand Finale: 6-Card Circulating Neural Asset Matrix (Progressive Disclosure & In-View Lazy Load) */}
+              <AgentCardShowcase onOpenDedicated={() => setCurrentView("AGENTCARD")} />
             </motion.div>
           )}
 
@@ -441,7 +448,7 @@ function MainContent() {
               />
 
               {/* Direct On-Chain Contract Studio Drawer/Section */}
-              <div className="rounded-3xl bg-[#121622]/90 border border-white/10 p-6 space-y-6 shadow-xl">
+              <div className="rounded-lg bg-[#121622]/90 border border-white/10 p-6 space-y-6 shadow-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
                   <div>
                     <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -457,7 +464,7 @@ function MainContent() {
                     href={`${monadTestnet.blockExplorers.default.url}/address/${KOLIANCE_ADDRESS}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="px-3.5 py-1.5 rounded-xl bg-[#181d2c] border border-white/10 text-xs font-mono text-white hover:border-purple-400 transition flex items-center gap-1.5 self-start sm:self-auto"
+                    className="px-3.5 py-1.5 rounded-md bg-[#181d2c] border border-white/10 text-xs font-mono text-white hover:border-purple-400 transition flex items-center gap-1.5 self-start sm:self-auto"
                   >
                     <span>Sourcify Verified</span>
                     <ExternalLink className="w-3.5 h-3.5 text-emerald-400" />
@@ -609,10 +616,30 @@ function MainContent() {
 
 export default function Home() {
   const [booting, setBooting] = useState(true);
+  const [bootKey, setBootKey] = useState(0);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Trigger on Ctrl+A or Cmd+A (Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        setBootKey((prev) => prev + 1);
+        setBooting(true);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   return (
     <Suspense fallback={<QuantumBootLoader />}>
-      {booting && <QuantumBootLoader onComplete={() => setBooting(false)} />}
+      {booting && (
+        <QuantumBootLoader
+          key={bootKey}
+          onComplete={() => setBooting(false)}
+        />
+      )}
       <MainContent />
     </Suspense>
   );

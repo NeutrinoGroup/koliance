@@ -58,10 +58,10 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5, delay: 0.1, ease: "easeOut" }}
-      className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-monad-500/30 relative overflow-hidden"
+      className="glass-panel-glow rounded-lg p-6 sm:p-8 border border-monad-500/30 relative overflow-hidden"
     >
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-12 h-12 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
+        <div className="w-12 h-12 rounded-md bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
           <KeyRound className="w-6 h-6 text-cyber-accent" />
         </div>
         <div>
@@ -87,7 +87,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
             value={toAddress}
             onChange={(e) => setToAddress(e.target.value)}
             placeholder="0x71C... or paste destination wallet"
-            className="w-full px-4 py-3 rounded-xl bg-monad-950/60 border border-monad-500/30 focus:border-monad-400 focus:outline-none text-sm text-white placeholder-monad-400/40 font-mono transition"
+            className="w-full px-4 py-2.5 rounded-md bg-monad-950/60 border border-monad-500/30 focus:border-monad-400 focus:outline-none text-sm text-white placeholder-monad-400/40 font-mono transition"
           />
         </div>
 
@@ -100,7 +100,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
                 key={item}
                 type="button"
                 onClick={() => setAction(item)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono transition ${
+                className={`px-3 py-1.5 rounded-md text-xs font-mono transition ${
                   action === item
                     ? "bg-monad-500 text-white shadow-glow border border-monad-400"
                     : "bg-monad-950/50 hover:bg-monad-900/50 text-monad-300 border border-monad-500/20"
@@ -112,7 +112,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
             <button
               type="button"
               onClick={() => setAction("CUSTOM")}
-              className={`px-3 py-1.5 rounded-lg text-xs font-mono transition ${
+              className={`px-3 py-1.5 rounded-md text-xs font-mono transition ${
                 action === "CUSTOM"
                   ? "bg-monad-500 text-white shadow-glow border border-monad-400"
                   : "bg-monad-950/50 hover:bg-monad-900/50 text-monad-300 border border-monad-500/20"
@@ -131,7 +131,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
               value={customAction}
               onChange={(e) => setCustomAction(e.target.value)}
               placeholder="Enter custom action keyword..."
-              className="w-full px-4 py-2.5 rounded-xl bg-monad-950/60 border border-monad-500/30 focus:border-monad-400 focus:outline-none text-sm text-white font-mono"
+              className="w-full px-4 py-2 rounded-md bg-monad-950/60 border border-monad-500/30 focus:border-monad-400 focus:outline-none text-sm text-white font-mono"
             />
           </div>
         )}
@@ -142,7 +142,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
             <span className="text-monad-200">Proof Payload (Calculated Keccak256)</span>
             <span className="text-cyber-accent text-[11px]">bytes32</span>
           </div>
-          <div className="p-3 rounded-xl bg-monad-950/80 border border-monad-500/20 text-xs font-mono text-monad-300/80 break-all select-all">
+          <div className="p-3 rounded-md bg-monad-950/80 border border-monad-500/20 text-xs font-mono text-monad-300/80 break-all select-all">
             {currentProof}
           </div>
           <input
@@ -150,7 +150,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
             value={rawProofText}
             onChange={(e) => setRawProofText(e.target.value)}
             placeholder="Type extra endorsement message to update proof hash..."
-            className="w-full px-4 py-2 rounded-xl bg-monad-950/40 border border-monad-500/20 focus:border-monad-400 focus:outline-none text-xs text-white placeholder-monad-400/40 font-mono transition"
+            className="w-full px-4 py-2 rounded-md bg-monad-950/40 border border-monad-500/20 focus:border-monad-400 focus:outline-none text-xs text-white placeholder-monad-400/40 font-mono transition"
           />
         </div>
 
@@ -161,7 +161,7 @@ export function TrustAttestationCard({ account, onAddTrust }: TrustAttestationCa
             whileTap={{ scale: 0.99 }}
             disabled={isSubmitting || !toAddress}
             type="submit"
-            className="w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-cyber-accent via-monad-500 to-monad-600 hover:opacity-95 text-white font-semibold text-sm shadow-cyan transition duration-200 disabled:opacity-50"
+            className="w-full h-10 flex items-center justify-center gap-2 px-6 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-400/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] transition duration-200 disabled:opacity-50"
           >
             {isSubmitting ? (
               <>

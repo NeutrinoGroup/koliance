@@ -30,7 +30,7 @@ export function TrustStream({ records, isLoading, onRefresh }: TrustStreamProps)
   };
 
   return (
-    <div className="glass-panel-glow rounded-3xl p-6 sm:p-8 border border-monad-500/30">
+    <div className="glass-panel-glow rounded-lg p-6 sm:p-8 border border-monad-500/30">
       {/* Header & Search */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
@@ -54,14 +54,14 @@ export function TrustStream({ records, isLoading, onRefresh }: TrustStreamProps)
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search address or action..."
-              className="pl-8 pr-4 py-2 rounded-xl bg-monad-950/60 border border-monad-500/30 focus:border-monad-400 focus:outline-none text-xs text-white placeholder-monad-400/40 font-mono w-48 sm:w-64 transition"
+              className="pl-8 pr-4 py-2 rounded-md bg-monad-950/60 border border-monad-500/30 focus:border-monad-400 focus:outline-none text-xs text-white placeholder-monad-400/40 font-mono w-48 sm:w-64 transition"
             />
           </div>
 
           <button
             onClick={onRefresh}
             disabled={isLoading}
-            className="p-2.5 rounded-xl bg-monad-950/60 border border-monad-500/30 hover:border-monad-400 text-monad-300 hover:text-white transition disabled:opacity-50"
+            className="p-2.5 rounded-md bg-monad-950/60 border border-monad-500/30 hover:border-monad-400 text-monad-300 hover:text-white transition disabled:opacity-50"
             title="Refresh from Monad RPC"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
@@ -71,7 +71,7 @@ export function TrustStream({ records, isLoading, onRefresh }: TrustStreamProps)
 
       {/* Record List */}
       {filteredRecords.length === 0 ? (
-        <div className="py-12 text-center rounded-2xl bg-monad-950/40 border border-monad-500/20">
+        <div className="py-12 text-center rounded-lg bg-monad-950/40 border border-monad-500/20">
           <ShieldCheck className="w-10 h-10 text-monad-400/40 mx-auto mb-2" />
           <p className="text-sm text-monad-300 font-medium">No Trust Records Found</p>
           <p className="text-xs text-monad-400/60 font-mono mt-1">
@@ -89,7 +89,7 @@ export function TrustStream({ records, isLoading, onRefresh }: TrustStreamProps)
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: idx * 0.05 }}
-                className="p-4 rounded-2xl bg-monad-950/60 hover:bg-monad-950/90 border border-monad-500/20 hover:border-monad-500/40 transition-all duration-200 group"
+                className="p-4 rounded-md bg-monad-950/60 hover:bg-monad-950/90 border border-monad-500/20 hover:border-monad-500/40 transition-all duration-200 group"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
                   {/* From -> To */}

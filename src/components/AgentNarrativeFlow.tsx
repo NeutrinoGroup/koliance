@@ -190,7 +190,7 @@ export function AgentNarrativeFlow({ onOpenConsole }: AgentNarrativeFlowProps) {
 
         {/* Right: Holographic Dynamic Agent Card & Live Transactions */}
         <div className="lg:col-span-6">
-          <div className="relative rounded-2xl bg-gradient-to-br from-[#181d2e] via-[#111422] to-[#0a0d16] border border-white/15 p-6 sm:p-8 shadow-2xl space-y-6 overflow-hidden">
+          <div className="relative rounded-lg bg-gradient-to-br from-[#181d2e] via-[#111422] to-[#0a0d16] border border-white/15 p-6 sm:p-8 shadow-sm space-y-6 overflow-hidden">
             <div className="absolute -top-16 -right-16 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
             <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
 

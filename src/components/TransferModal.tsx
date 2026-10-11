@@ -193,12 +193,12 @@ export function TransferModal({
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative w-full max-w-md rounded-3xl bg-[#141824] border border-white/15 p-6 shadow-2xl text-white z-10 space-y-5"
+          className="relative w-full max-w-md rounded-lg bg-[#141824] border border-white/15 p-6 shadow-2xl text-white z-10 space-y-5"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 pb-3">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300">
+              <div className="w-8 h-8 rounded-md bg-purple-500/20 border border-purple-400/40 flex items-center justify-center text-purple-300">
                 <Send className="w-4 h-4" />
               </div>
               <div>
@@ -213,7 +213,7 @@ export function TransferModal({
             </div>
             <button
               onClick={onClose}
-              className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+              className="p-1 rounded-md hover:bg-white/10 text-slate-400 hover:text-white transition"
             >
               <X className="w-4 h-4" />
             </button>
@@ -221,10 +221,10 @@ export function TransferModal({
 
           {/* Form */}
           {txHash ? (
-            <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-400/30 space-y-3 text-center">
+            <div className="p-4 rounded-md bg-emerald-500/10 border border-emerald-400/30 space-y-3 text-center">
               <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
               <div className="text-xs font-bold text-white">{currency} 转账交易已成功广播！</div>
-              <p className="text-[11px] font-mono text-slate-300 break-all bg-black/40 p-2 rounded-lg">
+              <p className="text-[11px] font-mono text-slate-300 break-all bg-black/40 p-2 rounded-md">
                 Tx: {txHash}
               </p>
               <div className="flex items-center justify-center gap-2 pt-1">
@@ -232,14 +232,14 @@ export function TransferModal({
                   href={`${monadTestnet.blockExplorers.default.url}/tx/${txHash}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono transition"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono transition"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>在区块浏览器中查看</span>
                 </a>
                 <button
                   onClick={onClose}
-                  className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs text-white font-mono transition"
+                  className="px-3 py-1.5 rounded-md bg-white/10 hover:bg-white/20 text-xs text-white font-mono transition"
                 >
                   关闭
                 </button>
@@ -248,7 +248,7 @@ export function TransferModal({
           ) : (
             <form onSubmit={handleTransfer} className="space-y-4">
               {error && (
-                <div className="p-2.5 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center gap-2 text-red-300 text-xs">
+                <div className="p-2.5 rounded-md bg-red-500/15 border border-red-500/30 flex items-center gap-2 text-red-300 text-xs">
                   <AlertCircle className="w-4 h-4 shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -264,7 +264,7 @@ export function TransferModal({
                       setCurrency("KOL");
                       setAmount("");
                     }}
-                    className={`py-2 px-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-mono font-bold transition ${
+                    className={`py-2 px-3 rounded-md border flex items-center justify-center gap-2 text-xs font-mono font-bold transition ${
                       currency === "KOL"
                         ? "bg-purple-600 border-purple-400 text-white shadow-md shadow-purple-600/30"
                         : "bg-black/30 border-white/10 text-slate-400 hover:text-white"
@@ -280,7 +280,7 @@ export function TransferModal({
                       setCurrency("MON");
                       setAmount("");
                     }}
-                    className={`py-2 px-3 rounded-xl border flex items-center justify-center gap-2 text-xs font-mono font-bold transition ${
+                    className={`py-2 px-3 rounded-md border flex items-center justify-center gap-2 text-xs font-mono font-bold transition ${
                       currency === "MON"
                         ? "bg-emerald-600 border-emerald-400 text-white shadow-md shadow-emerald-600/30"
                         : "bg-black/30 border-white/10 text-slate-400 hover:text-white"
@@ -300,7 +300,7 @@ export function TransferModal({
                   placeholder="0x..."
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
+                  className="w-full px-3 py-2 rounded-md bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
                   required
                 />
               </div>
@@ -324,7 +324,7 @@ export function TransferModal({
                     placeholder="0.0"
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
-                    className="w-full px-3 py-2 pr-14 rounded-xl bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
+                    className="w-full px-3 py-2 pr-14 rounded-md bg-black/40 border border-white/15 focus:border-purple-400 focus:outline-none text-xs font-mono text-white placeholder-slate-500"
                     required
                   />
                   <span className="absolute right-3 top-2 text-xs font-mono text-slate-300 font-bold pointer-events-none">
@@ -337,7 +337,7 @@ export function TransferModal({
               <button
                 type="submit"
                 disabled={isLoading}
-                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-semibold text-xs sm:text-sm transition shadow-lg shadow-purple-600/20 active:scale-98 disabled:opacity-50"
+                className="w-full h-10 flex items-center justify-center gap-2 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-400/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition disabled:opacity-50"
               >
                 {isLoading ? (
                   <>

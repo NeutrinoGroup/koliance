@@ -106,11 +106,11 @@ function ReactorCard({
       ref={cardRef}
       onClick={onClick}
       style={{ transformStyle: "preserve-3d" }}
-      className={`group relative rounded-3xl p-6 bg-[#101422]/90 border border-white/[0.08] ${colorConfig.border} ${colorConfig.shadow} cursor-pointer overflow-hidden transform-gpu will-change-transform transition-all duration-300 shadow-xl flex flex-col justify-between`}
+      className={`group relative rounded-lg p-6 bg-[#101422]/90 border border-white/[0.08] ${colorConfig.border} ${colorConfig.shadow} cursor-pointer overflow-hidden transform-gpu will-change-transform transition-all duration-300 shadow-xl flex flex-col justify-between`}
     >
       {/* Ray-traced Specular Follower Spotlight */}
       <div
-        className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"
+        className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"
         style={{
           background: `radial-gradient(380px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), ${colorConfig.glowBg}, transparent 75%)`,
         }}
@@ -133,7 +133,7 @@ function ReactorCard({
       <div className="relative z-10 space-y-4" style={{ transform: "translateZ(18px)" }}>
         <div className="flex items-center justify-between">
           <div
-            className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${colorConfig.iconBg} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}
+            className={`w-12 h-12 rounded-md bg-gradient-to-br ${colorConfig.iconBg} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}
           >
             {icon}
           </div>

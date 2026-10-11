@@ -9,18 +9,9 @@ interface QuantumBootLoaderProps {
 
 export function QuantumBootLoader({ onComplete }: QuantumBootLoaderProps) {
   const [percent, setPercent] = useState(0);
-  const [statusText, setStatusText] = useState("INITIALIZING MONAD PARALLEL RUNTIME");
   const [isDone, setIsDone] = useState(false);
 
   useEffect(() => {
-    const statuses = [
-      { at: 15, text: "INITIALIZING MONAD PARALLEL RUNTIME" },
-      { at: 35, text: "ESTABLISHING EIP-712 SESSION BUS" },
-      { at: 65, text: "INGESTING ZERO-KNOWLEDGE CREDIT PROOFS" },
-      { at: 88, text: "SYNCING HIGH-FREQUENCY 10,000 TPS ENGINE" },
-      { at: 100, text: "CONSENSUS SYNCHRONIZED // ACCESS GRANTED" },
-    ];
-
     const startTime = Date.now();
     const duration = 1200; // 1.2s smooth boot sequence
 
@@ -28,11 +19,6 @@ export function QuantumBootLoader({ onComplete }: QuantumBootLoaderProps) {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(100, Math.floor((elapsed / duration) * 100));
       setPercent(progress);
-
-      const matching = statuses.filter((s) => progress >= s.at).pop();
-      if (matching) {
-        setStatusText(matching.text);
-      }
 
       if (progress >= 100) {
         clearInterval(interval);
@@ -88,33 +74,15 @@ export function QuantumBootLoader({ onComplete }: QuantumBootLoaderProps) {
       {/* Central Terminal Telemetry Hub */}
       <div className="relative z-10 w-full max-w-md px-6 flex flex-col items-center space-y-6">
         {/* Monad Chain & Architecture Coordinates */}
-        <div className="flex items-center gap-3 font-mono text-[11px] tracking-widest text-cyan-400/90 border border-cyan-400/20 bg-cyan-950/30 px-3 py-1 rounded-full backdrop-blur-md">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+        <div className="flex items-center gap-3 font-mono text-[11px] tracking-widest text-cyan-400/90 border border-cyan-400/20 bg-cyan-950/30 px-3.5 py-1.5 rounded-md backdrop-blur-md">
+          <span className="w-2 h-2 rounded-sm bg-cyan-400 animate-ping" />
           <span>KOLIANCE BOOT // CHAIN 10143</span>
         </div>
 
         {/* Big Monospaced Speed Percentage */}
         <div className="flex flex-col items-center">
           <div className="font-mono text-6xl sm:text-7xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white via-cyan-200 to-purple-400">
-            {percent.toString().padStart(3, "0")}%
-          </div>
-          <div className="text-[10px] font-mono tracking-widest text-slate-400 uppercase mt-1">
-            {statusText}
-          </div>
-        </div>
-
-        {/* Minimalist Precision Progress Gauge */}
-        <div className="w-full space-y-2">
-          <div className="w-full h-1 bg-white/10 rounded-full overflow-hidden p-[1px] backdrop-blur-sm border border-white/5">
-            <div
-              className="h-full bg-gradient-to-r from-cyan-400 via-monad-400 to-purple-500 rounded-full transition-all duration-75"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-
-          <div className="flex items-center justify-between font-mono text-[10px] text-slate-400">
-            <span>MEM: 0x8F94 // ALLOCATED</span>
-            <span className="text-cyan-400 font-bold">10,000 TPS ENGINE</span>
+            {percent}%
           </div>
         </div>
       </div>

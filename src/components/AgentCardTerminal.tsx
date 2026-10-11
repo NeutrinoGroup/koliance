@@ -448,11 +448,11 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 }}
               />
             ) : (
-              <div className="rounded-3xl bg-gradient-to-r from-[#171b28] via-[#1a233a] to-[#141b2d] border border-cyan-500/30 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+              <div className="rounded-lg bg-gradient-to-r from-[#171b28] via-[#1a2334] to-[#141b2d] border border-cyan-500/30 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2.5">
-                      <span className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
+                      <span className="w-8 h-8 rounded-md bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-400">
                         <Gamepad2 className="w-4 h-4" />
                       </span>
                       <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
@@ -471,7 +471,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                     {/* 1. Official Steam OpenID Button */}
                     <button
                       onClick={handleSteamOpenIDLogin}
-                      className="px-5 py-3 rounded-2xl bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs sm:text-sm font-mono transition shadow-[0_0_25px_rgba(34,211,238,0.4)] flex items-center gap-2 active:scale-95"
+                      className="h-10 px-4 rounded-md bg-cyan-400 hover:bg-cyan-300 text-black font-extrabold text-xs sm:text-sm font-mono transition border border-cyan-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] flex items-center gap-2 active:scale-[0.98]"
                     >
                       <Key className="w-4 h-4 text-black" />
                       <span>登录我的 Steam 账号 (官方认证)</span>
@@ -480,7 +480,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                     {/* 2. Custom Input Toggle */}
                     <button
                       onClick={() => setShowCustomInput(!showCustomInput)}
-                      className="px-4 py-3 rounded-2xl bg-white/[0.06] hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-mono transition"
+                      className="h-10 px-4 rounded-md bg-white/[0.06] hover:bg-white/10 text-slate-200 border border-white/10 text-xs font-mono transition"
                     >
                       {showCustomInput ? "收起输入框" : "输入 Steam 昵称 / 链接"}
                     </button>
@@ -496,12 +496,12 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                         value={customSteamInput}
                         onChange={(e) => setCustomSteamInput(e.target.value)}
                         placeholder="输入你的 Steam 自定义昵称 / 主页链接 / 17位ID (如 gabelogannewell 或 https://steamcommunity.com/id/...)"
-                        className="flex-1 px-4 py-2.5 rounded-xl bg-black/50 border border-white/10 text-white text-xs focus:outline-none focus:border-cyan-400"
+                        className="flex-1 px-4 py-2.5 rounded-md bg-black/50 border border-white/10 text-white text-xs focus:outline-none focus:border-cyan-400"
                       />
                       <button
                         type="submit"
                         disabled={steamLoading || !customSteamInput.trim()}
-                        className="px-5 py-2.5 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-black font-bold text-xs transition"
+                        className="h-10 px-5 rounded-md bg-cyan-400 hover:bg-cyan-300 border border-cyan-300 text-black font-bold text-xs shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] active:scale-[0.98] transition"
                       >
                         {steamLoading ? "查询中..." : "绑定此账号"}
                       </button>
@@ -512,7 +512,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                       <button
                         type="button"
                         onClick={() => loadSteamProfile("76561197960287930")}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-cyan-300 transition flex items-center gap-1"
+                        className="px-2.5 py-1 rounded-md bg-white/[0.06] hover:bg-white/10 text-cyan-300 transition flex items-center gap-1"
                       >
                         <Crown className="w-3 h-3 text-cyan-400" />
                         <span>Gabe Newell (Valve CEO)</span>
@@ -520,7 +520,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                       <button
                         type="button"
                         onClick={() => loadSteamProfile("76561198034202275")}
-                        className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/10 text-emerald-300 transition flex items-center gap-1"
+                        className="px-2.5 py-1 rounded-md bg-white/[0.06] hover:bg-white/10 text-emerald-300 transition flex items-center gap-1"
                       >
                         <Gamepad2 className="w-3 h-3 text-emerald-400" />
                         <span>CS2 5000h 高玩</span>
@@ -531,7 +531,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
 
                 {/* Privacy Notice or Warning */}
                 {steamNotice && (
-                  <div className="mt-3 p-3 rounded-xl bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-mono flex items-center gap-2">
+                  <div className="mt-3 p-3 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-mono flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{steamNotice}</span>
                   </div>
@@ -565,7 +565,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
       {/* ==================== 2. MAIN TERMINAL GRID (CARD + PAYMENTS) ==================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Col 1 (5 cols): 3D Physical Visa AgentCard */}
-        <div className="lg:col-span-5 rounded-3xl bg-[#121622]/90 border border-white/[0.08] p-6 space-y-6 shadow-xl backdrop-blur-xl flex flex-col justify-between">
+        <div className="lg:col-span-5 rounded-lg bg-[#121622]/90 border border-white/[0.08] p-6 space-y-6 shadow-xl backdrop-blur-xl flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3 mb-4">
               <span className="text-xs font-mono text-slate-300 uppercase tracking-wider flex items-center gap-2">
@@ -591,7 +591,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 }}
                 transition={{ type: "spring", stiffness: 350, damping: 25 }}
                 style={{ transformStyle: "preserve-3d" }}
-                className={`group relative w-full h-56 rounded-2xl p-5 flex flex-col justify-between shadow-2xl overflow-hidden cursor-pointer select-none transition-shadow duration-300 ${
+                className={`group relative w-full h-56 rounded-md p-5 flex flex-col justify-between shadow-2xl overflow-hidden cursor-pointer select-none transition-shadow duration-300 ${
                   cardFrozen
                     ? "bg-gradient-to-br from-slate-800 to-slate-950 border border-red-500/40 opacity-75"
                     : "bg-gradient-to-br from-slate-900 via-[#182033] to-black border border-white/20 hover:border-cyan-400/80 shadow-[0_12px_35px_rgba(0,0,0,0.7)] hover:shadow-[0_20px_50px_rgba(0,242,254,0.3)]"
@@ -670,7 +670,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
             <div className="grid grid-cols-2 gap-3 pt-1">
               <button
                 onClick={() => setStripeModalOpen(true)}
-                className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-bold text-xs font-mono transition shadow-[0_0_20px_rgba(99,102,241,0.35)] active:scale-95"
+                className="h-10 flex items-center justify-center gap-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs font-mono transition border border-indigo-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98]"
               >
                 <DollarSign className="w-4 h-4" />
                 <span>使用 Stripe 充值</span>
@@ -678,7 +678,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
 
               <button
                 onClick={() => setCardFrozen(!cardFrozen)}
-                className={`flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-mono font-bold transition border ${
+                className={`h-10 flex items-center justify-center gap-2 rounded-md text-xs font-mono font-semibold transition border ${
                   cardFrozen
                     ? "bg-red-500/20 text-red-300 border-red-500/40"
                     : "bg-white/[0.06] hover:bg-white/10 text-white border-white/10"
@@ -692,7 +692,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
         </div>
 
         {/* Col 2 (7 cols): High-Frequency Visa Micro-Payment Simulator (KISS) */}
-        <div className="lg:col-span-7 rounded-3xl bg-[#121622]/90 border border-white/[0.08] p-6 space-y-5 shadow-xl backdrop-blur-xl flex flex-col justify-between">
+        <div className="lg:col-span-7 rounded-lg bg-[#121622]/90 border border-white/[0.08] p-6 space-y-5 shadow-xl backdrop-blur-xl flex flex-col justify-between">
           <div>
             <div className="flex items-center justify-between border-b border-white/[0.08] pb-3">
               <div className="flex items-center gap-2.5">
@@ -714,7 +714,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 <button
                   onClick={() => handleSimulateMicropayment(4.50, "Steam Games / Valve", "7999")}
                   disabled={micropayLoading}
-                  className="p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-cyan-400/50 text-left transition space-y-1 active:scale-95 group"
+                  className="p-3.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-cyan-400/50 text-left transition space-y-1 active:scale-[0.98] group"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-xs text-white flex items-center gap-1.5">
@@ -729,7 +729,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 <button
                   onClick={() => handleSimulateMicropayment(3.20, "Starbucks Coffee", "5814")}
                   disabled={micropayLoading}
-                  className="p-3.5 rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-emerald-400/50 text-left transition space-y-1 active:scale-95 group"
+                  className="p-3.5 rounded-md bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 hover:border-emerald-400/50 text-left transition space-y-1 active:scale-[0.98] group"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-xs text-white flex items-center gap-1.5">
@@ -744,7 +744,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 <button
                   onClick={() => handleSimulateMicropayment(50.00, "Luxury Goods", "5944")}
                   disabled={micropayLoading}
-                  className="p-3.5 rounded-2xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-left transition space-y-1 active:scale-95 group"
+                  className="p-3.5 rounded-md bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-left transition space-y-1 active:scale-[0.98] group"
                 >
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-xs text-red-300 flex items-center gap-1.5">
@@ -762,7 +762,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 <motion.div
                   initial={{ opacity: 0, y: -5 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={`p-3 rounded-2xl text-xs font-mono flex items-center gap-2 border ${
+                  className={`p-3 rounded-md text-xs font-mono flex items-center gap-2 border ${
                     micropayNotice.type === "success"
                       ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                       : "bg-red-500/20 text-red-300 border-red-500/40"
@@ -831,7 +831,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="w-full max-w-md rounded-3xl bg-[#141824] border border-white/20 p-6 space-y-5 shadow-2xl font-mono text-white"
+              className="w-full max-w-md rounded-lg bg-[#141824] border border-white/20 p-6 space-y-5 shadow-2xl font-mono text-white"
             >
               <div className="flex items-center justify-between border-b border-white/10 pb-3">
                 <div className="flex items-center gap-2">
@@ -840,14 +840,14 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 </div>
                 <button
                   onClick={() => setStripeModalOpen(false)}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/10 transition"
+                  className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-white/10 transition"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               <div className="space-y-3">
-                <div className="p-3 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-xs space-y-1">
+                <div className="p-3 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-xs space-y-1">
                   <span className="text-indigo-300 font-bold flex items-center gap-1.5">
                     <Info className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
                     <span>充值资金流向说明：</span>

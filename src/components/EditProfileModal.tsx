@@ -129,7 +129,7 @@ export function EditProfileModal({
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        className="relative w-full max-w-lg rounded-3xl bg-[#121624] border border-white/15 p-6 shadow-2xl overflow-hidden text-white"
+        className="relative w-full max-w-lg rounded-lg bg-[#121624] border border-white/15 p-6 shadow-2xl overflow-hidden text-white"
       >
         {/* Glow */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full blur-[80px] pointer-events-none" />
@@ -137,7 +137,7 @@ export function EditProfileModal({
         {/* Modal Header */}
         <div className="flex items-center justify-between pb-4 border-b border-white/10">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-400">
+            <div className="w-8 h-8 rounded-md bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-400">
               <User className="w-4 h-4" />
             </div>
             <div>
@@ -149,7 +149,7 @@ export function EditProfileModal({
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition"
+            className="p-1.5 rounded-md hover:bg-white/10 text-slate-400 hover:text-white transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -162,7 +162,7 @@ export function EditProfileModal({
               头像设置 (Avatar URL / Preset)
             </label>
             <div className="flex items-center gap-3">
-              <div className="w-14 h-14 rounded-2xl overflow-hidden bg-black/50 border border-white/20 shrink-0 relative flex items-center justify-center">
+              <div className="w-14 h-14 rounded-md overflow-hidden bg-black/50 border border-white/20 shrink-0 relative flex items-center justify-center">
                 {picture ? (
                   <Image
                     src={picture}
@@ -182,7 +182,7 @@ export function EditProfileModal({
                   value={picture}
                   onChange={(e) => setPicture(e.target.value)}
                   placeholder="https://... 头像直链"
-                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-400"
+                  className="w-full px-3 py-2 rounded-md bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-400"
                 />
                 <div className="flex items-center gap-1.5">
                   <span className="text-[10px] text-slate-400 font-mono">预设:</span>
@@ -213,7 +213,7 @@ export function EditProfileModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="你的昵称"
-                className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-400 pl-9"
+                className="w-full px-3 py-2.5 rounded-md bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-400 pl-9"
               />
               <User className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
@@ -230,7 +230,7 @@ export function EditProfileModal({
                 value={bio}
                 onChange={(e) => setBio(e.target.value)}
                 placeholder="介绍你的 Web3 经历与开发专长..."
-                className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-400"
+                className="w-full px-3 py-2 rounded-md bg-black/40 border border-white/10 text-xs text-white focus:outline-none focus:border-blue-400"
               />
             </div>
           </div>
@@ -258,14 +258,14 @@ export function EditProfileModal({
                 value={boundWallet}
                 onChange={(e) => setBoundWallet(e.target.value)}
                 placeholder="0x... Monad 钱包地址"
-                className="w-full px-3 py-2.5 rounded-xl bg-black/40 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-blue-400 pl-9"
+                className="w-full px-3 py-2.5 rounded-md bg-black/40 border border-white/10 text-xs font-mono text-white focus:outline-none focus:border-blue-400 pl-9"
               />
               <Wallet className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             </div>
           </div>
 
           {/* Email Info (Read-only) */}
-          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/10 flex items-center justify-between text-xs">
+          <div className="p-3 rounded-md bg-white/[0.03] border border-white/10 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 text-slate-400">
               <Mail className="w-3.5 h-3.5" />
               <span>注册 Google 邮箱</span>
@@ -278,14 +278,14 @@ export function EditProfileModal({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-mono text-xs transition"
+              className="h-9 px-4 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 font-mono text-xs transition border border-white/10"
             >
               取消
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-blue-500/25 active:scale-95"
+              className="h-9 px-4 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-mono text-xs font-bold transition flex items-center gap-2 border border-blue-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98]"
             >
               {isSubmitting ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />

@@ -63,15 +63,13 @@ export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsP
         items,
         {
           opacity: 0,
-          y: 40,
-          filter: "blur(8px)",
+          y: 30,
         },
         {
           opacity: 1,
           y: 0,
-          filter: "blur(0px)",
-          duration: 0.9,
-          stagger: 0.14,
+          duration: 0.8,
+          stagger: 0.12,
           ease: "power2.out",
           scrollTrigger: {
             trigger: container,
@@ -86,61 +84,63 @@ export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsP
   }, []);
 
   return (
-    <section ref={containerRef} className="max-w-7xl mx-auto px-4 sm:px-8 py-24 space-y-12 select-none">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
-        <div className="space-y-1">
-          <div className="text-[11px] font-mono tracking-widest text-cyan-400 uppercase">
-            [PARALLEL EXECUTION RAILS]
-          </div>
-          <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase font-mono">
-            Protocol Architecture
-          </h3>
-        </div>
-        <div className="text-xs font-mono text-slate-400">
-          SELECT NAVIGATION RAIL TO ENGAGE
-        </div>
-      </div>
-
-      <div className="divide-y divide-white/[0.08]">
-        {rails.map((rail) => (
-          <div
-            key={rail.index}
-            onClick={() => onSelectView(rail.view)}
-            className="gateway-rail-row group relative py-8 sm:py-10 flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer transition-all duration-300 hover:pl-4 will-change-transform"
-          >
-            {/* Background Hover Glow Sweep */}
-            <div className="pointer-events-none absolute inset-0 bg-white/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10 rounded-2xl" />
-
-            {/* Left: Index & Title & Desc */}
-            <div className="space-y-2 max-w-2xl">
-              <div className="flex items-center gap-4">
-                <span className="text-xs font-mono text-cyan-400 font-bold">
-                  {rail.index}
-                </span>
-                <span className="text-white/20 text-xs font-mono">{"//"}</span>
-                <span className="text-xs font-mono text-slate-400 tracking-wider">
-                  {rail.spec}
-                </span>
-              </div>
-              <h4 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white group-hover:text-cyan-300 transition-colors font-mono tracking-tight uppercase">
-                {rail.title}
-              </h4>
-              <p className="text-xs sm:text-sm text-slate-400 font-mono leading-relaxed">
-                {rail.desc}
-              </p>
+    <section ref={containerRef} className="w-full bg-white text-slate-900 border-t border-slate-200 py-24 select-none">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 space-y-12">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-slate-200 pb-6">
+          <div className="space-y-1">
+            <div className="text-[11px] font-mono tracking-widest text-[#836ef9] uppercase font-bold">
+              [PARALLEL EXECUTION RAILS]
             </div>
+            <h3 className="text-2xl sm:text-4xl font-black text-slate-950 tracking-tight uppercase font-mono">
+              Protocol Architecture
+            </h3>
+          </div>
+          <div className="text-xs font-mono text-slate-500">
+            SELECT NAVIGATION RAIL TO ENGAGE
+          </div>
+        </div>
 
-            {/* Right: Technical Tag & Action */}
-            <div className="flex items-center gap-4 self-start md:self-auto shrink-0">
-              <span className="px-3 py-1 rounded-full border border-white/10 text-[11px] font-mono text-slate-300 group-hover:border-cyan-400/50 group-hover:text-cyan-300 transition-colors">
-                [{rail.tag}]
-              </span>
-              <div className="w-10 h-10 rounded-full border border-white/10 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:border-white/40 group-hover:translate-x-1.5 transition-all">
-                <ArrowRight className="w-4 h-4" />
+        <div className="divide-y divide-slate-200">
+          {rails.map((rail) => (
+            <div
+              key={rail.index}
+              onClick={() => onSelectView(rail.view)}
+              className="gateway-rail-row group relative py-8 sm:py-10 flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer transition-all duration-300 hover:pl-4 will-change-transform"
+            >
+              {/* Background Hover Sweep */}
+              <div className="pointer-events-none absolute inset-0 bg-slate-50/80 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10 rounded-lg" />
+
+              {/* Left: Index & Title & Desc */}
+              <div className="space-y-2 max-w-2xl">
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-mono text-[#836ef9] font-bold">
+                    {rail.index}
+                  </span>
+                  <span className="text-slate-300 text-xs font-mono">{"//"}</span>
+                  <span className="text-xs font-mono text-slate-500 tracking-wider font-medium">
+                    {rail.spec}
+                  </span>
+                </div>
+                <h4 className="text-2xl sm:text-3xl md:text-4xl font-bold text-slate-950 group-hover:text-[#836ef9] transition-colors font-mono tracking-tight uppercase">
+                  {rail.title}
+                </h4>
+                <p className="text-xs sm:text-sm text-slate-600 font-mono leading-relaxed">
+                  {rail.desc}
+                </p>
+              </div>
+
+              {/* Right: Technical Tag & Action */}
+              <div className="flex items-center gap-4 self-start md:self-auto shrink-0">
+                <span className="px-3 py-1 rounded-md border border-slate-200 bg-slate-50 text-[11px] font-mono text-slate-700 group-hover:border-[#836ef9]/50 group-hover:text-[#836ef9] transition-colors">
+                  [{rail.tag}]
+                </span>
+                <div className="w-10 h-10 rounded-md border border-slate-200 bg-white shadow-xs flex items-center justify-center text-slate-500 group-hover:text-slate-950 group-hover:border-slate-400 group-hover:translate-x-1.5 transition-all">
+                  <ArrowRight className="w-4 h-4" />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </section>
   );

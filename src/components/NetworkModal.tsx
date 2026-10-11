@@ -21,7 +21,7 @@ export function NetworkModal({ isOpen, onClose, onSwitch }: NetworkModalProps) {
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="glass-panel-glow rounded-3xl p-6 sm:p-8 max-w-md w-full border border-monad-500/40 shadow-2xl relative"
+          className="glass-panel-glow rounded-lg p-6 sm:p-8 max-w-md w-full border border-purple-500/40 shadow-xl relative"
         >
           <button
             onClick={onClose}
@@ -30,7 +30,7 @@ export function NetworkModal({ isOpen, onClose, onSwitch }: NetworkModalProps) {
             <X className="w-5 h-5" />
           </button>
 
-          <div className="w-12 h-12 rounded-xl bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 mb-5">
+          <div className="w-12 h-12 rounded-md bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-400 mb-5">
             <AlertTriangle className="w-6 h-6" />
           </div>
 
@@ -40,7 +40,7 @@ export function NetworkModal({ isOpen, onClose, onSwitch }: NetworkModalProps) {
             your wallet to interact with on-chain identity and trust contracts.
           </p>
 
-          <div className="p-4 rounded-2xl bg-monad-950/70 border border-monad-500/20 space-y-2 mb-6 font-mono text-xs">
+          <div className="p-4 rounded-md bg-monad-950/70 border border-monad-500/20 space-y-2 mb-6 font-mono text-xs">
             <div className="flex justify-between">
               <span className="text-monad-400">Network Name:</span>
               <span className="text-white font-bold">Monad Testnet</span>
@@ -62,7 +62,7 @@ export function NetworkModal({ isOpen, onClose, onSwitch }: NetworkModalProps) {
           <div className="space-y-3">
             <button
               onClick={onSwitch}
-              className="w-full flex items-center justify-center gap-2 py-3.5 px-6 rounded-xl bg-gradient-to-r from-monad-600 to-monad-500 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-sm shadow-glow transition duration-200"
+              className="w-full h-10 px-6 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition flex items-center justify-center gap-2 cursor-pointer"
             >
               <span>Add / Switch to Monad</span>
               <ArrowRight className="w-4 h-4" />
