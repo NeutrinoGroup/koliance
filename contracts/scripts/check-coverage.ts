@@ -63,7 +63,7 @@ const INCLUDED_PREFIXES = [
  * `branchesFound === 0` path now reports `n/a` and refuses to score, rather than
  * inventing a number.
  *
- * ⚠️ THE NUMBER IS LINE-ENDING SENSITIVE. Read this before changing the floor.
+ * [WARN] THE NUMBER IS LINE-ENDING SENSITIVE. Read this before changing the floor.
  *
  * Hardhat maps executed bytecode back to source by BYTE OFFSET, so a CRLF
  * checkout and an LF checkout do not measure the same thing from identical code.
@@ -229,12 +229,12 @@ function main(): void {
   }
 
   if (failures.length > 0) {
-    console.error(`\n✗ Coverage below floor: ${failures.join(", ")}\n`);
+    console.error(`\n[ERROR] Coverage below floor: ${failures.join(", ")}\n`);
     process.exitCode = 1;
     return;
   }
 
-  console.log(`\n✓ Coverage above floor\n`);
+  console.log(`\n[OK] Coverage above floor\n`);
 }
 
 main();
