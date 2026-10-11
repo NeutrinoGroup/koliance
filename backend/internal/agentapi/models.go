@@ -91,7 +91,9 @@ type PackageClaimResponse struct {
 // APIKeyCredential represents the persisted key metadata and quota ledger.
 type APIKeyCredential struct {
 	KeyID          string    `json:"key_id"`
+	UserID         string    `json:"user_id,omitempty"`
 	WalletAddress  string    `json:"wallet_address"`
+	Name           string    `json:"name,omitempty"`
 	KeyPrefix      string    `json:"key_prefix"`
 	KeyHash        [32]byte  `json:"-"`
 	Tier           string    `json:"tier"`

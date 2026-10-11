@@ -571,6 +571,7 @@ func NewRouter(d Deps) http.Handler {
 		var req struct {
 			WalletAddress string `json:"wallet_address"`
 			Tier          string `json:"tier"`
+			Name          string `json:"name"`
 		}
 		if !decodeJSON(w, r, &req) {
 			return
@@ -578,7 +579,7 @@ func NewRouter(d Deps) http.Handler {
 		if req.Tier == "" {
 			req.Tier = "STARTER_FREE"
 		}
-		key, err := d.AgentAPI.GenerateAPIKey(req.WalletAddress, req.Tier)
+		key, err := d.AgentAPI.GenerateAPIKey(req.WalletAddress, req.Tier, req.Name)
 		if err != nil {
 			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_KEY_GEN: "+err.Error(), nil)
 			return

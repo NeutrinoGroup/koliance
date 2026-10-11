@@ -1,6 +1,7 @@
 package agentapi
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -102,12 +103,17 @@ func ValidateWallet(addr string) error {
 	return nil
 }
 
-// GenerateAPIKey generates a new kol_live_ key for a wallet address.
-func (s *Service) GenerateAPIKey(walletAddress string, tier string) (*CreatedAPIKey, error) {
+// GenerateAPIKey generates a new kol_live_ key for a wallet address and persists to api_keys.
+func (s *Service) GenerateAPIKey(walletAddress string, tier string, optionalName ...string) (*CreatedAPIKey, error) {
 	if err := ValidateWallet(walletAddress); err != nil {
 		return nil, err
 	}
 	walletAddress = strings.ToLower(walletAddress)
+
+	keyName := "Default API Key"
+	if len(optionalName) > 0 && optionalName[0] != "" {
+		keyName = optionalName[0]
+	}
 
 	randBytes := make([]byte, 24)
 	if _, err := rand.Read(randBytes); err != nil {
@@ -129,7 +135,9 @@ func (s *Service) GenerateAPIKey(walletAddress string, tier string) (*CreatedAPI
 	keyID := fmt.Sprintf("key_%s", hex.EncodeToString(randBytes[:6]))
 	cred := &APIKeyCredential{
 		KeyID:          keyID,
+		UserID:         "did:koliance:wallet:" + walletAddress,
 		WalletAddress:  walletAddress,
+		Name:           keyName,
 		KeyPrefix:      rawKey[:15] + "...",
 		KeyHash:        hash,
 		Tier:           tier,
@@ -144,6 +152,21 @@ func (s *Service) GenerateAPIKey(walletAddress string, tier string) (*CreatedAPI
 	s.apiKeys[hashKey] = cred
 	s.walletKeys[walletAddress] = cred
 	s.rateLimiters[hashKey] = newTokenBucket(cred.RateLimitRPM)
+
+	// Persist to api_keys table if database pool is active
+	if s.db != nil && s.db.Pool != nil && s.db.IsConnected {
+		go func(c *APIKeyCredential, h string) {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			_, _ = s.db.Pool.Exec(ctx,
+				`INSERT INTO api_keys (id, user_id, wallet_address, name, key_prefix, key_hash, tier, remaining_quota, free_claims_left, rate_limit_rpm, status, created_at, updated_at)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+				 ON CONFLICT (key_hash) DO NOTHING`,
+				c.KeyID, c.UserID, c.WalletAddress, c.Name, c.KeyPrefix, h,
+				c.Tier, c.RemainingQuota, c.FreeClaimsLeft, c.RateLimitRPM, c.Status, c.CreatedAt, c.CreatedAt,
+			)
+		}(cred, hashKey)
+	}
 
 	return &CreatedAPIKey{
 		APIKeyCredential: *cred,
