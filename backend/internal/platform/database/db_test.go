@@ -36,3 +36,25 @@ func TestSystemConfigMemoryFallback(t *testing.T) {
 		t.Errorf("expected error for non_existent_key, got nil")
 	}
 }
+
+// ==================== BENCHMARKS ====================
+
+func BenchmarkSystemConfigGet(b *testing.B) {
+	db := New("")
+	ctx := context.Background()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, _ = db.GetSystemConfig(ctx, "maintenance_mode")
+	}
+}
+
+func BenchmarkSystemConfigSet(b *testing.B) {
+	db := New("")
+	ctx := context.Background()
+	val := []byte(`{"enabled":true}`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_ = db.SetSystemConfig(ctx, "maintenance_mode", val, "benchmark update")
+	}
+}
+
