@@ -590,15 +590,13 @@ function MainContent() {
                 <span>Explorer</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
-              <a
-                href="https://github.com/monad-developers/hardhat3-monad"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:text-white transition flex items-center gap-1"
+              <button
+                onClick={() => setContactModalOpen(true)}
+                className="hover:text-white transition flex items-center gap-1.5 text-slate-300 hover:text-cyan-300 cursor-pointer"
               >
-                <Github className="w-3.5 h-3.5" />
-                <span>Hardhat</span>
-              </a>
+                <Mail className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Contact</span>
+              </button>
             </div>
           </div>
         </footer>
@@ -609,6 +607,12 @@ function MainContent() {
         isOpen={networkModalOpen}
         onClose={() => setNetworkModalOpen(false)}
         onSwitch={handleSwitchNetwork}
+      />
+
+      {/* Contact & Team Modal */}
+      <ContactModal
+        isOpen={contactModalOpen}
+        onClose={() => setContactModalOpen(false)}
       />
     </div>
   );
