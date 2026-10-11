@@ -4,7 +4,41 @@ This document defines the operational directives for Autonomous AI Agents and hu
 
 ---
 
-## 1. Core Operating Directive: High-Frequency 3% Incremental Commits
+## 1. Context Alignment & Pre-Execution Synchronization Directive (执行前文档同步与现状分析)
+
+Before executing any instructions, modifying code, or designing architecture, all autonomous agents and developers MUST follow the **Documentation-Driven Synchronization Protocol**:
+
+### 1.1 Mandatory Pre-Execution Document Reading (每次执行前必须读取 docs 目录)
+- **Zero-Assumption Principle**: Never execute based on unverified assumptions or out-of-date context.
+- **Reading Scope**: Before taking action, inspect and reference the authoritative documents in `docs/`:
+  - `docs/planning/`: Master roadmaps, architectural design documents, ADR references, and target definitions (e.g., `README.md`, `推进方案-Trust-Identity-AI-Infrastructure.md`, `项目目标.md`).
+  - `docs/GAP台账.md`: The single source of truth for all tracked defects, pending items, blockers, and Definitions of Done (DoD).
+  - `docs/changes/`: The sequential record of past modifications (`001-...md` through latest), capturing rationale, touched files, and verification commands.
+  - `docs/adr/`: Architectural Decision Records governing system constraints and patterns.
+
+### 1.2 State Analysis: What is Done vs. What is NOT Done (现状深度分析：已完成 vs 未完成)
+- **Analyze "What is Done" (已完成现状)**:
+  - Identify existing implemented features, passing test suites, deployed smart contracts, and closed GAP items.
+  - Treat completed code and verification suites as non-negotiable regression baselines. Never rewrite, duplicate, or dismantle working functionality without explicit architectural mandate.
+- **Analyze "What is NOT Done" (未完成与阻塞项)**:
+  - Cross-check user instructions against open items in `docs/GAP台账.md` and pending phases in `docs/planning/`.
+  - Distinguish between actionable items (ready to implement) and blocked items (`[WARN] Blocked`, external dependency wait, missing cryptographic parameters).
+  - Define the exact, tight ~3% scope of what needs to be addressed in the current step.
+
+### 1.3 Division of Responsibilities: `docs/planning/` vs `docs/changes/` (计划与变更的协同分工)
+- **`docs/planning/` (The Strategic Plan / 目标与演进计划)**:
+  - Answers: **"Where are we going, why, and what is the architecture specification?"**
+  - Contains overall milestones, target specifications, interface freeze documents, and multi-phase roadmaps.
+  - Acts as the architectural compass and reference for task alignment.
+- **`docs/changes/` (The Change Audit Trail / 每次修改留痕)**:
+  - Answers: **"What specifically was altered in this iteration, why, and how was it verified?"**
+  - Follows the "Document Before/With Code" rule: Every incremental modification batch must record its purpose, exact diff summary, and verification logs in `docs/changes/NNN-*.md`.
+  - Preserves immutable evidence of past state transitions and regressions guards.
+- **Dual-Anchor Synchronization**: `docs/planning/` sets the plan; `docs/changes/` logs the step-by-step progress. This structure guarantees that multi-agent threads and human contributors can hand off tasks seamlessly without context loss or drift.
+
+---
+
+## 2. Core Operating Directive: High-Frequency 3% Incremental Commits
 
 All autonomous agents and developers working with agents must adhere to the **Micro-Iteration Principle**:
 
@@ -16,10 +50,13 @@ All autonomous agents and developers working with agents must adhere to the **Mi
 ### Commit Cadence Flowchart
 
 ```
-[Inspect Target Problem]
+[Pre-Execution: Read docs/ (planning, changes, GAP台账)]
            │
            ▼
-[Apply ~3% Incremental Improvement]
+[Analyze Current State: What is Done vs. What is NOT Done]
+           │
+           ▼
+[Select Target & Apply ~3% Incremental Improvement]
            │
            ▼
 [Run Local Test & Lint Verification]
@@ -27,6 +64,9 @@ All autonomous agents and developers working with agents must adhere to the **Mi
     Pass? ─┴─► Fail: Revert or Fix in Place
            │
            ▼ (Pass)
+[Record Increment in docs/changes/ & Update GAP台账 / planning]
+           │
+           ▼
 [Atomic Git Commit with Conventional Commit Message]
            │
            ▼
@@ -35,14 +75,14 @@ All autonomous agents and developers working with agents must adhere to the **Mi
 
 ---
 
-## 2. Strict Formatting and Style Directive: Zero Emojis
+## 3. Strict Formatting and Style Directive: Zero Emojis
 
 - **No Emojis Policy**: Do not include Unicode emojis in code, log messages, commit messages, console output, comments, or documentation.
 - Use structured textual indicators: `[INFO]`, `[WARN]`, `[ERROR]`, `[OK]`, `[SUCCESS]`, `[PREREQUISITE]`.
 
 ---
 
-## 3. Mandatory Pre-Commit Gate (Local CI Matrix)
+## 4. Mandatory Pre-Commit Gate (Local CI Matrix)
 
 Before staging and committing any changes, run and verify the following gates:
 
@@ -66,7 +106,7 @@ go test -race ./...
 
 ---
 
-## 4. Security & Cryptographic Boundary Guidelines
+## 5. Security & Cryptographic Boundary Guidelines
 
 1. **Zero Plaintext Credentials**:
    - Secrets, private keys, API keys, and session tokens must never be written to repository files.
@@ -83,7 +123,7 @@ go test -race ./...
 
 ---
 
-## 5. Parity & Math Integrity
+## 6. Parity & Math Integrity
 
 - **Exact Precision**: On-chain smart contract verdicts are the authoritative source of truth.
 - Financial arithmetic must use integer / BigInt representation (Wei / 6-decimal USDC / 18-decimal shares).
@@ -91,7 +131,7 @@ go test -race ./...
 
 ---
 
-## 6. Strict Geometric Directive: Ban on Oval/Pill Cards & Buttons (拒接椭圆形卡片与按钮)
+## 7. Strict Geometric Directive: Ban on Oval/Pill Cards & Buttons (拒接椭圆形卡片与按钮)
 
 To maintain a top-tier developer SaaS aesthetic (comparable to Stripe, Vercel, Linear, and Supabase):
 
@@ -108,7 +148,7 @@ To maintain a top-tier developer SaaS aesthetic (comparable to Stripe, Vercel, L
 
 ---
 
-## 7. Traceability & User Operation Audit Directive (操作可追溯与交易历史)
+## 8. Traceability & User Operation Audit Directive (操作可追溯与交易历史)
 
 All user-facing workflows must maintain complete audit transparency:
 
@@ -119,3 +159,4 @@ All user-facing workflows must maintain complete audit transparency:
    - Full visibility into KOL Token acquisition events (block claims, mining rewards, transfers).
    - Full visibility into autonomous payment streams, including Order Hash, on-chain TX Hash, Monad testnet consensus state, and receipt links.
    - All records must persist per user account (syncing local state with backend telemetry).
+

@@ -36,6 +36,7 @@ export function CursorTrail() {
     let moveTimeout: NodeJS.Timeout;
 
     const handleMouseMove = (e: MouseEvent) => {
+      if (!e.isTrusted) return;
       mouse.x = e.clientX;
       mouse.y = e.clientY;
       mouse.isMoving = true;
