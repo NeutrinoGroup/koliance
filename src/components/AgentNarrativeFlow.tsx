@@ -16,12 +16,14 @@ import {
   RotateCw,
   Activity,
 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 interface AgentNarrativeFlowProps {
   onOpenConsole?: () => void;
 }
 
 export function AgentNarrativeFlow({ onOpenConsole }: AgentNarrativeFlowProps) {
+  const { lang, t } = useLanguage();
   const [currentStep, setCurrentStep] = useState<number>(0);
   const [autoPlay, setAutoPlay] = useState<boolean>(true);
   const [balance, setBalance] = useState<number>(120.42);
@@ -34,42 +36,42 @@ export function AgentNarrativeFlow({ onOpenConsole }: AgentNarrativeFlowProps) {
   const steps = [
     {
       id: 0,
-      title: "1. AI Agent Identity Generation",
+      title: t("narrative.step1_title"),
       tag: "STEP 01 // IDENTITY",
       icon: <Cpu className="w-4 h-4 text-cyan-400" />,
-      desc: "Agent registers identity with designated model weight (deepseek-r1 / gpt-4o) and deterministic cryptographic fingerprint.",
+      desc: t("narrative.step1_desc"),
       badge: "[IDENTITY VERIFIED]",
     },
     {
       id: 1,
-      title: "2. GitHub & Gaming Reputation Proof",
+      title: t("narrative.step2_title"),
       tag: "STEP 02 // REPUTATION",
       icon: <Github className="w-4 h-4 text-purple-400" />,
-      desc: "BUIDL metrics, code commits, and gaming telemetry attestations are ingested and verified without exposing private data.",
+      desc: t("narrative.step2_desc"),
       badge: "[CREDIT ATTESTED]",
     },
     {
       id: 2,
-      title: "3. EIP-712 Session Key Delegation",
+      title: t("narrative.step3_title"),
       tag: "STEP 03 // DELEGATION",
       icon: <KeyRound className="w-4 h-4 text-purple-400" />,
-      desc: "Card owner signs cryptographic session delegation with strict single-transaction ($100) and daily ($500) limit guardrails.",
+      desc: t("narrative.step3_desc"),
       badge: "[SESSION ACTIVE]",
     },
     {
       id: 3,
-      title: "4. Autonomous Micro-Payment Execution",
+      title: t("narrative.step4_title"),
       tag: "STEP 04 // PAYMENT",
       icon: <CreditCard className="w-4 h-4 text-emerald-400" />,
-      desc: "Agent pays compute clusters, data oracles, or APIs via gasless virtual cards, streaming real-time ledger updates.",
+      desc: t("narrative.step4_desc"),
       badge: "[PAYMENT CLEARED]",
     },
     {
       id: 4,
-      title: "5. Monad 10,000 TPS Batch Settlement",
+      title: t("narrative.step5_title"),
       tag: "STEP 05 // MONAD SETTLEMENT",
       icon: <Database className="w-4 h-4 text-cyan-400" />,
-      desc: "High-frequency micropayments and order hashes are aggregated and settled deterministically onto the Monad execution layer.",
+      desc: t("narrative.step5_desc"),
       badge: "[ON-CHAIN 10143]",
     },
   ];
@@ -107,13 +109,13 @@ export function AgentNarrativeFlow({ onOpenConsole }: AgentNarrativeFlowProps) {
         <div className="space-y-2">
           <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-mono">
             <Activity className="w-3.5 h-3.5" />
-            <span>[NARRATIVE FLOW] SCROLL-DRIVEN AGENT SETTLEMENT</span>
+            <span>{t("narrative.tag")}</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white">
-            Autonomous Agent Lifecycle & Trust Pipeline
+            {t("narrative.title")}
           </h2>
           <p className="text-xs sm:text-sm text-slate-400 font-mono max-w-2xl">
-            From zero identity to verified reputation, EIP-712 session delegation, autonomous payment, and deterministic Monad on-chain settlement.
+            {t("narrative.subtitle")}
           </p>
         </div>
 
@@ -123,7 +125,7 @@ export function AgentNarrativeFlow({ onOpenConsole }: AgentNarrativeFlowProps) {
             className="px-3 py-1.5 rounded-lg bg-[#141824] border border-white/10 text-xs font-mono text-slate-300 hover:text-white transition flex items-center gap-1.5 cursor-pointer"
           >
             {autoPlay ? <RotateCw className="w-3.5 h-3.5 animate-spin text-cyan-400" /> : <Play className="w-3.5 h-3.5" />}
-            <span>{autoPlay ? "Auto-Play [ON]" : "Play"}</span>
+            <span>{autoPlay ? `${t("narrative.autoplay")} [ON]` : t("narrative.paused")}</span>
           </button>
 
           {onOpenConsole && (
@@ -132,7 +134,7 @@ export function AgentNarrativeFlow({ onOpenConsole }: AgentNarrativeFlowProps) {
               className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-xs font-mono text-white font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-lg shadow-purple-900/30"
             >
               <Terminal className="w-3.5 h-3.5" />
-              <span>Launch API Console</span>
+              <span>{t("narrative.open_console")}</span>
             </button>
           )}
         </div>

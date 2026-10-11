@@ -29,6 +29,7 @@ import { TransferModal } from "@/components/TransferModal";
 import { monadTestnet, KOL_TOKEN_ADDRESS, KOL_TOKEN_ABI } from "@/lib/contract";
 import { truncateAddress } from "@/lib/utils";
 import { useKolianceAuth } from "@/components/Providers";
+import { useLanguage } from "@/lib/i18n";
 
 interface NavAuthBadgesProps {
   walletAddress?: string | null;
@@ -51,6 +52,7 @@ export function NavAuthBadges({
     linkGoogle,
     linkGithub,
   } = useKolianceAuth();
+  const { lang, t } = useLanguage();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -287,20 +289,20 @@ export function NavAuthBadges({
         {/* User Identity / Display Name */}
         <div className="flex flex-col text-left leading-tight">
           <span className="font-sans font-semibold text-white text-xs truncate max-w-[85px] sm:max-w-[110px]">
-            {googleUser ? googleUser.name : "个人中心"}
+            {googleUser ? googleUser.name : t("auth.user_center")}
           </span>
           <span className="text-[9px] font-mono text-slate-300 flex items-center gap-1">
             {effectiveWallet ? (
               <span className="text-emerald-400 font-semibold">{truncateAddress(effectiveWallet)}</span>
             ) : (
-              <span>编辑资料 / 账户</span>
+              <span>{lang === "en" ? "Edit Profile / Account" : "编辑资料 / 账户"}</span>
             )}
           </span>
         </div>
 
         {/* Small Action indicator */}
         <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#222a42] text-slate-200 border border-white/20 group-hover:bg-blue-600 group-hover:text-white transition hidden sm:inline">
-          编辑资料
+          {t("auth.edit_profile")}
         </span>
 
         <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5 group-hover:text-white transition" />
@@ -335,11 +337,11 @@ export function NavAuthBadges({
                   </div>
                   <div className="overflow-hidden">
                     <div className="text-xs font-bold text-white flex items-center gap-1">
-                      <span className="truncate max-w-[130px]">{googleUser?.name || "Koliance 开发者"}</span>
+                      <span className="truncate max-w-[130px]">{googleUser?.name || t("auth.developer_default")}</span>
                       {googleUser && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
                     </div>
                     <div className="text-[10px] font-mono text-slate-300 truncate max-w-[150px]">
-                      {googleUser?.email || "未登录谷歌账户"}
+                      {googleUser?.email || t("auth.google_unlinked")}
                     </div>
                   </div>
                 </div>
@@ -350,10 +352,10 @@ export function NavAuthBadges({
                     setDropdownOpen(false);
                     setEditModalOpen(true);
                   }}
-                  className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95"
+                  className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95 cursor-pointer"
                 >
                   <Edit3 className="w-3 h-3 text-white" />
-                  <span>编辑资料</span>
+                  <span>{t("auth.edit_profile")}</span>
                 </button>
               </div>
 
@@ -370,14 +372,14 @@ export function NavAuthBadges({
               <div className="flex items-center justify-between text-xs font-mono">
                 <span className="text-white flex items-center gap-1.5 font-bold">
                   <Wallet className="w-4 h-4 text-purple-400" />
-                  <span>Monad 链上钱包</span>
+                  <span>{t("auth.onchain_wallet")}</span>
                 </span>
                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
                   <span className="text-[10px] text-purple-300 font-bold bg-purple-950/60 border border-purple-500/50 px-2 py-0.5 rounded-full">
-                    {walletAddress ? `${kolBalance} KOL` : "未连接"}
+                    {walletAddress ? `${kolBalance} KOL` : t("auth.wallet_unconnected")}
                   </span>
                   <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-500/50 px-2 py-0.5 rounded-full">
-                    {walletAddress ? `${balance} MON` : "未连接"}
+                    {walletAddress ? `${balance} MON` : t("auth.wallet_unconnected")}
                   </span>
                 </div>
               </div>
@@ -389,22 +391,22 @@ export function NavAuthBadges({
                     <div className="flex items-center gap-1.5">
                       <button
                         onClick={() => copyToClipboard(walletAddress)}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition flex items-center gap-1 border border-white/10"
-                        title="复制地址"
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition flex items-center gap-1 border border-white/10 cursor-pointer"
+                        title={t("auth.copy_address")}
                       >
                         {copied ? (
                           <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                         ) : (
                           <Copy className="w-3 h-3" />
                         )}
-                        <span>{copied ? "已复制" : "复制"}</span>
+                        <span>{copied ? t("auth.copied") : t("auth.copy")}</span>
                       </button>
                       <a
                         href={`${monadTestnet.blockExplorers.default.url}/address/${walletAddress}`}
                         target="_blank"
                         rel="noreferrer"
                         className="text-[10px] p-1 rounded bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition border border-white/10"
-                        title="在区块浏览器查看"
+                        title={t("auth.view_explorer")}
                       >
                         <ExternalLink className="w-3 h-3" />
                       </a>
@@ -419,10 +421,10 @@ export function NavAuthBadges({
                         setDropdownOpen(false);
                         setTransferModalOpen(true);
                       }}
-                      className="py-1.5 px-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-purple-400/40"
+                      className="py-1.5 px-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-purple-400/40 cursor-pointer"
                     >
                       <Coins className="w-3 h-3 text-purple-200" />
-                      <span>转账 KOL</span>
+                      <span>{t("auth.transfer_kol")}</span>
                     </button>
                     <button
                       onClick={() => {
@@ -430,20 +432,20 @@ export function NavAuthBadges({
                         setDropdownOpen(false);
                         setTransferModalOpen(true);
                       }}
-                      className="py-1.5 px-2 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-emerald-400/40"
+                      className="py-1.5 px-2 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-emerald-400/40 cursor-pointer"
                     >
                       <Send className="w-3 h-3 text-emerald-200" />
-                      <span>转账 MON</span>
+                      <span>{t("auth.transfer_mon")}</span>
                     </button>
                     <button
                       onClick={() => {
                         setDropdownOpen(false);
                         onDisconnectWallet?.();
                       }}
-                      className="py-1.5 px-2 rounded-lg bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1"
+                      className="py-1.5 px-2 rounded-lg bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1 cursor-pointer"
                     >
                       <LogOut className="w-3 h-3" />
-                      <span>断开</span>
+                      <span>{t("auth.disconnect")}</span>
                     </button>
                   </div>
 
@@ -463,17 +465,19 @@ export function NavAuthBadges({
               ) : (
                 <div className="space-y-2">
                   <p className="text-[11px] text-slate-300 font-sans">
-                    连接 Monad 钱包以进行链上转账、资产抵押与信用背书。
+                    {lang === "en"
+                      ? "Connect your Monad wallet for on-chain transfers, asset staking, and credit endorsement."
+                      : "连接 Monad 钱包以进行链上转账、资产抵押与信用背书。"}
                   </p>
                   <button
                     onClick={() => {
                       setDropdownOpen(false);
                       onConnectWallet?.();
                     }}
-                    className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-95"
+                    className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
                   >
                     <Wallet className="w-3.5 h-3.5 text-black" />
-                    <span>立即连接钱包 (Connect Wallet)</span>
+                    <span>{lang === "en" ? "Connect Monad Wallet" : "立即连接钱包 (Connect Wallet)"}</span>
                   </button>
                 </div>
               )}
@@ -484,9 +488,11 @@ export function NavAuthBadges({
               <div className="flex items-center justify-between text-[11px] font-mono text-slate-200 px-0.5">
                 <span className="flex items-center gap-1 font-semibold">
                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>多轨身份背书与授信</span>
+                  <span>{lang === "en" ? "Multi-Rail Credential Attestation" : "多轨身份背书与授信"}</span>
                 </span>
-                <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-500/30">额度增强</span>
+                <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                  {lang === "en" ? "Credit Boost" : "额度增强"}
+                </span>
               </div>
 
               {/* Google Row */}
@@ -500,11 +506,11 @@ export function NavAuthBadges({
                   </svg>
                   <div>
                     <div className="text-xs font-bold text-white flex items-center gap-1">
-                      <span>Google 认证</span>
+                      <span>{lang === "en" ? "Google Identity" : "Google 认证"}</span>
                       {googleUser && <CheckCircle2 className="w-3 h-3 text-blue-400" />}
                     </div>
                     <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
-                      {googleUser ? (googleUser.synthetic ? "[SYNTHETIC] 0 USD 授信" : googleUser.email) : "+$1,200 USD 授信"}
+                      {googleUser ? (googleUser.synthetic ? "[SYNTHETIC] 0 USD" : googleUser.email) : "+$1,200 USD"}
                     </div>
                   </div>
                 </div>
@@ -514,22 +520,22 @@ export function NavAuthBadges({
                       localStorage.removeItem("koliance_google_profile");
                       syncAuthState();
                     }}
-                    className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition"
+                    className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                   >
-                    解除
+                    {lang === "en" ? "Unlink" : "解除"}
                   </button>
                 ) : (
                   <div className="flex items-center gap-1">
                     <button
                       onClick={handleGoogleLogin}
-                      className="text-[10px] font-mono px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-sm"
+                      className="text-[10px] font-mono px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-sm cursor-pointer"
                     >
-                      登录
+                      {lang === "en" ? "Sign In" : "登录"}
                     </button>
                     <button
                       onClick={handleInstantGoogleDemo}
-                      title="模拟登录"
-                      className="p-1 rounded bg-[#222a42] hover:bg-[#2c3652] text-slate-200 border border-white/10"
+                      title={lang === "en" ? "Synthetic Demo" : "模拟登录"}
+                      className="p-1 rounded bg-[#222a42] hover:bg-[#2c3652] text-slate-200 border border-white/10 cursor-pointer"
                     >
                       <Sparkles className="w-3 h-3 text-blue-300" />
                     </button>
@@ -547,7 +553,7 @@ export function NavAuthBadges({
                       {githubUser && <CheckCircle2 className="w-3 h-3 text-indigo-400" />}
                     </div>
                     <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
-                      {githubUser ? `@${githubUser.username}` : "+$1,000 USD 授信"}
+                      {githubUser ? `@${githubUser.username}` : "+$1,000 USD"}
                     </div>
                   </div>
                 </div>
@@ -557,16 +563,16 @@ export function NavAuthBadges({
                       localStorage.removeItem("koliance_github_user");
                       syncAuthState();
                     }}
-                    className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition"
+                    className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                   >
-                    解除
+                    {lang === "en" ? "Unlink" : "解除"}
                   </button>
                 ) : (
                   <button
                     onClick={handleGithubLogin}
-                    className="text-[10px] font-mono px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-sm"
+                    className="text-[10px] font-mono px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-sm cursor-pointer"
                   >
-                    授权
+                    {lang === "en" ? "Authorize" : "授权"}
                   </button>
                 )}
               </div>
@@ -577,11 +583,11 @@ export function NavAuthBadges({
                   <Gamepad2 className="w-4 h-4 text-cyan-400" />
                   <div>
                     <div className="text-xs font-bold text-white flex items-center gap-1">
-                      <span>Steam 游戏时长</span>
+                      <span>{lang === "en" ? "Steam Gameplay" : "Steam 游戏时长"}</span>
                       {steamUser && <CheckCircle2 className="w-3 h-3 text-cyan-400" />}
                     </div>
                     <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
-                      {steamUser ? steamUser.personaName : "+$800 USD 授信"}
+                      {steamUser ? steamUser.personaName : "+$800 USD"}
                     </div>
                   </div>
                 </div>
@@ -591,16 +597,16 @@ export function NavAuthBadges({
                       localStorage.removeItem("koliance_steam_id");
                       syncAuthState();
                     }}
-                    className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition"
+                    className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                   >
-                    解除
+                    {lang === "en" ? "Unlink" : "解除"}
                   </button>
                 ) : (
                   <button
                     onClick={handleSteamLogin}
-                    className="text-[10px] font-mono px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition shadow-sm"
+                    className="text-[10px] font-mono px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition shadow-sm cursor-pointer"
                   >
-                    绑定
+                    {lang === "en" ? "Link Steam" : "绑定"}
                   </button>
                 )}
               </div>
@@ -608,12 +614,12 @@ export function NavAuthBadges({
 
             {/* Footer */}
             <div className="pt-1 flex items-center justify-between text-[10px] font-mono text-slate-400">
-              <span>Koliance 统一账户与资产中心</span>
+              <span>{lang === "en" ? "Koliance Unified Account & Asset Center" : "Koliance 统一账户与资产中心"}</span>
               <button
                 onClick={() => setDropdownOpen(false)}
-                className="hover:text-white transition"
+                className="hover:text-white transition cursor-pointer"
               >
-                收起
+                {lang === "en" ? "Close" : "收起"}
               </button>
             </div>
           </motion.div>

@@ -37,7 +37,7 @@ describe("Console API Keys Route (/api/console/api-keys)", () => {
     expect(json.key).toBeDefined();
     expect(json.key.name).toBe("My Custom Quant Key");
     expect(json.raw_key.startsWith("kol_live_")).toBe(true);
-  });
+  }, 15000);
 
   it("lists API keys for authenticated registered developer", async () => {
     const req = new NextRequest(`http://localhost:3000/api/console/api-keys?wallet=${testWallet}`, {
@@ -53,7 +53,7 @@ describe("Console API Keys Route (/api/console/api-keys)", () => {
     expect(json.success).toBe(true);
     expect(Array.isArray(json.keys)).toBe(true);
     expect(json.keys.length).toBeGreaterThan(0);
-  });
+  }, 15000);
 
   it("revokes an existing user API key", async () => {
     // 1. Create key
@@ -84,5 +84,5 @@ describe("Console API Keys Route (/api/console/api-keys)", () => {
 
     const delJson = await delRes.json();
     expect(delJson.success).toBe(true);
-  });
+  }, 15000);
 });

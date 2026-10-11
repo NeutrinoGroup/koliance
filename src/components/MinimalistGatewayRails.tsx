@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { ArrowRight } from "lucide-react";
 import { NavView } from "@/components/Navbar";
+import { useLanguage } from "@/lib/i18n";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -15,38 +16,39 @@ interface MinimalistGatewayRailsProps {
 }
 
 export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsProps) {
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
 
   const rails = [
     {
       index: "01",
-      title: "TRUST CONSTELLATION GRAPH",
+      title: t("gateway.r1_title"),
       tag: "TOPOLOGY",
-      desc: "Multi-cluster trust weights, AI audit agents & parallel consensus metrics.",
+      desc: t("gateway.r1_desc"),
       view: "DETAIL" as NavView,
       spec: "10,000 TPS CLUSTERS",
     },
     {
       index: "02",
-      title: "HOLOGRAPHIC VERIFICATION",
+      title: t("gateway.r2_title"),
       tag: "STUDIO",
-      desc: "3D holographic identity badge, staking dashboard & biometric protocol.",
+      desc: t("gateway.r2_desc"),
       view: "PRODUCT" as NavView,
       spec: "EIP-712 & ATTESTATION",
     },
     {
       index: "03",
-      title: "NEURAL CARD SCANNER",
+      title: t("gateway.r3_title"),
       tag: "SCANNER",
-      desc: "Full-stack Neural Asset Processor with 6-card circulating digitization.",
+      desc: t("gateway.r3_desc"),
       view: "AGENTCARD" as NavView,
       spec: "NEURAL ASSET DIGITIZER",
     },
     {
       index: "04",
-      title: "KOL HALVING TOKEN HUB",
+      title: t("gateway.r4_title"),
       tag: "TOKEN",
-      desc: "2^30 Max Supply · 2-year halving · Monad block claiming & transfer.",
+      desc: t("gateway.r4_desc"),
       view: "TOKEN" as NavView,
       spec: "2^30 MAX SUPPLY",
     },
@@ -88,14 +90,14 @@ export function MinimalistGatewayRails({ onSelectView }: MinimalistGatewayRailsP
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
         <div className="space-y-1">
           <div className="text-[11px] font-mono tracking-widest text-cyan-400 uppercase font-bold">
-            [PARALLEL EXECUTION RAILS]
+            {t("gateway.tag")}
           </div>
           <h3 className="text-2xl sm:text-4xl font-black text-white tracking-tight uppercase font-mono">
-            Protocol Architecture
+            {t("gateway.title")}
           </h3>
         </div>
         <div className="text-xs font-mono text-slate-400">
-          SELECT NAVIGATION RAIL TO ENGAGE
+          {t("gateway.hint")}
         </div>
       </div>
 
