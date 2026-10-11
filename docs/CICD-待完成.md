@@ -45,7 +45,7 @@
 | **B-3** | `STEAM_API_KEY` | Render 面板（`render.yaml:17-18`） | 读取处 `config.go:54`，**该行带明文默认值** | 后端不再从面板取值，**静默回落到已泄露的旧密钥**——正是 GAP-12 要拆掉的那条路 | 作者 | 否 |
 | **B-4** | `ALPACA_API_KEY` / `ALPACA_API_SECRET` | Render 面板（`render.yaml:21-24`） | 读取处 `config.go:56-57`，**两行均带明文默认值** | 同 B-3：静默回落到已泄露的旧值；Alpaca 侧一旦轮换，**线上行情/下单直接失效** | 作者 | 否 |
 | **B-5** | `STRIPE_SECRET_KEY` | Render 面板（`render.yaml:29-30`） | 读取处 `config.go:60`，**默认空串** | Stripe checkout / customer 调用失败（充值路径不可用） | 作者 | 否 |
-| **B-6** | `STRIPE_PUBLISHABLE_KEY` | Render 面板（`render.yaml:27-28`） | 读取处 `config.go:59`，**带明文默认值** | 同 B-3（可发布键，风险较低，但轮换后仍需同步） | 作者 | 否 |
+| **B-6** | `STRIPE_PUBLISHABLE_KEY` | Render 面板（`render.yaml:27-28`） | 读取处 `config.go`，~~带明文默认值~~ 已移除默认值，仅从环境变量读取 | 同 B-3（可发布键，风险较低，但轮换后仍需同步） | 作者 | 否 |
 | **B-7** | `CORS_ALLOWED_ORIGINS` | **已配**（`render.yaml:40-41` 有值） | 读取处 `config.go:66`；默认值 `config.go:42` | 仅当前端域名变更时需改；**改动即影响浏览器能否调后端** | 作者 | 否 |
 | **B-8** | `DEMO_PUBLIC_TRADING` 的**取值裁定** | Render 面板或 `render.yaml:49-50` | 读取处 `config.go:68`；`render.yaml:49-50` 现为 `"true"` | 现值 `true` = **浏览器无需 operator token 即可下 Alpaca paper 单**（`render.yaml:46-48` 的注释即此意）。演示后若要收回，**这是要改的那一行** | 作者（需裁定） | 否 |
 | **B-9** | `STEAM_DOMAIN` 是否仍为 `koliance.oodai.space` | Render 面板 / `render.yaml:19-20` | 该值被用于 **Stripe 成功/取消回跳**（`backend/internal/httpapi/router.go:428,434`），非仅显示 | 域名变更而不改此值 → Stripe 回跳到旧域；且 `SteamDomain` 的命名与用途已不符（**命名误导，非缺陷**） | 作者 | 否 |

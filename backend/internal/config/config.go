@@ -93,7 +93,7 @@ func loadFrom(read func(key, defaultVal string) string) *Config {
 		AlpacaBaseURL:        read("ALPACA_BASE_URL", "https://paper-api.alpaca.markets/v2"),
 		AlpacaDataURL:        read("ALPACA_DATA_URL", "https://data.alpaca.markets"),
 		AlpacaDataFeed:       read("ALPACA_DATA_FEED", "iex"),
-		StripePublishableKey: read("STRIPE_PUBLISHABLE_KEY", "pk_test_51UMQCbEP5h4ijOX4RfqfeOsj5flpshzH2814PRH1FIvK8kPn79Goucx9sAfzvnkVIzdU30f60ozxkD0FC9vejNM300uNY0C82o"),
+		StripePublishableKey: read("STRIPE_PUBLISHABLE_KEY", ""), // env only, no committed fallback (unused by the backend today)
 		StripeSecretKey:      read("STRIPE_SECRET_KEY", ""),
 		PythHermesURL:        read("PYTH_HERMES_URL", "https://hermes.pyth.network"),
 		MonadRPCURL:          read("MONAD_RPC_URL", "https://testnet-rpc.monad.xyz"),

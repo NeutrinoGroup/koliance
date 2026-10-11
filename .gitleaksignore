@@ -18,3 +18,4 @@ df227bff45274015f4da6ff3585a8a2089c2ce40:docs/planning/执行方案-自治Agent�
 31d1f4fe1c43b46330f6b9e6c578a135ffa0fa8a:docs/developer-api-service-spec.md:generic-api-key:128
 7c4b7537f2073ed2a5ac73a34665ddbfcf435053:src/components/DeveloperConsole.tsx:generic-api-key:144
 f41f8d815c5106f5d3952595c6e1e8ee4d67c7a8:src/components/DeveloperConsole.tsx:generic-api-key:176
+06dbb2ef6903367261915f957dce5f580e0594a5:backend/internal/config/config.go:generic-api-key:96
