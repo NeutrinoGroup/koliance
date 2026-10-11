@@ -4,21 +4,21 @@ import React, { useEffect, useRef } from "react";
 
 interface EnergyCoreBackdropProps {
   className?: string;
-  blurAmount?: number; // In pixels, default: 18
-  opacity?: number; // 0 to 1, default: 0.52
-  size?: number; // Core radius scale, default: 130
+  blurAmount?: number; // In pixels, default: 5 (crisp 3D facet definition with soft bloom)
+  opacity?: number; // 0 to 1, default: 0.68
+  size?: number; // Core radius scale, default: 210
 }
 
 /**
  * EnergyCoreBackdrop — 3D Crystalline Amethyst Atom Core and Orbital Rings
- * Rendered onto HTML5 Canvas with hardware-accelerated Gaussian depth-of-field blur.
+ * Rendered onto HTML5 Canvas with hardware-accelerated subtle depth bloom.
  * Serves as an atmospheric ambient backdrop layer behind Hero typography and controls.
  */
 export function EnergyCoreBackdrop({
   className = "",
-  blurAmount = 18,
-  opacity = 0.52,
-  size = 130,
+  blurAmount = 5,
+  opacity = 0.68,
+  size = 210,
 }: EnergyCoreBackdropProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -43,7 +43,7 @@ export function EnergyCoreBackdrop({
 
     // 3D Vertices for a multifaceted geodesic crystal core (Icosahedron)
     const phi = (1 + Math.sqrt(5)) / 2;
-    const radius = Math.min(width * 0.22, size);
+    const radius = Math.min(width * 0.28, height * 0.36, size);
 
     // 12 base icosahedron vertices
     const rawVertices: Array<[number, number, number]> = [
@@ -216,7 +216,7 @@ export function EnergyCoreBackdrop({
         const y3 = x2 * sinZ + y2 * cosZ;
         const z3 = z2;
 
-        const scale = 380 / (380 + z3);
+        const scale = 480 / (480 + z3);
         return {
           x: centerX + x3 * scale,
           y: centerY + y3 * scale,

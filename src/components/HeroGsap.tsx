@@ -177,12 +177,12 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
   return (
     <div ref={containerRef} className="relative pt-32 pb-20 overflow-hidden flex flex-col items-center text-center px-4">
       {/* 3D Crystalline Energy Core Blurred Ambient Backdrop */}
-      <div className="absolute top-[38%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[760px] max-w-[95vw] h-[540px] pointer-events-none -z-20">
+      <div className="absolute top-[38%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1100px] max-w-[98vw] h-[720px] pointer-events-none -z-20">
         <EnergyCoreBackdrop
           className="w-full h-full"
-          blurAmount={16}
-          opacity={0.55}
-          size={135}
+          blurAmount={5}
+          opacity={0.68}
+          size={210}
         />
       </div>
 
