@@ -166,14 +166,14 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
   };
 
   return (
-    <div className="rounded-3xl bg-gradient-to-r from-[#171e2c] via-[#1a2334] to-[#141b27] border border-blue-500/30 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
+    <div className="rounded-lg bg-gradient-to-r from-[#171e2c] via-[#1a2334] to-[#141b27] border border-blue-500/30 p-5 sm:p-6 shadow-2xl relative overflow-hidden">
       <div className="absolute top-0 right-0 w-80 h-80 bg-blue-500/10 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 relative z-10">
         <div className="space-y-1.5">
           <div className="flex items-center gap-2.5">
-            <span className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-400">
+            <span className="w-8 h-8 rounded-md bg-blue-500/20 border border-blue-400/40 flex items-center justify-center text-blue-400">
               <Globe className="w-4 h-4" />
             </span>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
@@ -196,7 +196,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
               <button
                 onClick={handleLaunchGoogleLogin}
                 disabled={loading}
-                className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white font-mono text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-blue-500/25"
+                className="h-9 px-4 rounded-md bg-blue-600 hover:bg-blue-500 active:scale-[0.98] text-white font-mono text-xs font-bold transition flex items-center gap-2 border border-blue-400/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
               >
                 {loading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -226,7 +226,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
               <button
                 onClick={handleQuickDemoVerify}
                 disabled={loading}
-                className="px-3 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 font-mono text-xs transition border border-white/10 flex items-center gap-1.5"
+                className="h-9 px-3 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 font-mono text-xs transition border border-white/10 flex items-center gap-1.5"
                 title="快捷测试 Google 开发者身份背书与 TypeORM 实体数据"
               >
                 <Sparkles className="w-3.5 h-3.5 text-blue-400" />
@@ -237,14 +237,14 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setEditModalOpen(true)}
-                className="px-3.5 py-2 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 font-mono text-xs transition border border-blue-500/30 flex items-center gap-1.5"
+                className="h-9 px-3.5 rounded-md bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 font-mono text-xs transition border border-blue-500/30 flex items-center gap-1.5"
               >
                 <Edit3 className="w-3.5 h-3.5" />
                 <span>编辑资料</span>
               </button>
               <button
                 onClick={handleDisconnect}
-                className="px-3.5 py-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 font-mono text-xs transition border border-red-500/30 flex items-center gap-1.5"
+                className="h-9 px-3.5 rounded-md bg-red-500/10 hover:bg-red-500/20 text-red-400 font-mono text-xs transition border border-red-500/30 flex items-center gap-1.5"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>解除绑定</span>
@@ -261,7 +261,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="mt-4 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-mono flex items-center gap-2"
+            className="mt-4 p-3 rounded-md bg-red-500/10 border border-red-500/30 text-red-300 text-xs font-mono flex items-center gap-2"
           >
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
@@ -272,7 +272,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            className="mt-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2"
+            className="mt-4 p-3 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono flex items-center gap-2"
           >
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>Google 身份背书验证通过！TypeORM 实体映射已同步，授信额度已实时加成。</span>
@@ -288,7 +288,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
           className="mt-6 pt-5 border-t border-white/10 grid grid-cols-1 md:grid-cols-3 gap-4"
         >
           {/* User ID & Info */}
-          <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex items-center gap-3">
+          <div className="p-4 rounded-md bg-black/40 border border-white/10 flex items-center gap-3">
             {profile.picture ? (
               <Image
                 src={profile.picture}
@@ -317,7 +317,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
           </div>
 
           {/* Trust Tier */}
-          <div className="p-4 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-between">
+          <div className="p-4 rounded-md bg-black/40 border border-white/10 flex items-center justify-between">
             <div>
               <div className="text-[10px] font-mono text-slate-400 uppercase">信用认证评级</div>
               <div className="text-sm font-bold text-blue-300 font-mono flex items-center gap-1.5 mt-0.5">
@@ -329,7 +329,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
           </div>
 
           {/* Credit Allowance */}
-          <div className="p-4 rounded-2xl bg-black/40 border border-blue-500/30 flex items-center justify-between">
+          <div className="p-4 rounded-md bg-black/40 border border-blue-500/30 flex items-center justify-between">
             <div>
               <div className="text-[10px] font-mono text-slate-400 uppercase">AgentCard 授信加成</div>
               <div className="text-lg font-black text-emerald-400 font-mono mt-0.5">

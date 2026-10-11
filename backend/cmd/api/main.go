@@ -8,11 +8,13 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/koliance/backend/internal/agentapi"
 	"github.com/koliance/backend/internal/agentcard"
 	"github.com/koliance/backend/internal/config"
 	"github.com/koliance/backend/internal/developer"
 	"github.com/koliance/backend/internal/game"
 	"github.com/koliance/backend/internal/httpapi"
+	"github.com/koliance/backend/internal/liquidation"
 	"github.com/koliance/backend/internal/market"
 	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
@@ -56,6 +58,8 @@ func run(cfg *config.Config) error {
 	// 4. Initialize Market Alpaca & Real-time Price Oracle
 	alpacaCli := market.NewAlpacaClient(cfg.AlpacaBaseURL, cfg.AlpacaAPIKey, cfg.AlpacaAPISecret)
 	priceOracle := market.NewPriceOracle(cfg.AlpacaAPIKey, cfg.AlpacaAPISecret)
+	priceOracle.SetDataBaseURL(cfg.AlpacaDataURL)
+	priceOracle.SetFeed(cfg.AlpacaDataFeed)
 	marketService := market.NewService(alpacaCli, priceOracle, db)
 
 	// 5. Initialize Stripe Client
@@ -70,16 +74,21 @@ func run(cfg *config.Config) error {
 	// is wired in here - and only here.
 	proofVerifier := verifier.NewNoop()
 
+	// 8. Initialize Autonomous Agent API & Quota Service
+	agentAPIService := agentapi.NewService(db)
+
 	handler := httpapi.NewRouter(httpapi.Deps{
-		Cfg:         cfg,
-		DB:          db,
-		Game:        gameService,
-		Cards:       cardService,
-		Market:      marketService,
-		PriceOracle: priceOracle,
-		Stripe:      stripeCli,
-		Dev:         devService,
-		Verifier:    proofVerifier,
+		Cfg:          cfg,
+		DB:           db,
+		Game:         gameService,
+		Cards:        cardService,
+		Market:       marketService,
+		PriceOracle:  priceOracle,
+		Stripe:       stripeCli,
+		Dev:          devService,
+		Verifier:     proofVerifier,
+		Liquidations: liquidation.NewPG(db.Pool),
+		AgentAPI:     agentAPIService,
 	})
 
 	port := cfg.Port
@@ -96,7 +105,11 @@ func run(cfg *config.Config) error {
 
 	fmt.Printf("[Koliance] Go Backend Service listening on http://localhost:%s\n", port)
 	fmt.Printf("   ├─ Steam Web API: Active (%s)\n", cfg.SteamDomain)
-	fmt.Printf("   ├─ Alpaca Paper API: Active (%s)\n", cfg.AlpacaBaseURL)
+	// Presence only — never the value.
+	fmt.Printf("   ├─ Alpaca Paper API: Active (%s), credentials configured: %t\n",
+		cfg.AlpacaBaseURL, cfg.AlpacaConfigured())
+	fmt.Printf("   ├─ Alpaca Market Data: %s (feed %s) — /api/v1/market/* fails closed (503) without credentials\n",
+		cfg.AlpacaDataURL, cfg.AlpacaDataFeed)
 	fmt.Printf("   ├─ Pyth Hermes Oracle: Active (%s)\n", cfg.PythHermesURL)
 	fmt.Printf("   ├─ Stripe Integration: Ready (Key loaded: %t)\n", cfg.StripeSecretKey != "")
 	fmt.Printf("   ├─ PostgreSQL: Connected (memory fallback removed, GAP-49)\n")

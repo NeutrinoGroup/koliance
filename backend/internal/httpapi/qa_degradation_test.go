@@ -45,8 +45,18 @@ type qaRouteExpectation struct {
 	why string
 }
 
-// qaRouteInventory is every route registered in NewRouter: all 20
-// `h("<path>", ...)` registrations, 20 distinct paths.
+// qaRouteInventory is every route registered in NewRouter: all 29
+// `h("<path>", ...)` registrations (25 behind methodOnly + 4 bare).
+//
+// The list was 20 routes when this file was written on the W1 branch. The merge
+// with `upstream/main` brought in nine more, and they are added here rather than
+// left out: the whole point of this file is that it is derived from router.go,
+// so a route added on either side and missing here would be a silently untested
+// route - exactly the failure TestQARouteInventoryIsComplete exists to catch.
+// Added: /api/v1/liquidations, /api/v1/market/health, /api/v1/market/movers,
+// /api/v1/agent/bind, /api/v1/agent/pay, /api/v1/developer/keys,
+// /api/v1/developer/stats, /api/v1/developer/agents,
+// /api/v1/developer/packages/claim-or-purchase.
 //
 // A path that is not registered answers 404, and TestQARouteInventoryIsComplete
 // fails on any 404 - so a typo here, or a registration renamed in router.go,
@@ -57,8 +67,11 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodGet, "/healthz", "", "", 200, "unguarded: process state"},
 	{http.MethodGet, "/health", "", "", 200, "unguarded: process state"},
 	{http.MethodGet, "/api/v1/stats", "", "", 200, "unguarded: compile-time fixture literals"},
-	{http.MethodGet, "/api/v1/market/prices", "", "", 200, "unguarded: PriceOracle over the Alpaca data API"},
+	{http.MethodGet, "/api/v1/liquidations", "", "", 200, "unguarded: nil store degrades to an empty list, and an empty list is the truth when no bot has written one"},
+	{http.MethodGet, "/api/v1/market/health", "", "", 200, "unguarded: must stay able to report configured:false - that is the fact an operator needs, so it is deliberately NOT behind marketData"},
 	{http.MethodGet, "/api/v1/developer/github/profile?username=moonhotline", "", "", 200, "unguarded: GitHub-backed, persists nothing (fabricated fallback: see TestQAFindingGithubProfileCannotExpressProvenance)"},
+	{http.MethodGet, "/api/v1/developer/stats?wallet_address=0x0000000000000000000000000000000000000001", "", "", 200, "unguarded: agentapi is in-memory (its PG write is best-effort, in a goroutine)"},
+	{http.MethodGet, "/api/v1/developer/agents", "", "", 200, "unguarded: agentapi in-memory list"},
 
 	// ---- no database needed, refused on other grounds ----
 	{http.MethodGet, "/api/v1/agentcard/cards/cX", "", "", 401, "unguarded: credential checked before any store is touched"},
@@ -67,8 +80,18 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodPost, "/api/v1/stripe/checkout-session", `{"amountCents":-500}`, "", 400, "unguarded: Stripe's API is the store"},
 	{http.MethodPost, "/api/v1/stripe/customer", `{}`, "", 401, "unguarded: operator-gated, Stripe-backed"},
 	{http.MethodPost, "/api/v1/verifier/verify", `{"subject":"s"}`, "", 501, "unguarded: pure computation, no store"},
-	{http.MethodPost, "/api/v1/market/trade", `{"symbol":"NVDA","side":"hold","notionalUSD":1,"leverage":1}`, "Bearer " + opToken, 400, "unguarded: Alpaca is the book of record"},
-	{http.MethodGet, "/api/v1/market/overview", "", "", 500, "unguarded: Alpaca is the source; the upstream is unreachable in this harness, and a 500 from an unguarded route proves the DB gate is not on it"},
+	{http.MethodPost, "/api/v1/market/trade", `{"symbol":"NVDA","side":"hold","notionalUSD":1,"leverage":1}`, "Bearer " + opToken, 400, "unguarded: Alpaca is the book of record; validation precedes the upstream call"},
+	{http.MethodPost, "/api/v1/agent/bind", `{}`, "", 400, "unguarded: wallet_address is required; no bearer token, so no key is deducted"},
+	{http.MethodPost, "/api/v1/agent/pay", `{}`, "", 400, "unguarded: an empty payment request is rejected before any store is touched"},
+	{http.MethodPost, "/api/v1/developer/keys", `{}`, "", 400, "unguarded: agentapi in-memory; an empty wallet_address fails key generation"},
+	{http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{}`, "", 400, "unguarded: wallet_address is required"},
+
+	// ---- no database needed, but the upstream is the failure mode ----
+	// Driven against the closed local port this harness points Alpaca at, so the
+	// outcome is deterministic ("unreachable"), not whatever the network answers.
+	{http.MethodGet, "/api/v1/market/prices", "", "", 502, "unguarded: PriceOracle over the Alpaca data API; the upstream is unreachable here, and a 502 from an unguarded route proves the DB gate is not on it"},
+	{http.MethodGet, "/api/v1/market/movers", "", "", 502, "unguarded: same upstream, same 502 (this is the endpoint whose loudness market_edge_qa_test.go relies on)"},
+	{http.MethodGet, "/api/v1/market/overview", "", "", 500, "unguarded: Alpaca is the source; 500 (not 502) is this handler's own inconsistency, recorded in market_edge_qa_test.go"},
 
 	// ---- persists through the DB handle: must refuse with 503 ----
 	{http.MethodGet, "/api/v1/game/steam/profile?id=76561198000000000", "", "", 503, "guarded (withDB)"},

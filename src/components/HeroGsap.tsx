@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
-import { ArrowRight, Globe } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { EnergyCoreBackdrop } from "@/components/EnergyCoreBackdrop";
 
@@ -12,12 +12,11 @@ interface HeroGsapProps {
 }
 
 export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
-  const { lang, setLang, t } = useLanguage();
+  const { t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const headlineRef = useRef<HTMLHeadingElement>(null);
   const subtextRef = useRef<HTMLParagraphElement>(null);
-  const badgeRef = useRef<HTMLDivElement>(null);
   const buttonsRef = useRef<HTMLDivElement>(null);
 
   // 1. GSAP Particle Constellation Canvas
@@ -140,16 +139,10 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       const tl = gsap.timeline({ defaults: { ease: "power4.out" } });
 
       tl.fromTo(
-        badgeRef.current,
-        { opacity: 0, y: -20, scale: 0.9 },
-        { opacity: 1, y: 0, scale: 1, duration: 0.8, delay: 0.2 }
+        headlineRef.current,
+        { opacity: 0, y: 40, filter: "blur(10px)" },
+        { opacity: 1, y: 0, filter: "blur(0px)", duration: 1, delay: 0.1 }
       )
-        .fromTo(
-          headlineRef.current,
-          { opacity: 0, y: 40, filter: "blur(10px)" },
-          { opacity: 1, y: 0, filter: "blur(0px)", duration: 1 },
-          "-=0.4"
-        )
         .fromTo(
           subtextRef.current,
           { opacity: 0, y: 25 },
@@ -189,26 +182,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[550px] h-[550px] bg-monad-600/20 rounded-full blur-[140px] pointer-events-none -z-10" />
       <div className="absolute top-1/3 left-1/4 w-[350px] h-[350px] bg-cyber-accent/15 rounded-full blur-[120px] pointer-events-none -z-10" />
 
-      {/* Futuristic Monad Badge & Language Switcher */}
-      <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
-        <div
-          ref={badgeRef}
-          className="inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full glass-panel border border-monad-400/30 text-xs text-monad-200 shadow-glow"
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse" />
-          <span className="font-semibold tracking-wider text-white uppercase text-[11px] font-mono">{t("vision.hero_tag")}</span>
-          <span className="text-monad-500">{"//"}</span>
-          <span className="text-monad-300 font-mono text-[11px]">{t("vision.hero_engine")}</span>
-        </div>
 
-        <button
-          onClick={() => setLang(lang === "en" ? "zh" : "en")}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-panel border border-white/10 hover:border-white/30 text-xs font-mono text-slate-300 hover:text-white transition cursor-pointer"
-        >
-          <Globe className="w-3.5 h-3.5 text-cyan-400" />
-          <span>{lang === "en" ? "EN / ZH" : "ZH / EN"}</span>
-        </button>
-      </div>
 
       {/* Kinetic Headline */}
       <h1
@@ -234,7 +208,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       >
         <button
           onClick={onRegisterClick}
-          className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-full bg-gradient-to-r from-monad-600 via-monad-500 to-monad-600 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-xs tracking-wider uppercase font-mono shadow-glow hover:shadow-glow-lg transition-all duration-300 active:scale-95"
+          className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-xl bg-gradient-to-r from-monad-600 via-monad-500 to-monad-600 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-xs tracking-wider uppercase font-mono shadow-glow hover:shadow-glow-lg transition-all duration-300 active:scale-95"
         >
           <span>{t("vision.register")}</span>
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
@@ -242,7 +216,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
 
         <button
           onClick={onExploreClick}
-          className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full glass-panel hover:bg-monad-900/40 border border-white/15 hover:border-monad-400/60 text-monad-200 hover:text-white font-medium text-xs tracking-wider uppercase font-mono transition-all duration-300"
+          className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-xl glass-panel hover:bg-monad-900/40 border border-white/15 hover:border-monad-400/60 text-monad-200 hover:text-white font-medium text-xs tracking-wider uppercase font-mono transition-all duration-300"
         >
           <span>{t("vision.explore")}</span>
         </button>

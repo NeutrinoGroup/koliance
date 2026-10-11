@@ -2,7 +2,7 @@
 
 import React, { useRef, useEffect } from "react";
 import gsap from "gsap";
-import { Network, Shield, CreditCard, Coins, ArrowRight, Zap, Activity } from "lucide-react";
+import { Network, Shield, CreditCard, Coins, ArrowRight, Activity } from "lucide-react";
 import { NavView } from "@/components/Navbar";
 
 interface ParallelBentoReactorProps {
@@ -14,7 +14,7 @@ interface ReactorCardProps {
   badge?: string;
   desc: string;
   actionText: string;
-  accentColor: "purple" | "cyan" | "indigo" | "amber";
+  accentColor: "purple" | "cyan" | "indigo" | "emerald";
   icon: React.ReactNode;
   onClick: () => void;
   features?: "constellation" | "scanline" | "hologram" | "halving";
@@ -92,12 +92,12 @@ function ReactorCard({
       iconBg: "from-indigo-500 to-purple-600",
       textAccent: "text-indigo-400",
     },
-    amber: {
-      border: "hover:border-amber-400/70",
-      shadow: "hover:shadow-[0_20px_50px_rgba(245,158,11,0.3)]",
-      glowBg: "rgba(245, 158, 11, 0.25)",
-      iconBg: "from-purple-500 via-indigo-600 to-amber-500",
-      textAccent: "text-amber-400",
+    emerald: {
+      border: "hover:border-emerald-400/70",
+      shadow: "hover:shadow-[0_20px_50px_rgba(16,185,129,0.3)]",
+      glowBg: "rgba(16, 185, 129, 0.25)",
+      iconBg: "from-emerald-500 to-teal-600",
+      textAccent: "text-emerald-400",
     },
   }[accentColor];
 
@@ -106,11 +106,11 @@ function ReactorCard({
       ref={cardRef}
       onClick={onClick}
       style={{ transformStyle: "preserve-3d" }}
-      className={`group relative rounded-3xl p-6 bg-[#101422]/90 border border-white/[0.08] ${colorConfig.border} ${colorConfig.shadow} cursor-pointer overflow-hidden transform-gpu will-change-transform transition-all duration-300 shadow-xl flex flex-col justify-between`}
+      className={`group relative rounded-lg p-6 bg-[#101422]/90 border border-white/[0.08] ${colorConfig.border} ${colorConfig.shadow} cursor-pointer overflow-hidden transform-gpu will-change-transform transition-all duration-300 shadow-xl flex flex-col justify-between`}
     >
       {/* Ray-traced Specular Follower Spotlight */}
       <div
-        className="pointer-events-none absolute -inset-px rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"
+        className="pointer-events-none absolute -inset-px rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-0"
         style={{
           background: `radial-gradient(380px circle at var(--mouse-x, 50%) var(--mouse-y, 50%), ${colorConfig.glowBg}, transparent 75%)`,
         }}
@@ -133,7 +133,7 @@ function ReactorCard({
       <div className="relative z-10 space-y-4" style={{ transform: "translateZ(18px)" }}>
         <div className="flex items-center justify-between">
           <div
-            className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${colorConfig.iconBg} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}
+            className={`w-12 h-12 rounded-md bg-gradient-to-br ${colorConfig.iconBg} flex items-center justify-center text-white shadow-lg group-hover:scale-110 transition-transform duration-300`}
           >
             {icon}
           </div>
@@ -180,8 +180,8 @@ export function ParallelBentoReactor({ onSelectView }: ParallelBentoReactorProps
       {/* Section Header with Parallel Pipeline Bus */}
       <div className="relative flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-white/[0.08] pb-6">
         <div className="space-y-2">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-monad-500/10 border border-monad-500/30 text-monad-300 text-xs font-mono uppercase tracking-widest">
-            <Zap className="w-3.5 h-3.5 text-yellow-400" />
+          <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-monad-500/10 border border-monad-500/30 text-monad-300 text-xs font-mono uppercase tracking-widest">
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
             <span>Monad Parallel Execution Mesh</span>
           </div>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-black text-white tracking-tight">
@@ -236,7 +236,7 @@ export function ParallelBentoReactor({ onSelectView }: ParallelBentoReactorProps
           badge="KOL"
           desc="2^30 Max Supply · 2-year halving · Monad block claiming & transfer."
           actionText="Open Token Hub"
-          accentColor="amber"
+          accentColor="emerald"
           icon={<Coins className="w-6 h-6" />}
           onClick={() => onSelectView("TOKEN")}
           features="halving"

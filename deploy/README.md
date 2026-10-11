@@ -11,10 +11,11 @@
 
 | 键 | 现状 |
 | --- | --- |
-| `STEAM_API_KEY` | 明文 |
-| `ALPACA_API_KEY` / `ALPACA_API_SECRET` | 明文 |
-| `STRIPE_PUBLISHABLE_KEY` | 明文（公开键，风险较低） |
+| `STEAM_API_KEY` | 明文（`config.go` 里仍是 `getEnv` 的默认值） |
+| `ALPACA_API_KEY` / `ALPACA_API_SECRET` | [OK] **代码侧已消除**：`docs/changes/027` 删掉了 `config.go` 的两处默认值，未配置即 503；`render.yaml` 里两项本就是 `sync: false`。**但历史里的值仍须轮换** |
+| `STRIPE_PUBLISHABLE_KEY` | 明文（公开键，风险较低；`config.go` 里仍是默认值） |
 | `STRIPE_SECRET_KEY` / `DATABASE_URL` | [OK] 已是 `sync: false`（读自 Render 面板） |
+| `ALPACA_DATA_URL` / `ALPACA_DATA_FEED` / `PYTH_HERMES_URL` | [OK] 非密钥，`render.yaml` 里是显式 `value` |
 
 **泄露已成事实**——这些值在 git 历史里，删掉当前行**不会**让它们重新变成秘密。**必须去各后台轮换**
 （Steam / Alpaca / Stripe），这是**人工操作，无法用代码完成**。

@@ -82,8 +82,8 @@ export function ArchitectureTopologyMatrix() {
       id: "settlement",
       title: t("matrix.settlement_signals"),
       badge: "CONSENSUS FINALITY",
-      color: "amber",
-      icon: <TrendingUp className="w-4 h-4 text-amber-400" />,
+      color: "emerald",
+      icon: <TrendingUp className="w-4 h-4 text-emerald-400" />,
       items: [
         {
           key: "monad_record",
@@ -111,7 +111,7 @@ export function ArchitectureTopologyMatrix() {
     <div className="space-y-8">
       {/* Section Header */}
       <div className="text-center max-w-3xl mx-auto space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono uppercase tracking-wider">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-500/10 border border-purple-500/30 text-purple-400 text-xs font-mono uppercase tracking-wider">
           <Layers className="w-3.5 h-3.5" />
           <span>Architecture Taxonomy</span>
         </div>
@@ -128,7 +128,7 @@ export function ArchitectureTopologyMatrix() {
         {tiers.map((tier) => (
           <div
             key={tier.id}
-            className="rounded-3xl p-6 bg-[#111523]/80 border border-white/[0.08] hover:border-white/20 transition-all duration-300 space-y-4 shadow-xl flex flex-col justify-between"
+            className="rounded-lg p-6 bg-[#111523]/80 border border-white/[0.08] hover:border-white/20 transition-all duration-300 space-y-4 shadow-xl flex flex-col justify-between"
           >
             <div className="space-y-4">
               <div className="flex items-center justify-between pb-3 border-b border-white/[0.08]">
@@ -136,7 +136,7 @@ export function ArchitectureTopologyMatrix() {
                   {tier.icon}
                   <span>{tier.title}</span>
                 </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/[0.05] text-slate-400">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-white/[0.05] text-slate-400">
                   {tier.badge}
                 </span>
               </div>
@@ -149,7 +149,7 @@ export function ArchitectureTopologyMatrix() {
                       key={item.key}
                       onMouseEnter={() => setHoveredNode(item.key)}
                       onMouseLeave={() => setHoveredNode(null)}
-                      className={`p-3.5 rounded-2xl transition-all duration-200 border cursor-pointer space-y-1.5 ${
+                      className={`p-3.5 rounded-md transition-all duration-200 border cursor-pointer space-y-1.5 ${
                         isHovered
                           ? "bg-white/[0.08] border-cyan-400/60 shadow-[0_0_20px_rgba(0,242,254,0.15)] translate-x-1"
                           : "bg-white/[0.02] border-white/[0.05] hover:border-white/10"

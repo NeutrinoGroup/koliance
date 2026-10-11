@@ -7,14 +7,27 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：2026-10-11 · 分支 `feat/w1-ai-infra-foundation`（`1f5f007`）
-> **本轮（W1）**：**GAP-43 / GAP-44 / GAP-49 关闭**（`docs/changes/035`）；新登记 **GAP-51**（迁移未真跑，🔴 阻塞于环境）与 **GAP-52**（DSN 脱敏残余暴露），见 **§5.2**。
-> **上一轮**：**补登记 §5.1**——`项目目标.md §5` 的 P2 项与「五大核心领域」此前**只有正文、无编号**，
+> **最后更新**：2026-10-11 · 分支 `feat/w1-ai-infra-foundation`（`1f5f007`）**已并入 `upstream/main`**
+> **本轮（W1）**：**GAP-43 / GAP-44 / GAP-49 关闭**（`docs/changes/035`）；新登记 **GAP-57**（迁移未真跑，🔴 阻塞于环境）与 **GAP-58**（DSN 脱敏残余暴露），见 **§5.7**。
+> **上下游轮次（`upstream/main`）**：**GAP-52 ✅ 关闭** ——
+> 前端 `/api/market` 由**本地行情生成器**改为**纯代理**（删 `FALLBACK_MARKET_DATA`/`seededRandom`/`synthetic_curated`/
+> `synthetic_fallback`，无兜底路径）· `MarketTerminal` 账户/订单/跑马灯**去硬编码** · 新增
+> `src/lib/marketFeed.ts` 与 `tests/market-no-synthetic.test.ts`（回归守卫）· **新开 GAP-54**（实测确认审计报告 `U-5`：
+> market 页之外仍有多处合成数据，本轮未修）。来源：`docs/changes/028`（前端侧，issue #14/#16）。
+> **上下游上一轮（后端侧，`docs/changes/027`）**：market 后端侧改为**真实 Alpaca 或 503**（无合成路径）·
+> 新增 **`/api/v1/market/movers` 标的涨跌幅排行** · `/health` 的 `steam`/`github`/`alpaca`/`pyth` 四键**改真探活** ·
+> 删 `ALPACA_API_KEY`/`ALPACA_API_SECRET` 两处硬编码默认值；新开 GAP-52 / GAP-53。
+> **上游合并轮**：`feat/liquidation-bot-chain`（PR #11，GAP-38~42）
+> × `docs/ai-infrastructure-roadmap`（PR #12，`98a0ad8`，GAP-43~50）——**两侧均为台账新增、编号本就错开，故 union 全保留**。
+> **上游本轮（PR #11）**：**GAP-41 ✅ 落地**（§5.5，`docs/changes/026`：Bot 镜像纳入资金费）· GAP-26 `/api/v1/liquidations` ✅（`docs/changes/025`）
+> **上游本轮（PR #12）**：**补登记 §5.1**——`项目目标.md §5` 的 P2 项与「五大核心领域」此前**只有正文、无编号**，
 > 按本项目规矩「不在台账里 = 不存在」补为 **GAP-43~49**（§5.1 有逐条实测依据）；另补 **GAP-50**（§5）。
-> **编号避坑**：本分支新号一律从 **GAP-43** 起——**GAP-38~42 已被另一未合并分支
-> `feat/liquidation-bot-chain`（PR #11）占用**（实测见 §5.1 末注）。
+> **编号避坑**：PR #12 侧新号一律从 **GAP-43** 起——**GAP-38~42 已被 PR #11 的
+> `feat/liquidation-bot-chain` 占用**（实测见 §5.1 末注）。
 > **上一轮（2026-10-09 · `feat/perp-solvency-and-panel`）**：GAP-37 已关闭（§3.6）；GAP-25 标注已修（§3.7）
-> **最新登记**：**GAP-43~50 新开**（§5 / §5.1）· **GAP-37 已修**（§3.6）· **GAP-25 标注已修正**（§3.7）· **GAP-06 已关闭**（§3.6）· GAP-36 已修（§3.4）· GAP-16/34 已修（§3.5）
+> **最新登记**：**GAP-43~50 新开**（§5 / §5.1）· **GAP-42**（§5.6）· **GAP-41 残余**：链上对拍 / 投影指数（§5.5 文末）· **GAP-37 已修**（§3.6）· **GAP-25 标注已修正**（§3.7）· **GAP-06 已关闭**（§3.6）· GAP-36 已修（§3.4）· GAP-16/34 已修（§3.5）
+> **§5 小节编号（合并后）**：§5.1 本轮补登记 GAP-43~50 · §5.2 GAP-38 · §5.3 GAP-39 · §5.4 GAP-40 · §5.5 GAP-41 · §5.6 GAP-42
+> **旧号顺延（供既有引用对照）**：PR #11 侧 §5.1→§5.2 · §5.2→§5.3 · §5.3→§5.4 · §5.4→§5.5 · §5.5→§5.6；PR #12 侧的 §5.1 **不变**。
 
 ---
 
@@ -71,9 +84,9 @@
 | GAP-09 | `perpConfig.ts` 的 FEEDS 与链上实测矛盾 | 🟡 P2 | ✅ | `df227bf` |
 | GAP-10 | 无 CI，全部用例是"门外用例" | 🟡 P2 | ✅ | `2b05f05` |
 | GAP-11 | 缺工程骨架目录 | 🟡 P2 | ✅ | `deploy/README.md`（发布环 runbook） |
-| GAP-12 | 凭证硬编码（6 处，含 README 明文） | 🟡 P2 | 🔴 | **需人工轮换密钥**；README 已清理 |
-| GAP-13 | 后端零链上交互 + `/health` 伪指标 | 🟡 P2 | 🟠 | — |
-| GAP-14 | 合成随机行情以"实时数据"形态返回 | 🟡 P2 | ✅ | `docs/changes/018` |
+| GAP-12 | 凭证硬编码（6 处，含 README 明文） | 🟡 P2 | 🔴 | **需人工轮换密钥**；README 已清理；`config.go` 的 Steam / Stripe publishable 默认值仍在，**但 `ALPACA_API_KEY`/`ALPACA_API_SECRET` 两处默认值已删**（`docs/changes/027`） |
+| GAP-13 | 后端零链上交互 + `/health` 伪指标 | 🟡 P2 | 🟠 | **伪指标部分 ✅**（`docs/changes/027`：`steam`/`github`/`alpaca`/`pyth` 四个键改真探活）；**「后端零链上交互」部分仍 🟠** |
+| GAP-14 | 合成随机行情以"实时数据"形态返回 | 🟡 P2 | ✅ | `docs/changes/018`（前端标注）+ `docs/changes/027`（后端侧：真实 Alpaca 或 503，无合成路径）+ **`docs/changes/028`（前端侧：`/api/market` 改为纯代理，合成序列与兜底表已删除）** —— market 一条链上**已无合成行情**。**残留同类见 GAP-54**（market 页之外的组件） |
 | GAP-15 | `docs/changes` 先写后填纪律从未执行 | 🟠 P1 | ✅ | `0193e3a` 起 |
 | GAP-16 | `项目目标.md` 交付缺口 | 🔴 P0 | 🟠 | 部分；见 §3 |
 | GAP-17 | 负向证伪用例未常驻化 | 🟠 P1 | ✅ | `0193e3a` |
@@ -85,7 +98,7 @@
 | GAP-23 | RFC 架构与仓库分层不兼容 + 4 处内部矛盾 | 🔴 P0 | ⬜ | 设计决策 |
 | GAP-24 | 三套 Session Key 模型互不兼容 | 🟠 P1 | 🟠 | **链上闭环**（`013`+`014`）；Go 侧仍用 `sk_sess_` |
 | GAP-25 | 全局锁串行化 vs 10,000 TPS 目标 | 🟠 P1 | 🟠 | **保留、不阻塞**；须先写基准测试量化（`ADR-004`，见 §3.7） |
-| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | 🟠 | 部分；见 §3 |
+| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | 🟠 | 部分：接链层 + 价格层 + **Bot 装配** + **观测端点**已落地（`022`+`023`+`024`+`025`）；见 §3 |
 | GAP-27 | 逐块资金费率未实现（赛道靶心） | 🟠 P1 | ✅ | 本分支 |
 | GAP-28 | 双 lockfile，`npm ci` 装过期树 | 🟡 P2 | ✅ | 前提已消失（`docs/changes/020`） |
 | GAP-29 | 缺 `deploy/` 目录 | 🟡 P2 | ✅ | `docs/changes/019` |
@@ -97,13 +110,18 @@
 | GAP-35 | 全库行尾未重规范化（CRLF/LF 混用） | 🟡 P2 | ✅ | 见 §3.3（**推迟理由不成立**） |
 | GAP-36 | `.gitignore` 的 `ignition/deployments/` 管不到 `contracts/` 下 → 部署产物误入库 | 🟠 P1 | ✅ | 见 §3.4 |
 | GAP-37 | 面板同时显示两条口径的清算状态（一条含资金费、一条不含） | 🟠 P1 | ✅ | 见 §3.6（`docs/changes/021`） |
+| GAP-38 | WS 断线重连 + `lastProcessedBlock` 水位持久化（ADR-005 §5.3 P1） | 🟠 P1 | ✅ | 见 §5.2（`docs/changes/024`） |
+| GAP-39 | Hermes 生产路径：流式 tick / staleness 边界 / 批量更新 / 置信区间 | 🟡 P2 | 🟠 | 见 §5.3（`docs/changes/023`） |
+| GAP-40 | 本地链端到端集成验证（Bot 提交 `liquidate` 回执）未跑 | 🟠 P1 | 🟠 | 见 §5.4（`docs/changes/024`） |
+| GAP-41 | Bot 镜像不含资金费 → 低估可清算集合 | 🟠 P1 | ✅ | 见 §5.5（`docs/changes/026`；残余：链上对拍 / 投影指数） |
+| GAP-42 | 清算观测 `exit_price` 为判定价、`reward`/`block_number` 恒 NULL | 🟡 P2 | 🟠 | 见 §5.6（`docs/changes/025`） |
 
-> **编号跳号说明**：**GAP-38~42 不在本分支**——它们登记在未合并的
-> `feat/liquidation-bot-chain`（PR #11）上（实测该分支 `docs/` 内命中这五个号）。
-> 故本分支新号从 **GAP-43** 起，**中间的空档不是遗漏**。合并时两边的 §1 行序都会冲突，
-> **合并方需两边都保留**（§5.1 末注有详情）。
+> **编号跳号说明（合并后已消解）**：**GAP-38~42 原不在 PR #12 侧**——它们登记在
+> `feat/liquidation-bot-chain`（PR #11）上，故 PR #12 侧新号从 **GAP-43** 起，中间的空档不是遗漏。
+> **本次合并把两边 §1 行序都保留**（GAP-38~42 与 GAP-43~50 各自成块、连续成表），
+> 按原注「合并方需两边都保留」执行；编号区间本就错开，**未重排任何既有行**。
 
-| **GAP-43** | `settlement_ledger` 复式记账未建（无表、无代码） | 🟡 P2 | ✅ | `docs/changes/035`——表 + 校验层 + 借贷平的断言判据均已落。**迁移未在真实 PG 上执行**，见 GAP-51 |
+| **GAP-43** | `settlement_ledger` 复式记账未建（无表、无代码） | 🟡 P2 | ✅ | `docs/changes/035`——表 + 校验层 + 借贷平的断言判据均已落。**迁移未在真实 PG 上执行**，见 GAP-57 |
 | **GAP-44** | ZK Verifier 抽象插槽不存在（`backend/internal/verifier/` 无此目录） | 🟡 P2 | ✅ | `docs/changes/035`——接口 + no-op + 调用点（`POST /api/v1/verifier/verify`）齐 |
 | **GAP-45** | 清算结果大屏未接（`GET /api/v1/liquidations` 不存在） | 🟠 P1 | 🔴 | 见 §5.1；**阻塞于 GAP-26**（Bot 未接链、未部署） |
 | **GAP-46** | 信任证明未落链（`addTrust` 手填 proof，不消费 Steam/GitHub 证明） | 🟠 P1 | 🟠 | 见 §5.1 |
@@ -111,8 +129,29 @@
 | **GAP-48** | 授信额度纯装饰（各层硬编码，无链上 credit engine） | 🟠 P1 | 🟠 | 见 §5.1 |
 | **GAP-49** | 无 Supabase 时 DB 层静默降级内存态 | 🟠 P1 | ✅ | `docs/changes/035`——`New` 返回错误、`main` 非零退出、落盘路由 `withDB` 守卫返回 503 |
 | **GAP-50** | 资金费**收费侧**（费率取负）无链上对拍 | 🟡 P2 | 🟠 | 见 §5（`docs/changes/021`「未做（明确）」） |
-| **GAP-51** | `005_settlement_ledger.sql` **未在真实 PostgreSQL 上执行过** | 🟠 P1 | 🔴 | **阻塞于环境**：本机无 docker、无 psql、无 DB 凭据。见 §5.2 |
-| **GAP-52** | `sanitizeDSNError` 残余暴露：既非 URL userinfo、又非 `password=` 锚点的口令回显不被脱敏 | 🟡 P2 | 🟠 | 见 §5.2（另：全库 Go 源码存在**既存** gofmt 债务，CI 不跑 gofmt） |
+| **GAP-51** | 核心问题区字体浅色低对比与毛玻璃背景缺乏自主波纹动效 | 🟢 P3 | ✅ | 见 `docs/changes/022`；文字深色化与背景自主波纹闭环（**`upstream/main` 侧登记**） |
+| **GAP-52** | **前端 `src/app/api/market/route.ts` 仍在本地生成行情序列**（`synthetic_curated` / `synthetic_fallback` / `FALLBACK_MARKET_DATA` 硬编码常量）；且 `MarketTerminal.tsx` 把账户与订单写死 | 🟠 P1 | ✅ | **✅ 关闭**（`docs/changes/028`，issue #14/#16 前端侧）：路由改为**纯代理**（无生成器、无兜底表），数据源＝后端 `/api/v1/market/{prices,movers,health}`；账户/订单/跑马灯去硬编码；`/api/v1/market/movers` 排行已在 market 页呈现。**回归守卫**：`tests/market-no-synthetic.test.ts` |
+| **GAP-53** | **GitHub 探测与业务共用同一匿名配额**（60 次/小时）；`/health` 探针已加 20s 缓存压低消耗，但 CI/多实例下仍可能相互挤压 | 🟡 P2 | 🟠 | 见 `docs/changes/027` §未做；正解是 `GITHUB_TOKEN` 或探测独立配额 |
+| **GAP-54** | **market 页之外仍有多处「合成数据以实时形态呈现」**（与 GAP-14/GAP-52 同族，**审计报告 `U-5` 当时只是线索，本轮实测确认**）：`EnergyCoreHero.tsx:26/31` 把 `liveTps` 初始化成 `10032` 并每 1.2s 用 `Math.random()` 在 10015~10060 间抖动，而 `lib/api.ts` 的 `fetchBackendStats` 已能取真实 TPS；`AgentCardTerminal.tsx:372-373` 伪造 `slot` 与 `txHash`；`DeveloperConsole.tsx:394/509/526/551/561` 伪造 `simulatedTx` / `payment_id` / `agent_id` / `sessKey`；`IdentityCard.tsx:167` 用 `Math.random()` 造 `ipfs://` metadataHash；`lib/audit.ts:110/117/118` 兜底造 `order_hash`/`tx_hash` | 🟠 P1 | ⬜ | **本轮未修**（超出 #14/#16 范围，且各条需要接不同真实源：链上 / Stripe / AgentCard API）。**注意**：`CursorTrail`/`HeroGsap`/`EnergyCoreBackdrop` 的 `Math.random()` 是**粒子动画**，属正当用途，**不在本项内**（实测区分，避免误伤） |
+| **GAP-57** | `005_settlement_ledger.sql` **未在真实 PostgreSQL 上执行过** | 🟠 P1 | 🔴 | **阻塞于环境**：本机无 docker、无 psql、无 DB 凭据。见 §5.7（**W1 侧登记，原号 GAP-51 撞车，本合并重编为 57**） |
+| **GAP-58** | `sanitizeDSNError` 残余暴露：既非 URL userinfo、又非 `password=` 锚点的口令回显不被脱敏 | 🟡 P2 | 🟠 | 见 §5.7（另：全库 Go 源码存在**既存** gofmt 债务，CI 不跑 gofmt）· **W1 侧登记，原号 GAP-52 撞车，本合并重编为 58** |
+
+> **⚠️ 编号撞车与重编裁决（2026-10-11，合并 `upstream/main` 时实测）**（D4）：
+> W1 分支与 `upstream/main` **各自**把新缺口登记为 GAP-51 / GAP-52，**双方在本合并前各自都是对的**
+> （登记前检索各自零命中），**合并后才产生同号两义**。按本项目口径「**登记前先检索、撞车比漏登记更糟**」，
+> **本合并一次重编到位**，不留待后续：
+>
+> | 原（W1 分支） | 重编为 | 内容 | 保留者 |
+> | --- | --- | --- | --- |
+> | GAP-51 | **GAP-57** | `005_settlement_ledger.sql` 未在真实 PG 上执行过（🔴） | W1 |
+> | GAP-52 | **GAP-58** | `sanitizeDSNError` 残余暴露（🟠） | W1 |
+> | GAP-51 | **GAP-51（不变）** | 前端字体/波纹动效（✅） | `upstream/main` |
+> | GAP-52 | **GAP-52（不变）** | 前端 `/api/market` 合成行情（✅） | `upstream/main` |
+>
+> **重编号不新占号**：重编的 57 / 58 **取代**原本会取到的 55 / 56，故 **GAP-55 / GAP-56 未被占用**，
+> **下一个可用号仍是 GAP-55**。本仓任何分支若出现 55 / 56，即为**未合并的第三方登记**，合并时须再行检索（D4）。
+> 全套重编落在：本文件（§1 两行、§5 表两行、§5.7 两节正文与标题、§5 末注、§7 表一行）、
+> `docs/changes/035`（5 处）、`docs/changes/036`（2 处）。合并本身见 **`docs/changes/038`**。
 
 ---
 
@@ -174,9 +213,9 @@ Test-Path .github/workflows/ci.yml    # 期望 True
 | `Vault.sol` / `PositionManager.sol` | ✅ 已实现，138 用例通过 | — |
 | Pyth 拉取式预言机 | ✅ `PythOracleAdapter` 已实现；**美股 feed 在 Monad 上不可用**（`执行方案-后端与合约.md:29-46` 实测） | 外部事实，非缺陷 |
 | 前端交易面板 | ✅ `/perp` 页面 + `PositionPanel`，读链不读 mock | — |
-| **Go 清算 Bot** | 🟠 **核心已做**（`internal/perp/{position,nonce}`，29 测试 `-race` 通过）；**接链部分未做** | ⛔ **需要 RPC + 已部署的 `PositionManager` 地址** |
+| **Go 清算 Bot** | 🟠 **核心已做**（`internal/perp/{position,nonce}`）；**接链层已做**（`internal/chain`，`022`）；**价格层已做**（`internal/oracle`，`023`）；**交易发送 + `cmd/liquidator` 装配已做**（`internal/liquidator`，16 测试 `-race` 通过，`024`） | ⛔ **端到端回执**需本地链集成（GAP-40）+ 已部署的 `PositionManager` 地址 |
 | **链上部署** | 🔴 **未做** | ⛔ **需要 `PRIVATE_KEY` + Monad 测试币** |
-| `GET /api/v1/liquidations` | 🟠 未做 | ⛔ 依赖 Bot |
+| `GET /api/v1/liquidations` | ✅ 已做（`docs/changes/025`） | — |
 
 **为什么接链部分没写**：写了也无法验证，只会变成"看起来完成了"的代码。
 按 `提示词.md` 纪律 §1「读到才算，严禁推断」，**在能跑通之前不写**。
@@ -476,7 +515,14 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | 编号 | 事项 | 起点 | 预估 |
 | --- | --- | --- | --- |
 | GAP-25 | `agentcard` 全局锁 → 需先写基准测试量化 | `backend/internal/agentcard` | 1 天 |
-| GAP-13 | 后端接 go-ethereum，`/health` 改为真实探活 | `backend/` | 1 天 |
+| GAP-13 | ~~后端接 go-ethereum，`/health` 改为真实探活~~ **探活部分 ✅**（`docs/changes/027`）；**接链部分待做**（依赖 GAP-26 的部署） | `backend/`（接链）+ `/health`（已完成） | 接链残余 1 天 |
+| GAP-52 | ~~前端 `/api/market` 改真实数据源（撤掉 `synthetic_*` 生成序列与 `FALLBACK_MARKET_DATA`）+ 账户数字去硬编码~~ **✅ 已落地**（`docs/changes/028`）；残余见 §未做 | `src/app/api/market/route.ts` · `src/components/MarketTerminal.tsx` · `src/lib/api.ts` | 已用 1 天 |
+| GAP-53 | GitHub 探测改用 `GITHUB_TOKEN`（现与业务共用 60/h 匿名配额） | `backend/internal/httpapi/health.go` · `backend/internal/developer/github.go` | 0.5 天 |
+| GAP-54 | 前端其余组件的合成数据接真实源（`liveTps` → `fetchBackendStats` · AgentCard `slot`/`txHash` · DeveloperConsole 的 `payment_id`/`agent_id`/`sessKey` · IdentityCard 的 `metadataHash` · `audit.ts` 的 hash 兜底） | `src/components/{EnergyCoreHero,AgentCardTerminal,DeveloperConsole,IdentityCard}.tsx` · `src/lib/audit.ts` | 1.5 天 |
+| GAP-39 | Hermes 生产路径：SSE/WS 流式 tick、staleness 边界（镜像 `getPriceNoOlderThan`）、批量更新、置信区间 | `backend/internal/oracle/hermes.go`（最小 REST 已就位） | 0.5 天 |
+| GAP-40 | 本地链端到端集成验证（见 §5.4） | `contracts/`（`npx hardhat node` + `demo-seed.ts`）+ `cmd/liquidator` | 0.5 天 |
+| GAP-41 | ~~Bot 镜像纳入资金费（见 §5.5）~~ **✅ 已落地**（`docs/changes/026`）；残余见 §5.5 文末 | `backend/internal/perp/position` + `internal/chain` | 残余 0.5 天 |
+| GAP-42 | 清算观测回填权威 `exit_price`/`reward`/`block_number`（见 §5.6） | `backend/internal/chain`（`EventHandler` 增补字段）+ `internal/liquidation` | 0.5 天 |
 | GAP-46 | 信任证明落链（证明哈希 → `Koliance.addTrust`） | `src/app/page.tsx` · `src/components/TrustAttestationCard.tsx` | 1 天 |
 | GAP-47 | Steam / GitHub 证明落 PG（现只进 `MemoryStore`） | `backend/internal/game/service.go` · `backend/internal/developer/github.go` | 1 天 |
 | GAP-48 | 授信额度口径统一（现四处硬编码且互不相同） | `src/lib/trustTier.ts` · `contracts/contracts/Koliance.sol` | 1~2 天 |
@@ -484,7 +530,7 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 
 > **本节原列的三项已于 W1 关闭，移出本表**（保留在 §1 状态总览作回归基线，不删）：
 > **GAP-43 / GAP-44 / GAP-49 → ✅**，依据 `docs/changes/035`。
-> **GAP-43 带一个残留**：迁移**未在真实 PG 上跑过**（GAP-51，🔴 阻塞于环境），故"表已能建"**不等于**"表已存在"。
+> **GAP-43 带一个残留**：迁移**未在真实 PG 上跑过**（**GAP-57**，🔴 阻塞于环境），故"表已能建"**不等于**"表已存在"。
 > **GAP-49 的口径**：`database.New` 无凭据即返回错误；`cmd/api` 非零退出；落盘路由加 `withDB` 守卫（503）。
 > `health` / `stats` / `market/*` **不在**守卫内——它们的数据源不是 PostgreSQL，一并 503 会把"没有数据库"说成"服务全挂"。
 
@@ -522,12 +568,137 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 
 ---
 
-### 5.2 W1 落地时暴露的两个新缺口（2026-10-11）
+### 5.2 GAP-38：WS 断线重连与事件水位（ADR-005 §5.3 P1）—— ✅ 已落地
+
+> ✅ **已落地**（`docs/changes/024`，`internal/liquidator`）。实现口径见该文档 §关键设计 3：
+> **保守水位 + 回填提交点原子推进**（tmp+rename 持久化 `lastProcessedBlock`；`chain.EventHandler` 边界不带区块号，
+> 故推进粒度放宽到回填提交点，满足同一「不重不漏」不变量）。原 D3 负向判据（kill 本地链 → 发事件 → 再拉起，
+> 断言零丢事件）**并入 GAP-40 的本地链集成验证**（见 §5.4）。
+
+`internal/chain`（`docs/changes/022`）只提供 `Backfill(ctx, from, to, h)` 与 `Subscribe(ctx, h)` 两个**原语**，
+刻意不自愈。ADR-005 §5.3 的架构不变量——**持久化 `lastProcessedBlock` 水位** + **指数退避重连** +
+**重连后先回填、再切回实时订阅**——落在 `cmd/liquidator` 装配层：
+
+- 启动：从 `lastProcessedBlock+1`（空水位则从部署区块）回填到链头；
+- 运行：每处理一个区块**原子推进水位**（不重不漏）；
+- 重连：从 `lastProcessedBlock+1` 重新回填，堵断线空窗。
+
+**负向判据（D3，落地时必须真跑）**：kill 本地 `npx hardhat node` → 发若干事件 → 再拉起，断言回填后**零丢事件**
+（本地 `PositionOpened` 计数 == 链上事件数）。这是"失败即无声"的高危项，判据必须有牙。
+
+### 5.3 GAP-39：Hermes 生产路径（价格层的最小实现遗留）
+
+`internal/oracle`（`docs/changes/023`）的 `HermesFeed` 是**演示不阻塞的最小实现**：单次
+`/v2/updates/price/latest` REST GET + `price/expo` 归一化（`NormalizeHermesPrice` 已逐行镜像
+`PythOracleAdapter._normalize` 并有对拍测试）。生产叙事还差：
+
+- **SSE/WS 流式 tick**：现为每价一次轮询式 GET，无订阅、无缓存。
+- **staleness 边界**：镜像 `PythOracleAdapter.getPriceNoOlderThan`——拉取式预言机上，测试网 feed
+  可能**月级陈旧**却仍返回一个价；现实现不拒绝陈旧价，对保证金系统是错误失败模式。
+- **批量更新 / 置信区间**：现实现逐 feed 取、丢弃 `conf` 字段。
+
+**演示不受影响**：演示主路径是 `DemoFeed`（链上 `DemoOracle`，owner 可调、无 staleness 语义），`HermesFeed` 只作生产叙事。
+
+### 5.4 GAP-40：本地链端到端集成验证（Bot 提交 `liquidate` 回执）未跑
+
+`cmd/liquidator` 装配与单测已落地（`docs/changes/024`），但**端到端回执尚未在本地链上跑过**——
+按 D1 不得伪装成已跑。本地工具链已就位（`contracts/node_modules` 存在、`ignition/modules/PerpStack.ts` 与
+`scripts/demo-seed.ts` 存在），命令如下（本子代理未执行，留待集成）：
+
+```powershell
+# 终端 A：起本地链（HTTP + WS 同端口 8545，chain 31337，账户带测试币）
+cd contracts
+npx hardhat node
+
+# 终端 B：部署 + 注入流动性 + 开 20 笔混合仓位（14 long / 6 short @ 50x，入场价 180）
+npx hardhat run scripts/demo-seed.ts --network localhost
+# 记录输出的 NEXT_PUBLIC_PERP_POSITION_MANAGER / NEXT_PUBLIC_PERP_ORACLE 地址
+
+# 终端 B：写一个 drop-price 脚本（或复用 DemoControlPanel 的 setPrice），把 NVDA 价从 180 打到多头强平价下
+# （多头 50x、entry 180 → 强平价 ≈ 163.6）
+
+# 终端 C：起 Bot（私钥取 hardhat node 输出的任一 funded 账户私钥）
+cd backend
+$env:LIQUIDATOR_RPC="http://127.0.0.1:8545"
+$env:LIQUIDATOR_WS="ws://127.0.0.1:8545"
+$env:LIQUIDATOR_CHAIN_ID="31337"
+$env:LIQUIDATOR_POSITION_MANAGER="<pm 地址>"
+$env:LIQUIDATOR_DEMO_ORACLE="<oracle 地址>"
+$env:LIQUIDATOR_FEED="demo"
+$env:LIQUIDATOR_PRIVATE_KEY="<funded 账户私钥，无 0x 也可>"
+$env:LIQUIDATOR_START_BLOCK="1"
+go run ./cmd/liquidator
+
+# 判据：Bot 结构化日志出现 "liquidate submitted"（tx=0x…），且硬链接收到 PositionLiquidated 回执；
+# 附带 D3 负向：kill 终端 A 的 node → 发若干事件 → 再拉起 node + Bot，断言本地 PositionOpened 计数 == 链上事件数（零丢）。
+```
+
+**还差的最小件**：一个「调低 DemoOracle 价」的脚本（`demo-seed.ts` 不降价；`DemoControlPanel.tsx` 是前端按钮，
+headless 集成需要一个等价脚本或 `cast send` 一行）。
+
+### 5.5 GAP-41：Bot 镜像不含资金费 → 低估可清算集合 —— ✅ 已落地（残余见文末）
+
+> ✅ **公式与事件源部分已落地**（`docs/changes/026`，2026-10-11）。
+> `internal/perp/position` 增补 `EntryFundingIndex` / `Funding` / `WAD`，
+> `Equity` / `IsLiquidatable` / `LiquidationPrice` 按合约口径减去资金费，
+> `Table` 增补每 feed 的已观测指数（`ApplyFundingIndex`）并由 `Scan` 取用。
+> `entryFundingIndex` 的来源**选跟踪 `FundingAccrued` 事件**（而非 open 时 `getPosition` 读回）：
+> 合约在 `PositionOpened` **之前**于同一 tx 内 emit `FundingAccrued`（`PositionManager.sol:427` 对 `:476`），
+> 日志顺序保证回放时种子已在手，零额外 RPC。
+> 连带 `internal/chain`（**冻结四包之一，本次显式解冻**）：`EventHandler` 增 `HandleFundingAccrued`、
+> `filterQuery` 3 → 4 topic、`PositionFromOpened` 增一参。
+
+**原始记录（保留，D4 不篡改已发生的事实）**：
+
+`internal/perp/position.Position` **无 `entryFundingIndex`**（该包设计于 ADR-003 逐块资金费之前，
+`position.go:32-35` 明写「liquidator 无用的字段省略」）。故 `position.Scan` 按**纯价格**判清算，而链上
+`_isLiquidatable` 是 `collateral + pnl - funding`（`PositionManager.sol:1045-1049`）。
+
+**后果（安全方向，演示不阻塞）**：资金费非零时，Bot **低估可清算集合**——漏清算（资金费把仓位推过线时 Bot 看不到）；
+反向（Bot 认为可清算、链上因负资金费不可清算）时链上 `liquidate` 对不可清算仓位 `continue` 静默跳过，**不会 revert**。
+
+**残余（未做，本步明确不做）**：
+
+1. **链上对拍**：Bot 的判定 vs `PositionManager.isLiquidatable` 的实链读数，**未跑**。
+   属 GAP-40 的端到端集成范围——本步只保证「镜像口径对齐合约」，没保证「镜像读数等于链上读数」。
+2. **`indexNow` 是已观测指数，不是链上投影值**：合约用 `_projectedFundingIndex`（投影到当前区块，
+   `PositionManager.sol:866-872`），Bot 用 `FundingAccrued` 的存量指数，两次累积之间**滞后**。
+   方向与本 GAP 同向（欠报），幅度更小。要逐位消除需在 Bot 侧镜像 `_skewWad` / `_fundingDelta` /
+   `lastFundingBlock`——那是第二份资金费模型，**本步不做**。
+3. **回填窗口**：`LIQUIDATOR_START_BLOCK` 晚于某 feed 首次开仓 tx 时，该 feed 无种子 → entry 指数按 nil=0。
+   演示路径（从部署区块回填）不受影响。
+
+**解除条件（原文，已被上条落地满足）**：`position.Position` 增补 `EntryFundingIndex`，`chain.positionFromEvent`
+从 `PositionOpened` 事件之外补该字段（事件本身不携带它，需在 open 时按 `cumulativeFundingIndex` 快照或改事件）；
+`Scan` 的判定与 `_isLiquidatable` 对齐。属 `internal/perp/position` + `internal/chain` 的改动，超出 `024` 装配范围。
+
+### 5.6 GAP-42：清算观测的权威值回填（`exit_price`/`reward`/`block_number`）
+
+`docs/changes/025` 落地的 `/api/v1/liquidations` 在 Bot **提交成功点**写库，此时只有判定价与 tx 哈希：
+
+- `exit_price` 存的是 `batch.MarkPrice`（扫描时判定价），**不是**链上结算价；
+- `reward` / `block_number` 恒为 NULL（tx 尚未上链，结算赏金未知）。
+
+而 `PositionLiquidated` 事件**确实携带**权威 `exitPrice`/`reward`
+（`internal/chain/bindings/ipositionmanager.go:1327` 已解码），但 `chain.Client` 在
+`client.go:98` 只把 `positionId` 传给 `EventHandler.HandleLiquidated`，丢弃了这两个字段；
+`chain` 属冻结四包，`025` 不改。
+
+**解除条件**：给 `chain.EventHandler` 增补 `exitPrice`/`reward`（连带 `HandleLiquidated` 签名与
+`tableHandler`），在事件侧补写/回填这三列；或 Bot 侧独立监听 `PositionLiquidated` 回填。
+属 `internal/chain` + `internal/liquidation` 的改动。
+
+---
+
+### 5.7 W1 落地时暴露的两个新缺口（2026-10-11，合并后自 §5.2 迁入）
 
 **登记前检索**（D4）：`git grep -n "GAP-51\|GAP-52" -- .` 在本分支**零命中**；
+**（2026-10-11 合并 `upstream/main` 后）**：`upstream/main` **同时**占用了 GAP-51 / GAP-52，
+故本节两条**已重编为 GAP-57 / GAP-58**（撞号裁决见 §1 表后注）；下文中出现的 `GAP-51\|GAP-52`
+是**检索当时的字符串**，保留不改写。
 `docs/changes/` 编号 `022~026` 亦**零命中**（本分支从 `021` 直接跳到 `027`，见下方"编号说明"）。
 
-#### GAP-51 · `005_settlement_ledger.sql` 未在真实 PostgreSQL 上执行过（🔴 阻塞于环境）
+#### GAP-57 · `005_settlement_ledger.sql` 未在真实 PostgreSQL 上执行过（🔴 阻塞于环境）
 
 | 项 | 内容 |
 | --- | --- |
@@ -538,7 +709,7 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | **已做的替代验证（不构成解除）** | SQL 静态审查；Go 侧同一套不变量由 `internal/settlement` 以 23 个用例机械守住。**二者都不执行 DDL。** |
 | **一个已知的、静态审查**抓到**的坑（已修）** | 两个同时机 `BEFORE INSERT` 触发器按**名字母序**触发，`.._balance_after` 会**先于** `.._fill_seq` 运行 → 对 `NULL` 的 `ledger_seq` 取"前一笔"永远取不到 → 每一行都把自己的发生额当余额。**已改为单函数单触发器**消除名字序依赖（见该文件的注释）。**此坑正是"未跑过"的证据**：它不会被任何 Go 单测发现。 |
 
-#### GAP-52 · `sanitizeDSNError` 的残余暴露（🟠）
+#### GAP-58 · `sanitizeDSNError` 的残余暴露（🟠）
 
 | 项 | 内容 |
 | --- | --- |

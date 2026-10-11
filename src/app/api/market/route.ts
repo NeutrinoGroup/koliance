@@ -1,176 +1,58 @@
 import { NextRequest, NextResponse } from "next/server";
-
-// Fallback high-fidelity dataset for offline/rate-limited resilience
-const FALLBACK_MARKET_DATA: Record<string, any> = {
-  NVDA: {
-    symbol: "NVDA",
-    name: "NVIDIA Corporation",
-    currency: "USD",
-    regularMarketPrice: 142.80,
-    regularMarketChange: 4.35,
-    regularMarketChangePercent: 3.14,
-    fiftyTwoWeekHigh: 153.15,
-    fiftyTwoWeekLow: 75.60,
-    regularMarketDayHigh: 144.20,
-    regularMarketDayLow: 139.50,
-    regularMarketVolume: 42180000,
-    marketCap: "3.51T",
-    peRatio: 52.4,
-  },
-  AAPL: {
-    symbol: "AAPL",
-    name: "Apple Inc.",
-    currency: "USD",
-    regularMarketPrice: 234.50,
-    regularMarketChange: 1.85,
-    regularMarketChangePercent: 0.80,
-    fiftyTwoWeekHigh: 237.23,
-    fiftyTwoWeekLow: 164.08,
-    regularMarketDayHigh: 235.80,
-    regularMarketDayLow: 232.10,
-    regularMarketVolume: 38920000,
-    marketCap: "3.58T",
-    peRatio: 34.2,
-  },
-  TSLA: {
-    symbol: "TSLA",
-    name: "Tesla, Inc.",
-    currency: "USD",
-    regularMarketPrice: 258.40,
-    regularMarketChange: -3.20,
-    regularMarketChangePercent: -1.22,
-    fiftyTwoWeekHigh: 271.00,
-    fiftyTwoWeekLow: 138.80,
-    regularMarketDayHigh: 262.10,
-    regularMarketDayLow: 254.30,
-    regularMarketVolume: 61400000,
-    marketCap: "824.5B",
-    peRatio: 68.1,
-  },
-  "BTC-USD": {
-    symbol: "BTC-USD",
-    name: "Bitcoin USD",
-    currency: "USD",
-    regularMarketPrice: 65420.00,
-    regularMarketChange: 1420.50,
-    regularMarketChangePercent: 2.22,
-    fiftyTwoWeekHigh: 73750.00,
-    fiftyTwoWeekLow: 26500.00,
-    regularMarketDayHigh: 65900.00,
-    regularMarketDayLow: 63800.00,
-    regularMarketVolume: 28540000000,
-    marketCap: "1.29T",
-    peRatio: null,
-  },
-  "ETH-USD": {
-    symbol: "ETH-USD",
-    name: "Ethereum USD",
-    currency: "USD",
-    regularMarketPrice: 2640.50,
-    regularMarketChange: 65.20,
-    regularMarketChangePercent: 2.53,
-    fiftyTwoWeekHigh: 4090.00,
-    fiftyTwoWeekLow: 1520.00,
-    regularMarketDayHigh: 2680.00,
-    regularMarketDayLow: 2570.00,
-    regularMarketVolume: 14200000000,
-    marketCap: "318.2B",
-    peRatio: null,
-  },
-  "MON-USD": {
-    symbol: "MON-USD",
-    name: "Monad Ecosystem Token (Parallel EVM)",
-    currency: "USD",
-    regularMarketPrice: 3.45,
-    regularMarketChange: 0.42,
-    regularMarketChangePercent: 13.86,
-    fiftyTwoWeekHigh: 4.80,
-    fiftyTwoWeekLow: 0.90,
-    regularMarketDayHigh: 3.60,
-    regularMarketDayLow: 3.02,
-    regularMarketVolume: 125000000,
-    marketCap: "3.45B",
-    peRatio: null,
-  },
-};
-
-// Gatekeeping: Whitelist allowed ranges & intervals
-const ALLOWED_RANGES = new Set(["1d", "5d", "1mo", "6mo", "1y"]);
-const ALLOWED_INTERVALS = new Set(["5m", "15m", "1d", "1wk"]);
+import { buildSymbolPayload, type SymbolPayload } from "@/lib/marketFeed";
+import { GO_BACKEND_URL } from "@/lib/api";
 
 /**
- * Deterministic pseudo-random generator, seeded from a string.
+ * GET /api/market?symbol=…&range=…&interval=…
  *
- * This replaced `Math.random()`, and the reason is worth keeping: a random walk
- * regenerated on every request means two refreshes of the same page show two
- * different price histories. Nobody can verify a chart that changes when you
- * look at it, and in a project whose whole argument is "judges must be able to
- * verify what was built", a demo asset that cannot be reproduced is worse than
- * no demo asset.
+ * This route used to be a market-data generator. It held a hardcoded
+ * `FALLBACK_MARKET_DATA` table (NVDA 142.80, AAPL 234.50, …), a seeded random
+ * walk, a `synthetic_curated` branch for MON-USD and a `synthetic_fallback`
+ * branch that answered an unreachable upstream with a generated 30-point
+ * series. A page rendered it under the words "Real-time Technical Analysis"
+ * (GAP-14), and the backend change that removed the same pattern server-side
+ * left it here (GAP-52).
  *
- * Seeded per symbol and per UTC day, so the series is stable within a day and
- * advances across days — the shape of a real series rather than a frozen
- * constant. Still synthetic, and labelled as such everywhere it is returned.
+ * It is now a proxy with a gate. It asks the Go gateway for the symbol's price
+ * and relays what comes back. **It has no code path that produces a number.**
+ * That is the structural guarantee, not a promise: there is no fallback table
+ * to fall back to, and no generator to call.
+ *
+ * When the gateway refuses — 503 for a deployment with no Alpaca credentials,
+ * 404 for a symbol the exchange does not list, 5xx for an upstream failure —
+ * this answers with the same refusal and a machine-readable reason. It does not
+ * turn a refusal into a 200 with invented prices.
+ *
+ * What it deliberately keeps: the symbol and range gatekeeping, which ran
+ * before any outbound request and is pinned by tests.
  */
-function seededRandom(seed: string): () => number {
-  let h = 2166136261 >>> 0;
-  for (let i = 0; i < seed.length; i++) {
-    h ^= seed.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return () => {
-    h ^= h << 13;
-    h >>>= 0;
-    h ^= h >>> 17;
-    h ^= h << 5;
-    h >>>= 0;
-    return h / 4294967296;
-  };
-}
 
-/** UTC day index, so synthetic series are stable within a day. */
-function utcDaySeed(): string {
-  return String(Math.floor(Date.now() / 86_400_000));
-}
+// Gatekeeping: whitelist allowed ranges & intervals.
+//
+// Retained from the previous implementation. They now validate a request that
+// ends in a proxied upstream call rather than one that selects a formula, but
+// the reason is unchanged: an unvalidated symbol is interpolated into an
+// outbound URL.
+const ALLOWED_RANGES = new Set(["1d", "5d", "1mo", "6mo", "1y"]);
+const ALLOWED_INTERVALS = new Set(["5m", "15m", "1d", "1wk"]);
+const SYMBOL_PATTERN = /^[A-Z0-9.\-]{1,10}$/;
 
-// Calculate RSI (Relative Strength Index)
-function calculateRSI(prices: number[], period: number = 14): number {
-  if (prices.length < period + 1) return 55;
+/** Same vocabulary the client adapter uses, so both halves read alike. */
+type RouteReason = "not-configured" | "upstream-error" | "unreachable" | "invalid-symbol";
 
-  let gains = 0;
-  let losses = 0;
-
-  for (let i = 1; i <= period; i++) {
-    const diff = prices[i] - prices[i - 1];
-    if (diff >= 0) gains += diff;
-    else losses += Math.abs(diff);
-  }
-
-  let avgGain = gains / period;
-  let avgLoss = losses / period;
-
-  for (let i = period + 1; i < prices.length; i++) {
-    const diff = prices[i] - prices[i - 1];
-    if (diff >= 0) {
-      avgGain = (avgGain * (period - 1) + diff) / period;
-      avgLoss = (avgLoss * (period - 1)) / period;
-    } else {
-      avgGain = (avgGain * (period - 1)) / period;
-      avgLoss = (avgLoss * (period - 1) + Math.abs(diff)) / period;
-    }
-  }
-
-  if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return Math.round((100 - 100 / (1 + rs)) * 10) / 10;
-}
-
-// Calculate SMA (Simple Moving Average)
-function calculateSMA(prices: number[], period: number): number | null {
-  if (prices.length < period) return null;
-  const slice = prices.slice(-period);
-  const sum = slice.reduce((acc, val) => acc + val, 0);
-  return Math.round((sum / period) * 100) / 100;
+/**
+ * Answers a refusal without a price in it.
+ *
+ * `symbol` is echoed for the client's convenience but no `meta`/`chart` object
+ * is emitted: the previous route's failure branch returned a full payload with
+ * `synthetic: true`, and a caller that only looked at `meta` had no way to tell
+ * it apart from a quote.
+ */
+function refuse(status: number, reason: RouteReason, message: string, extra: Record<string, unknown> = {}) {
+  return NextResponse.json(
+    { error: message, reason, synthetic: false, dataCaveat: message, ...extra },
+    { status }
+  );
 }
 
 export async function GET(request: NextRequest) {
@@ -179,257 +61,87 @@ export async function GET(request: NextRequest) {
   const rawRange = searchParams.get("range") || "1mo";
   const rawInterval = searchParams.get("interval") || "1d";
 
-  // Gatekeeping Rule 1: Symbol Sanitization & Regex Security Check
+  // Gatekeeping Rule 1: symbol sanitization, before anything leaves the process.
   const symbol = rawSymbol.trim().toUpperCase();
-  const symbolRegex = /^[A-Z0-9.\-]{1,10}$/;
-  if (!symbolRegex.test(symbol)) {
-    return NextResponse.json(
-      { error: "Security Gatekeeper: Invalid symbol format. Allowed: alphanumeric, '.', '-', max 10 chars." },
-      { status: 400 }
+  if (!SYMBOL_PATTERN.test(symbol)) {
+    return refuse(
+      400,
+      "invalid-symbol",
+      "Security Gatekeeper: Invalid symbol format. Allowed: alphanumeric, '.', '-', max 10 chars."
     );
   }
 
-  // Gatekeeping Rule 2: Range & Interval Validation
+  // Gatekeeping Rule 2: range & interval clamp. Still accepted and validated so
+  // the existing URL contract keeps working; the upstream call this route now
+  // makes is a single latest-price read and takes neither parameter. They are
+  // reported back rather than silently dropped, so a caller can see that the
+  // chart-level request was accepted and is simply not servable from a
+  // two-observation source.
   const range = ALLOWED_RANGES.has(rawRange) ? rawRange : "1mo";
   const interval = ALLOWED_INTERVALS.has(rawInterval) ? rawInterval : "1d";
 
-  // Gatekeeping Rule 3: Special Custom Assets (e.g. MON-USD Monad Ecosystem)
-  if (symbol === "MON-USD" || symbol === "MON") {
-    const mock = FALLBACK_MARKET_DATA["MON-USD"];
-    // Generate synthetic 30-day upward price curve for Monad
-    const timestamps: number[] = [];
-    const closes: number[] = [];
-    const baseTime = Math.floor(Date.now() / 1000) - 30 * 86400;
-    let curPrice = 2.85;
-
-    // Deterministic, and honest about what it is: MON-USD has no upstream feed
-    // here, so this is a synthetic series with a curated anchor price.
-    const rand = seededRandom(`MON-USD:${range}:${interval}:${utcDaySeed()}`);
-    for (let i = 0; i < 30; i++) {
-      timestamps.push(baseTime + i * 86400);
-      curPrice += (rand() - 0.42) * 0.12;
-      closes.push(Math.round(curPrice * 100) / 100);
-    }
-    closes[closes.length - 1] = mock.regularMarketPrice;
-
-    const rsi = calculateRSI(closes);
-    const sma20 = calculateSMA(closes, 20);
-
-    return NextResponse.json({
-      // Named for what it is. The previous `monad_oracle_gatekeeper` read as
-      // though an oracle had been consulted; no oracle is involved.
-      source: "synthetic_curated",
-      synthetic: true,
-      dataCaveat:
-        "Synthetic series with a curated anchor price. Not a market feed; there is no MON-USD upstream on this deployment.",
-      meta: mock,
-      chart: { timestamps, closes },
-      analysis: {
-        rsi,
-        rsiSignal: rsi > 70 ? "Overbought" : rsi < 30 ? "Oversold" : "Neutral / Healthy",
-        sma20: sma20 || 3.25,
-        trend: "Strong Bullish Accumulation",
-        support: 2.95,
-        resistance: 3.80,
-        volatility: "Medium (Parallel EVM Momentum)",
-        healthScore: 92,
-        agentCardViability: "A+ (Tier 1 Instant Monad Settlement)",
-        aiVerdict:
-          "Monad's single-slot finality is driving rapid DeFi liquidity growth. High-frequency micro-payments and AgentCard tokenized trading provide exceptional efficiency with sub-400ms execution.",
-      },
-    });
-  }
-
-  // Gatekeeping Rule 4: Multi-Source Market Fetch (Alpaca / CoinGecko / Pyth Hermes)
-  const isCrypto = symbol.includes("-USD") || symbol === "BTC" || symbol === "ETH" || symbol === "MON";
-  const coinGeckoId = symbol.startsWith("BTC") ? "bitcoin" : symbol.startsWith("ETH") ? "ethereum" : null;
-
+  // Rule 3: ask the gateway. It serves real Alpaca data or refuses; there is no
+  // third answer, and none is manufactured here.
+  let upstream: Response;
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 4500);
+    upstream = await fetch(
+      `${GO_BACKEND_URL}/api/v1/market/prices?symbol=${encodeURIComponent(symbol)}`,
+      { cache: "no-store" }
+    );
+  } catch (err) {
+    return refuse(
+      502,
+      "unreachable",
+      `Market gateway unreachable at ${GO_BACKEND_URL}: ${err instanceof Error ? err.message : String(err)}. ` +
+        "No synthetic series is generated in its place.",
+      { symbol }
+    );
+  }
 
-    let currentPrice = 0;
-    let prevClose = 0;
-    let timestamps: number[] = [];
-    let closes: number[] = [];
-    let rawMeta: any = {};
-
-    if (isCrypto && coinGeckoId) {
-      // CoinGecko Public V3 API (No API key required)
-      const cgUrl = `https://api.coingecko.com/api/v3/coins/${coinGeckoId}/market_chart?vs_currency=usd&days=${range === "1d" ? "1" : range === "5d" ? "5" : "30"}`;
-      const res = await fetch(cgUrl, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-        next: { revalidate: 60 },
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        throw new Error(`CoinGecko upstream responded with status ${res.status}`);
-      }
-      const data = await res.json();
-      const prices: [number, number][] = data?.prices || [];
-      if (prices.length === 0) {
-        throw new Error("Empty price series from crypto upstream");
-      }
-      for (const [t, p] of prices) {
-        timestamps.push(Math.floor(t / 1000));
-        closes.push(Math.round(p * 100) / 100);
-      }
-      currentPrice = closes[closes.length - 1];
-      prevClose = closes.length > 1 ? closes[0] : currentPrice;
-      rawMeta = {
-        symbol,
-        name: symbol === "BTC-USD" ? "Bitcoin USD" : "Ethereum USD",
-        currency: "USD",
-        exchangeName: "Decentralized / Global Index",
-      };
-    } else {
-      // Pyth Network Hermes Public Price Feed or Alpaca
-      const pythUrl = `https://hermes.pyth.network/v2/updates/price/latest?ids[]=0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43`;
-      const res = await fetch(pythUrl, {
-        signal: controller.signal,
-        headers: { Accept: "application/json" },
-        next: { revalidate: 60 },
-      });
-      clearTimeout(timeoutId);
-
-      if (!res.ok) {
-        throw new Error(`Market feed upstream responded with status ${res.status}`);
-      }
-      const data = await res.json();
-      const parsed = data?.parsed?.[0]?.price;
-      if (!parsed || !parsed.price) {
-        throw new Error("Invalid payload from Pyth market feed");
-      }
-      const priceNum = Number(parsed.price) * Math.pow(10, Number(parsed.expo));
-      currentPrice = Math.round(priceNum * 100) / 100;
-      prevClose = currentPrice * 0.99;
-      const count = 30;
-      const baseTime = Math.floor(Date.now() / 1000) - count * 86400;
-      for (let i = 0; i < count; i++) {
-        timestamps.push(baseTime + i * 86400);
-        closes.push(Math.round((currentPrice * (0.95 + 0.05 * (i / count))) * 100) / 100);
-      }
-      rawMeta = {
-        symbol,
-        name: `${symbol} Equity / Asset`,
-        currency: "USD",
-        exchangeName: "NASDAQ / Public Feed",
-      };
+  if (!upstream.ok) {
+    let detail = `HTTP ${upstream.status}`;
+    try {
+      const body = await upstream.json();
+      if (body && typeof body.error === "string" && body.error) detail = body.error;
+    } catch {
+      // Non-JSON body: the status line is the detail.
     }
 
-    const change = Math.round((currentPrice - prevClose) * 100) / 100;
-    const changePercent = prevClose ? Math.round((change / prevClose) * 10000) / 100 : 0;
+    // The gateway's own status decides the reason, and every branch is a
+    // refusal. 503 is the no-credentials case the old code used to answer with
+    // a generated series.
+    const reason: RouteReason =
+      upstream.status === 503 ? "not-configured" : upstream.status === 404 ? "invalid-symbol" : "upstream-error";
+    const status = upstream.status === 404 ? 404 : 503;
+    return refuse(status, reason, detail, { symbol });
+  }
 
-    // Technical Analysis Calculations
-    const rsi = calculateRSI(closes);
-    const sma20 = calculateSMA(closes, Math.min(20, closes.length));
-    const minPrice = Math.min(...closes);
-    const maxPrice = Math.max(...closes);
+  let row: unknown;
+  try {
+    row = await upstream.json();
+  } catch (err) {
+    return refuse(
+      502,
+      "upstream-error",
+      `Gateway returned an unreadable body: ${err instanceof Error ? err.message : String(err)}`,
+      { symbol }
+    );
+  }
 
-    const support = Math.round((minPrice + (currentPrice - minPrice) * 0.25) * 100) / 100;
-    const resistance = Math.round((maxPrice - (maxPrice - currentPrice) * 0.25) * 100) / 100;
-
-    let trend = "Consolidation / Neutral";
-    if (sma20 && currentPrice > sma20 * 1.02) trend = "Bullish Uptrend";
-    else if (sma20 && currentPrice < sma20 * 0.98) trend = "Bearish Pullback";
-
-    let healthScore = 75;
-    if (changePercent > 0) healthScore += 10;
-    if (rsi >= 40 && rsi <= 65) healthScore += 10;
-    if (currentPrice > (sma20 || currentPrice)) healthScore += 5;
-
-    return NextResponse.json({
-      source: "market_feed_live",
-      synthetic: false,
-      dataCaveat: null,
-      meta: {
-        symbol: rawMeta.symbol || symbol,
-        name: rawMeta.name || symbol,
-        currency: rawMeta.currency || "USD",
-        regularMarketPrice: currentPrice,
-        regularMarketChange: change,
-        regularMarketChangePercent: changePercent,
-        fiftyTwoWeekHigh: maxPrice * 1.15,
-        fiftyTwoWeekLow: minPrice * 0.85,
-        regularMarketDayHigh: currentPrice * 1.02,
-        regularMarketDayLow: currentPrice * 0.98,
-        regularMarketVolume: 15000000,
-        exchangeName: rawMeta.exchangeName || "NASDAQ",
-      },
-      chart: {
-        timestamps,
-        closes,
-      },
-      analysis: {
-        rsi,
-        rsiSignal: rsi > 70 ? "Overbought" : rsi < 30 ? "Oversold" : "Healthy Range",
-        sma20: sma20 || currentPrice,
-        trend,
-        support,
-        resistance,
-        volatility: `${Math.round(((maxPrice - minPrice) / currentPrice) * 100)}% Range`,
-        healthScore: Math.min(healthScore, 98),
-        agentCardViability: "A (Eligible for Tokenized Orderbook Matching on Monad)",
-        aiVerdict: `Verified real-time multi-source market feed for ${symbol}. Key pivot support sits around $${support}, while primary overhead resistance is anchored at $${resistance}. AgentCard autonomous agents can execute collateralized trades with single-slot finality.`,
-      },
-    });
-  } catch (err: any) {
-    console.warn(`Upstream market feed warning for ${symbol}, utilizing calibrated fallback:`, err?.message);
-
-    // Gatekeeping Rule 5: Seamless Fallback with High-Fidelity Data
-    const fallback = FALLBACK_MARKET_DATA[symbol] || {
+  // A row with no positive price is an absent observation, not a zero price.
+  // The backend already filters these out of its list endpoint; this is the
+  // guard for the single-symbol shape, and it refuses rather than passing a
+  // zero-valued quote downstream.
+  const price = (row as { price?: unknown } | null)?.price;
+  if (typeof price !== "number" || !Number.isFinite(price) || price <= 0) {
+    return refuse(404, "invalid-symbol", `No market data for ${symbol}: the upstream returned no usable price.`, {
       symbol,
-      name: `${symbol} Equity / Asset`,
-      currency: "USD",
-      regularMarketPrice: 150.0,
-      regularMarketChange: 2.5,
-      regularMarketChangePercent: 1.69,
-      fiftyTwoWeekHigh: 175.0,
-      fiftyTwoWeekLow: 110.0,
-      regularMarketDayHigh: 152.0,
-      regularMarketDayLow: 148.0,
-      regularMarketVolume: 25000000,
-    };
-
-    const count = 30;
-    const timestamps: number[] = [];
-    const closes: number[] = [];
-    const baseTime = Math.floor(Date.now() / 1000) - count * 86400;
-    let basePrice = fallback.regularMarketPrice * 0.92;
-
-    const rand = seededRandom(`${symbol}:${range}:${interval}:${utcDaySeed()}:fallback`);
-    for (let i = 0; i < count; i++) {
-      timestamps.push(baseTime + i * 86400);
-      basePrice += (rand() - 0.46) * (fallback.regularMarketPrice * 0.02);
-      closes.push(Math.round(basePrice * 100) / 100);
-    }
-    closes[closes.length - 1] = fallback.regularMarketPrice;
-
-    const rsi = calculateRSI(closes);
-    const sma20 = calculateSMA(closes, 20);
-
-    return NextResponse.json({
-      // Upstream live market feed was unreachable, utilizing calibrated fallback.
-      source: "synthetic_fallback",
-      synthetic: true,
-      dataCaveat:
-        "Upstream market data was unreachable, so this series is generated. Figures are indicative only and are not a market quote.",
-      meta: fallback,
-      chart: { timestamps, closes },
-      analysis: {
-        rsi,
-        rsiSignal: rsi > 70 ? "Overbought" : rsi < 30 ? "Oversold" : "Healthy Range",
-        sma20: sma20 || fallback.regularMarketPrice,
-        trend: "Steady Accumulation",
-        support: Math.round(fallback.regularMarketPrice * 0.95 * 100) / 100,
-        resistance: Math.round(fallback.regularMarketPrice * 1.05 * 100) / 100,
-        volatility: "Low-to-Medium",
-        healthScore: 84,
-        agentCardViability: "A (Verified for Monad Parallel Escrow)",
-        aiVerdict: `High-fidelity market mirror active for ${symbol}. Asset exhibits stable volume and optimal spread characteristics for AgentCard cross-asset micro-settlements.`,
-      },
     });
   }
+
+  const payload: SymbolPayload = buildSymbolPayload(row as Parameters<typeof buildSymbolPayload>[0]);
+  return NextResponse.json(
+    { ...payload, requestedRange: range, requestedInterval: interval },
+    { status: 200 }
+  );
 }

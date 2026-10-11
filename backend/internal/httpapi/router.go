@@ -2,16 +2,20 @@ package httpapi
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/koliance/backend/internal/agentapi"
 	"github.com/koliance/backend/internal/agentcard"
 	"github.com/koliance/backend/internal/config"
 	"github.com/koliance/backend/internal/developer"
 	"github.com/koliance/backend/internal/game"
+	"github.com/koliance/backend/internal/liquidation"
 	"github.com/koliance/backend/internal/market"
 	"github.com/koliance/backend/internal/model"
 	"github.com/koliance/backend/internal/platform/database"
@@ -34,6 +38,10 @@ type Deps struct {
 	// on the verify route, so cmd/api always supplies at least the no-op
 	// (verifier.NewNoop), which answers 501.
 	Verifier verifier.Verifier
+	// Liquidations serves the liquidation observation feed written by
+	// cmd/liquidator. Nil (no DATABASE_URL) degrades to an empty list.
+	Liquidations liquidation.Store
+	AgentAPI     *agentapi.Service
 }
 
 // Access model (see docs in backend/README.md):
@@ -88,22 +96,60 @@ func NewRouter(d Deps) http.Handler {
 		}
 	}
 
+	// marketData fails closed when the market data credentials are missing.
+	//
+	// The alternative — which is what the code did before — is that a deployment
+	// without credentials answers these endpoints with numbers that came from
+	// somewhere other than the market. Refusing is the only answer that cannot
+	// be mistaken for data (issue #14, GAP-14).
+	//
+	// It deliberately does NOT wrap `trade`/`close`: those keep their existing
+	// auth-first order (a missing operator token must still answer 401/503) and
+	// surface the missing credentials as a 503 from the handler below. It also
+	// does not wrap /api/v1/market/health, which must stay able to report
+	// `configured: false` — that being the fact an operator needs.
+	marketData := func(fn http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if !cfg.AlpacaConfigured() {
+				jsonError(w, http.StatusServiceUnavailable,
+					"market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured (no synthetic data is served)")
+				return
+			}
+			fn(w, r)
+		}
+	}
+
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		connected := d.DB != nil && d.DB.IsConnected
+		// Probed, not asserted. The four remote integrations below are the
+		// outcome of a call made on this request; each used to be a literal
+		// `true` — an integration status badge produced by a process that had
+		// never contacted the integration (GAP-13). `agentcard` was a fifth
+		// literal `true` and is now the wiring fact described below.
+		//
+		// The last three keys have no upstream to call, so none of them appears
+		// in `probes`/`degraded`; each still names the fact it is derived from:
+		// `stripe` = the configured key, `database` = the connection state, and
+		// `agentcard` = `Deps.Cards`, whose absence is the nil dereference that
+		// every /api/v1/agentcard/* handler would take.
+		probes := runHealthProbes(ctx, cfg, d.PriceOracle)
 		jsonResponse(w, http.StatusOK, map[string]interface{}{
 			"status":    "healthy",
 			"network":   fmt.Sprintf("Monad Testnet (Chain ID: %s)", cfg.MonadChainID),
 			"contract":  cfg.KolianceContract,
 			"timestamp": time.Now().UTC(),
 			"services": map[string]bool{
-				"steam":     true,
-				"github":    true,
-				"alpaca":    true,
-				"pyth":      true,
-				"agentcard": true,
+				"steam":     probes.Steam.OK,
+				"github":    probes.GitHub.OK,
+				"alpaca":    probes.Alpaca.OK,
+				"pyth":      probes.Pyth.OK,
+				"agentcard": d.Cards != nil,
 				"stripe":    cfg.StripeSecretKey != "",
 				"database":  connected,
 			},
+			"degraded": probes.Degraded(),
+			"probes":   probes,
 		})
 	}
 
@@ -121,6 +167,38 @@ func NewRouter(d Deps) http.Handler {
 			Status:          "optimal",
 		})
 	})
+
+	// ==================== LIQUIDATIONS (observation feed) ====================
+
+	// Public read-only: the dashboard polls this to scroll recent liquidations.
+	// limit defaults to 50 and is capped at 200; anything else is rejected
+	// rather than silently clamped.
+	h("/api/v1/liquidations", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		limit := 50
+		if raw := r.URL.Query().Get("limit"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil || n < 1 {
+				jsonError(w, http.StatusBadRequest, "limit must be a positive integer")
+				return
+			}
+			if n > 200 {
+				jsonError(w, http.StatusBadRequest, "limit must be at most 200")
+				return
+			}
+			limit = n
+		}
+
+		if d.Liquidations == nil {
+			jsonResponse(w, http.StatusOK, map[string]interface{}{"liquidations": []liquidation.Event{}})
+			return
+		}
+		events, err := d.Liquidations.Latest(r.Context(), limit)
+		if err != nil {
+			jsonError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		jsonResponse(w, http.StatusOK, map[string]interface{}{"liquidations": events})
+	}))
 
 	// ==================== GAME ====================
 
@@ -314,16 +392,22 @@ func NewRouter(d Deps) http.Handler {
 
 	// ==================== MARKET ====================
 
-	h("/api/v1/market/overview", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
-		overview, err := d.Market.GetMarketOverview()
+	// Provenance of everything under /api/v1/market: real Alpaca data, or a
+	// 503. There is no third answer.
+	h("/api/v1/market/health", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, d.Market.GetDataHealth(r.Context()))
+	}))
+
+	h("/api/v1/market/overview", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
+		overview, err := d.Market.GetMarketOverview(r.Context())
 		if err != nil {
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		jsonResponse(w, http.StatusOK, overview)
-	}))
+	})))
 
-	h("/api/v1/market/prices", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/market/prices", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
 		symbol := r.URL.Query().Get("symbol")
 		if symbol != "" {
 			sym, err := normalizeSymbol(symbol)
@@ -331,17 +415,40 @@ func NewRouter(d Deps) http.Handler {
 				jsonError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			p, err := d.Market.GetPrice(sym)
+			p, err := d.Market.GetPrice(r.Context(), sym)
 			if err != nil {
-				jsonError(w, http.StatusNotFound, err.Error())
+				// A symbol with no bar is a 404; an upstream failure is not the
+				// caller's fault and must not be reported as one.
+				if errors.Is(err, market.ErrNoMarketData) {
+					jsonError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				jsonError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			jsonResponse(w, http.StatusOK, p)
 			return
 		}
-		prices, _ := d.PriceOracle.GetAllPrices()
+
+		prices, err := d.PriceOracle.PriceList(r.Context())
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, err.Error())
+			return
+		}
 		jsonResponse(w, http.StatusOK, prices)
-	}))
+	})))
+
+	// Issue #16: 标的涨跌幅排行, computed from the last two daily bars of each
+	// tracked instrument. An upstream failure is a 502, never an empty board —
+	// "we could not ask" and "nothing moved" must not look alike.
+	h("/api/v1/market/movers", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
+		movers, err := d.Market.GetMovers(r.Context())
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		jsonResponse(w, http.StatusOK, movers)
+	})))
 
 	h("/api/v1/market/trade", methodOnly(http.MethodPost, trading(func(w http.ResponseWriter, r *http.Request) {
 		var req market.TradeRequest
@@ -361,9 +468,16 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		req.Leverage = lev
-		res, err := d.Market.ExecuteTrade(req)
+		res, err := d.Market.ExecuteTrade(r.Context(), req)
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			// Misconfiguration is not an order failure: answer 503 rather than a
+			// 200 carrying `success:false`, so a client cannot report "the trade
+			// was rejected by the broker" when no broker was ever configured.
+			if errors.Is(err, market.ErrAlpacaCredentialsMissing) {
+				jsonError(w, http.StatusServiceUnavailable, err.Error())
+				return
+			}
+			jsonResponse(w, http.StatusOK, res)
 			return
 		}
 		jsonResponse(w, http.StatusOK, res)
@@ -381,7 +495,11 @@ func NewRouter(d Deps) http.Handler {
 			jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := d.Market.ClosePosition(sym); err != nil {
+		if err := d.Market.ClosePosition(r.Context(), sym); err != nil {
+			if errors.Is(err, market.ErrAlpacaCredentialsMissing) {
+				jsonError(w, http.StatusServiceUnavailable, err.Error())
+				return
+			}
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -519,6 +637,145 @@ func NewRouter(d Deps) http.Handler {
 		default:
 			jsonError(w, http.StatusNotImplemented, err.Error())
 		}
+	}))
+
+	// ==================== AGENT API & DEVELOPER SERVICES ====================
+
+	if d.AgentAPI == nil {
+		d.AgentAPI = agentapi.NewService(d.DB)
+	}
+
+	jsonEnvelope := func(w http.ResponseWriter, httpStatus int, code int, response string, data interface{}) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(httpStatus)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"code":     code,
+			"response": response,
+			"data":     data,
+		})
+	}
+
+	// POST /api/v1/agent/bind - Agent and Wallet binding
+	h("/api/v1/agent/bind", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		token := bearer(r)
+		if token != "" {
+			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
+				if errors.Is(err, agentapi.ErrQuotaExhausted) {
+					jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_QUOTA_EXHAUSTED", nil)
+					return
+				}
+				if errors.Is(err, agentapi.ErrRateLimited) {
+					jsonEnvelope(w, http.StatusTooManyRequests, 429, "ERROR_RATE_LIMITED", nil)
+					return
+				}
+				jsonEnvelope(w, http.StatusUnauthorized, 401, "ERROR_UNAUTHORIZED", nil)
+				return
+			}
+		}
+
+		var req agentapi.BindAgentRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		binding, err := d.AgentAPI.BindAgent(req.WalletAddress, req)
+		if err != nil {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", binding)
+	}))
+
+	// POST /api/v1/agent/pay - Autonomous Agent Payment & On-Chain Committal
+	h("/api/v1/agent/pay", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		token := bearer(r)
+		if token != "" {
+			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
+				if errors.Is(err, agentapi.ErrQuotaExhausted) {
+					jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_QUOTA_EXHAUSTED", nil)
+					return
+				}
+				if errors.Is(err, agentapi.ErrRateLimited) {
+					jsonEnvelope(w, http.StatusTooManyRequests, 429, "ERROR_RATE_LIMITED", nil)
+					return
+				}
+				jsonEnvelope(w, http.StatusUnauthorized, 401, "ERROR_UNAUTHORIZED", nil)
+				return
+			}
+		}
+
+		var req agentapi.PaymentRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		order, err := d.AgentAPI.ProcessPayment("", req)
+		if err != nil {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", order)
+	}))
+
+	// POST /api/v1/developer/packages/claim-or-purchase - 3-tier recharge & 3-free-claims
+	h("/api/v1/developer/packages/claim-or-purchase", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			WalletAddress string `json:"wallet_address"`
+			TierID        string `json:"tier_id"`
+			PaymentMethod string `json:"payment_method"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if req.WalletAddress == "" {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: wallet_address is required", nil)
+			return
+		}
+		resp, err := d.AgentAPI.ClaimOrPurchasePackage(req.WalletAddress, agentapi.PackageClaimRequest{
+			TierID:        req.TierID,
+			PaymentMethod: req.PaymentMethod,
+		})
+		if err != nil {
+			if errors.Is(err, agentapi.ErrFreeClaimsExhausted) {
+				jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_FREE_CLAIMS_EXHAUSTED", nil)
+				return
+			}
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_PACKAGE_FAILED: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", resp)
+	}))
+
+	// POST /api/v1/developer/keys - Create API Key
+	h("/api/v1/developer/keys", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			WalletAddress string `json:"wallet_address"`
+			Tier          string `json:"tier"`
+			Name          string `json:"name"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if req.Tier == "" {
+			req.Tier = "STARTER_FREE"
+		}
+		key, err := d.AgentAPI.GenerateAPIKey(req.WalletAddress, req.Tier, req.Name)
+		if err != nil {
+			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_KEY_GEN: "+err.Error(), nil)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", key)
+	}))
+
+	// GET /api/v1/developer/stats - Console stats and usage metrics
+	h("/api/v1/developer/stats", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		wallet := strings.TrimSpace(r.URL.Query().Get("wallet_address"))
+		stats := d.AgentAPI.GetConsoleStats(wallet)
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", stats)
+	}))
+
+	// GET /api/v1/developer/agents - List bound agents
+	h("/api/v1/developer/agents", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		agents := d.AgentAPI.ListBoundAgents()
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", agents)
 	}))
 
 	return mux

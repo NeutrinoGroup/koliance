@@ -10,9 +10,11 @@ import {
   TrendingUp,
   Coins,
   Activity,
+  Terminal,
 } from "lucide-react";
 import { BrandIcon } from "@/components/BrandIcon";
 import { NavAuthBadges } from "@/components/NavAuthBadges";
+import { useLanguage } from "@/lib/i18n";
 
 export type NavView =
   | "INDEX"
@@ -21,7 +23,8 @@ export type NavView =
   | "MARKET"
   | "AGENTCARD"
   | "TOKEN"
-  | "PERP";
+  | "PERP"
+  | "CONSOLE";
 
 interface NavbarProps {
   currentView: NavView;
@@ -40,15 +43,17 @@ export function Navbar({
   onConnect,
   onDisconnect,
 }: NavbarProps) {
+  const { lang, setLang, t } = useLanguage();
 
   const navItems: Array<{ id: NavView; label: string; icon: React.ReactNode; badge?: string }> = [
-    { id: "INDEX", label: "INDEX", icon: <Globe className="w-3.5 h-3.5" /> },
-    { id: "TOKEN", label: "TOKEN", icon: <Coins className="w-3.5 h-3.5" />, badge: "KOL" },
-    { id: "DETAIL", label: "DETAIL", icon: <Network className="w-3.5 h-3.5" />, badge: "AGENT" },
-    { id: "PRODUCT", label: "PRODUCT", icon: <Shield className="w-3.5 h-3.5" /> },
-    { id: "MARKET", label: "MARKET", icon: <TrendingUp className="w-3.5 h-3.5" />, badge: "LIVE" },
-    { id: "PERP", label: "PERP", icon: <Activity className="w-3.5 h-3.5" />, badge: "ONCHAIN" },
-    { id: "AGENTCARD", label: "AGENTCARD", icon: <CreditCard className="w-3.5 h-3.5" />, badge: "AI" },
+    { id: "INDEX", label: t("nav.index"), icon: <Globe className="w-3.5 h-3.5" /> },
+    { id: "CONSOLE", label: t("nav.console"), icon: <Terminal className="w-3.5 h-3.5" />, badge: "API" },
+    { id: "TOKEN", label: t("nav.token"), icon: <Coins className="w-3.5 h-3.5" />, badge: "KOL" },
+    { id: "DETAIL", label: t("nav.detail"), icon: <Network className="w-3.5 h-3.5" />, badge: "AGENT" },
+    { id: "PRODUCT", label: t("nav.product"), icon: <Shield className="w-3.5 h-3.5" /> },
+    { id: "MARKET", label: t("nav.market"), icon: <TrendingUp className="w-3.5 h-3.5" />, badge: "LIVE" },
+    { id: "PERP", label: t("nav.perp"), icon: <Activity className="w-3.5 h-3.5" />, badge: "ONCHAIN" },
+    { id: "AGENTCARD", label: t("nav.agentcard"), icon: <CreditCard className="w-3.5 h-3.5" />, badge: "AI" },
   ];
 
   return (
@@ -105,7 +110,7 @@ export function Navbar({
           })}
         </nav>
 
-        {/* Unified Account Center */}
+        {/* Unified Account Center & Top-Right Language Switcher */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
           {/* User Account / Profile Center: Avatar, Edit Profile, Connect Wallet, Transfer MON, Identity Badges */}
           <NavAuthBadges
@@ -114,6 +119,21 @@ export function Navbar({
             onConnectWallet={onConnect}
             onDisconnectWallet={onDisconnect}
           />
+
+          {/* Top-Right Language Switcher */}
+          <button
+            type="button"
+            onClick={() => setLang(lang === "en" ? "zh" : "en")}
+            className="h-9 px-2.5 sm:px-3 rounded-md bg-[#141824] hover:bg-[#1e2337] border border-white/15 hover:border-white/30 text-xs font-mono text-slate-200 hover:text-white transition-all flex items-center gap-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] active:scale-[0.98] cursor-pointer"
+            title={lang === "en" ? "切换为中文 (Switch to Chinese)" : "Switch to English"}
+          >
+            <Globe className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            <span className="font-semibold tracking-wider">
+              <span className={lang === "en" ? "text-cyan-400 font-bold" : "text-slate-400"}>EN</span>
+              <span className="text-white/20 mx-1">/</span>
+              <span className={lang === "zh" ? "text-cyan-400 font-bold" : "text-slate-400"}>中</span>
+            </span>
+          </button>
         </div>
       </div>
     </header>

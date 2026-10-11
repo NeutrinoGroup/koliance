@@ -53,14 +53,38 @@ test.describe("Koliance Production E2E Verification", () => {
     expect([401, 400, 403]).toContain(res.status());
   });
 
-  test("4. Market Feed API operates reliably with multi-source fallback (No Yahoo)", async ({ request }) => {
+  test("4. Market route relays real data or refuses — it never fabricates a quote", async ({ request }) => {
     const res = await request.get("/api/market?symbol=NVDA&range=1mo&interval=1d");
-    expect(res.ok()).toBeTruthy();
     const data = await res.json();
-    
-    expect(data.chart.closes.length).toBeGreaterThan(0);
-    expect(data.meta.symbol).toBe("NVDA");
+
+    // The route used to answer 200 here in every environment, because an
+    // unreachable upstream fell through to a locally generated series. That
+    // made this assertion vacuous: it passed with the market down, with no
+    // credentials, and with the Go gateway not running.
+    //
+    // The two outcomes are now distinct, and both are asserted:
+    //   - 200: the Go gateway served a real Alpaca quote, relayed with its
+    //     provenance and with no invented series attached;
+    //   - 503: the gateway refused (no credentials, upstream failure, or not
+    //     running). The body must carry the reason and no price at all.
+    if (res.status() === 200) {
+      expect(data.synthetic).toBe(false);
+      expect(typeof data.source).toBe("string");
+      expect(data.source.length).toBeGreaterThan(0);
+      expect(typeof data.meta.regularMarketPrice).toBe("number");
+      // No series is generated: the upstream publishes two observations, not a
+      // history, so the chart is empty and says why.
+      expect(data.chart.closes).toEqual([]);
+      expect(data.analysis.available).toBe(false);
+    } else {
+      expect(res.status()).toBe(503);
+      expect(data.error).toBeTruthy();
+      expect(data.chart).toBeUndefined();
+      expect(data.meta).toBeUndefined();
+      expect(data.synthetic).toBe(false);
+    }
+
     // Ensure no Yahoo Finance source string
-    expect(data.source).not.toContain("yahoo");
+    expect(data.source ?? "").not.toContain("yahoo");
   });
 });

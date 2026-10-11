@@ -35,6 +35,15 @@ func testDB() *database.DB {
 // upstreams. Every test below fails (or succeeds) before any network call.
 func newTestRouter(t testing.TB, mutate func(*Deps)) http.Handler {
 	t.Helper()
+	// The health probes would otherwise call Steam, GitHub, Alpaca and Hermes on
+	// every /health request. Pointing them at a closed local port makes the
+	// suite hermetic and makes "unreachable" the deterministic outcome (i.e.
+	// every probe reports false), rather than whatever the network happens to
+	// answer from CI.
+	origSteam, origGitHub := steamProbeBaseURL, githubProbeBaseURL
+	steamProbeBaseURL, githubProbeBaseURL = "http://127.0.0.1:1", "http://127.0.0.1:1"
+	t.Cleanup(func() { steamProbeBaseURL, githubProbeBaseURL = origSteam, origGitHub })
+
 	cfg := &config.Config{
 		SteamDomain:        "koliance.oodai.space",
 		MonadChainID:       "10143",
@@ -53,6 +62,17 @@ func newTestRouter(t testing.TB, mutate func(*Deps)) http.Handler {
 	}
 	alp := market.NewAlpacaClient("http://127.0.0.1:1", "k", "s")
 	oracle := market.NewPriceOracle("k", "s")
+	oracle.SetDataBaseURL("http://127.0.0.1:1")
+	// cfg.AlpacaConfigured() gates /api/v1/market/*, and the existing tests below
+	// exercise trade *validation*, which must still reach the handler and answer
+	// 400. Credentials that point at a dead host keep both properties: the gate
+	// opens, and nothing can accidentally succeed against a live upstream.
+	if cfg.AlpacaAPIKey == "" && cfg.AlpacaAPISecret == "" {
+		cfg.AlpacaAPIKey, cfg.AlpacaAPISecret = "test-key", "test-secret"
+	}
+	probeCache.Lock()
+	probeCache.entries = map[string]cachedProbe{}
+	probeCache.Unlock()
 	d.Market = market.NewService(alp, oracle, nil)
 	d.PriceOracle = oracle
 	d.Stripe = stripeclient.New("")
@@ -420,5 +440,76 @@ func BenchmarkRouterStats(b *testing.B) {
 		if rr.Code != http.StatusOK {
 			b.Fatalf("expected 200, got %d", rr.Code)
 		}
+	}
+}
+
+func TestAgentAPIRoutes_BindAndPay(t *testing.T) {
+	h := newTestRouter(t, nil)
+	wallet := "0x71C8360f3E118A7cD87A0cf633a69a089d4c20b2"
+
+	// 1. Generate Key
+	keyRec := do(h, http.MethodPost, "/api/v1/developer/keys", `{"wallet_address":"`+wallet+`","tier":"STARTER_FREE"}`, nil)
+	if keyRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on key gen, got %d: %s", keyRec.Code, keyRec.Body.String())
+	}
+	var keyResp struct {
+		Code int `json:"code"`
+		Data struct {
+			RawKey string `json:"raw_key"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(keyRec.Body.Bytes(), &keyResp); err != nil {
+		t.Fatalf("json unmarshal key gen err: %v", err)
+	}
+	rawKey := keyResp.Data.RawKey
+
+	// 2. Claim free package
+	claimRec := do(h, http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{"wallet_address":"`+wallet+`","tier_id":"STARTER_FREE_100","payment_method":"free_claim"}`, nil)
+	if claimRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on package claim, got %d: %s", claimRec.Code, claimRec.Body.String())
+	}
+
+	// 3. Bind Agent with Bearer auth
+	bindBody := `{
+		"agent_name": "arbitrage-bot",
+		"model_name": "deepseek-r1",
+		"wallet_address": "` + wallet + `",
+		"wallet_balance": 1000.0,
+		"permissions": ["trade:perp", "pay:micropayment"],
+		"limits": {"max_per_tx_usd": 100.0, "daily_limit_usd": 500.0},
+		"rate_limit": {"rpm": 60}
+	}`
+	bindRec := do(h, http.MethodPost, "/api/v1/agent/bind", bindBody, map[string]string{
+		"Authorization": "Bearer " + rawKey,
+	})
+	if bindRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on agent bind, got %d: %s", bindRec.Code, bindRec.Body.String())
+	}
+
+	// 4. Autonomous Payment with Bearer auth
+	payBody := `{
+		"amount": 25.5,
+		"item_name": "Nansen Data Stream",
+		"order_hash": "0x3e18a91df720c1598b92b67f18a6e9a71db902ef018274d7c0828590bf70d8a1",
+		"quantity": 1,
+		"payment_method": "crypto",
+		"crypto_currency": "MON"
+	}`
+	payRec := do(h, http.MethodPost, "/api/v1/agent/pay", payBody, map[string]string{
+		"Authorization": "Bearer " + rawKey,
+	})
+	if payRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on agent pay, got %d: %s", payRec.Code, payRec.Body.String())
+	}
+
+	// 5. Query stats & agents
+	statsRec := do(h, http.MethodGet, "/api/v1/developer/stats?wallet_address="+wallet, "", nil)
+	if statsRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on stats, got %d: %s", statsRec.Code, statsRec.Body.String())
+	}
+
+	agentsRec := do(h, http.MethodGet, "/api/v1/developer/agents", "", nil)
+	if agentsRec.Code != http.StatusOK {
+		t.Fatalf("expected 200 on agents, got %d: %s", agentsRec.Code, agentsRec.Body.String())
 	}
 }
