@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useLanguage } from "@/lib/i18n";
+import { GlassBackground } from "@/components/GlassBackground";
 
 if (typeof window !== "undefined") {
   gsap.registerPlugin(ScrollTrigger);
@@ -125,46 +126,52 @@ export function QuantumProtocolStream() {
   return (
     <section
       ref={sectionRef}
-      className="relative w-full h-screen bg-white text-slate-900 flex flex-col justify-center px-4 sm:px-8 select-none overflow-hidden"
+      className="relative w-full h-screen bg-transparent flex flex-col justify-center px-4 sm:px-8 select-none overflow-hidden"
     >
+      {/* Scoped Shader Glass Background starting specifically at "What Core Problem Does Koliance Solve?" */}
+      <GlassBackground
+        className="absolute inset-0 pointer-events-none -z-10 overflow-hidden"
+        opacity="opacity-45"
+      />
+
       <div className="max-w-7xl mx-auto w-full flex flex-col justify-between h-[82vh] py-6 z-10">
         {/* Top Minimalist Hairline Metadata */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-6 font-mono text-xs text-slate-500">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/[0.08] pb-6 font-mono text-xs text-slate-400">
           <div className="flex items-center gap-3">
-            <span className="w-2 h-2 rounded-full bg-[#836ef9] animate-ping" />
-            <span className="text-slate-950 font-bold tracking-widest uppercase">
+            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+            <span className="text-white font-bold tracking-widest uppercase">
               {t("problem.title")}
             </span>
           </div>
-          <div className="flex items-center gap-6 text-[11px] text-slate-500 tracking-wider">
-            <span className="transition-all duration-300 font-mono text-slate-700 font-medium">
+          <div className="flex items-center gap-6 text-[11px] text-slate-400 tracking-wider">
+            <span className="transition-all duration-300 font-mono text-slate-300">
               {activePhase.coordinates}
             </span>
-            <span className="text-slate-300">{"//"}</span>
-            <span className="text-[#836ef9] font-bold">
+            <span className="text-white/20">{"//"}</span>
+            <span className="text-cyan-400 font-bold">
               PHASE [{activePhase.index}/03]
             </span>
           </div>
         </div>
 
-        {/* Central Stage: Overlapping Progressive Disclosure Cards (Crisp High-Contrast Monochrome) */}
+        {/* Central Stage: Overlapping Progressive Disclosure Cards (Sharp, Crisp Glass - No Blur) */}
         <div ref={cardsContainerRef} className="relative flex-1 flex items-center justify-center my-6">
           {phases.map((phase) => (
             <div
               key={phase.index}
               className="quantum-phase-card absolute inset-0 flex flex-col justify-center space-y-6 will-change-transform will-change-opacity"
             >
-              <div className="text-xs font-mono tracking-widest text-[#836ef9] uppercase font-bold">
+              <div className="text-xs font-mono tracking-widest text-monad-400 uppercase">
                 {phase.spec}
               </div>
-              <h2 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter text-slate-950 leading-none uppercase font-mono">
+              <h2 className="text-5xl sm:text-7xl md:text-8xl lg:text-9xl font-black tracking-tighter text-white leading-none uppercase font-mono">
                 {phase.code}
               </h2>
               <div className="max-w-3xl space-y-4 pt-4">
-                <p className="text-lg sm:text-2xl text-slate-700 font-normal leading-relaxed">
+                <p className="text-lg sm:text-2xl text-slate-300 font-light leading-relaxed">
                   {phase.question}
                 </p>
-                <div className="pt-2 text-sm sm:text-base font-mono text-slate-900 leading-relaxed border-l-4 border-[#836ef9] pl-4 bg-slate-50 py-3 rounded-r-md border border-slate-200/80 shadow-xs">
+                <div className="pt-2 text-sm sm:text-base font-mono text-cyan-300 leading-relaxed border-l-2 border-cyan-400 pl-4 bg-cyan-950/20 py-2.5 rounded-r-md border border-white/5">
                   {phase.solution}
                 </div>
               </div>
@@ -173,11 +180,11 @@ export function QuantumProtocolStream() {
         </div>
 
         {/* Progressive Hairline Timeline Tracker */}
-        <div className="space-y-4 pt-6 border-t border-slate-200">
-          <div className="w-full h-1 bg-slate-100 rounded-full overflow-hidden">
+        <div className="space-y-4 pt-6 border-t border-white/[0.08]">
+          <div className="w-full h-0.5 bg-white/10 rounded-full overflow-hidden">
             <div
               ref={progressBarRef}
-              className="h-full bg-gradient-to-r from-[#836ef9] via-indigo-600 to-cyan-500 w-0 transition-[width] duration-75"
+              className="h-full bg-gradient-to-r from-cyan-400 via-monad-400 to-purple-500 w-0 transition-[width] duration-75"
             />
           </div>
 
@@ -188,8 +195,8 @@ export function QuantumProtocolStream() {
                   key={p.index}
                   className={`text-xs font-mono px-3.5 py-1.5 rounded-md border transition-all duration-300 ${
                     activePhaseIndex === idx
-                      ? "bg-slate-950 text-white border-slate-950 font-bold shadow-xs"
-                      : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                      ? "bg-white text-black border-white font-bold shadow-glow"
+                      : "bg-transparent text-slate-500 border-white/10 hover:border-white/20"
                   }`}
                 >
                   {p.index} {"//"} {p.code}
@@ -197,9 +204,9 @@ export function QuantumProtocolStream() {
               ))}
             </div>
 
-            <div className="font-mono text-xs text-slate-500 flex items-center gap-2">
-              <span className="text-[#836ef9] font-bold">[SPECIFICATION]</span>
-              <span className="text-slate-800 font-medium">{activePhase.metric}</span>
+            <div className="font-mono text-xs text-slate-400 flex items-center gap-2">
+              <span className="text-cyan-400 font-semibold">[SPECIFICATION]</span>
+              <span className="text-slate-300">{activePhase.metric}</span>
             </div>
           </div>
         </div>

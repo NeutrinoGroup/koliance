@@ -393,8 +393,8 @@ function MainContent() {
               {/* Minimalist Swiss Hairline Gateway Rails */}
               <MinimalistGatewayRails onSelectView={setCurrentView} />
 
-              {/* Grand Finale: 6-Card Circulating Neural Asset Matrix (Progressive Disclosure & In-View Lazy Load) */}
-              <AgentCardShowcase onOpenDedicated={() => setCurrentView("AGENTCARD")} />
+              {/* Grand Finale: 6-Card Circulating Neural Asset Matrix (100% Full-Width Stage) */}
+              <AgentCardShowcase />
             </motion.div>
           )}
 
