@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"sync"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -52,10 +53,21 @@ func (n Network) Validate() error {
 
 // EventHandler consumes decoded position events. It is the seam where chain
 // types stop and the pure position mirror begins.
+//
+// HandleFundingAccrued exists because the funding index is part of the
+// liquidation verdict (PositionManager._isLiquidatable) but is NOT in the
+// PositionOpened payload. The contract emits FundingAccrued from the same
+// transaction, immediately BEFORE PositionOpened — _openPosition accrues at
+// :427 and stores the index at :458 — so a replayer that feeds these events
+// through in log order has the feed's index in hand by the time it sees the
+// open. That ordering is the reason this is a handler method rather than a
+// per-position getPosition() call: it costs no extra round-trip, and it works
+// identically on the backfill and the live subscription.
 type EventHandler interface {
 	HandleOpened(p *position.Position)
 	HandleClosed(id uint64)
 	HandleLiquidated(id uint64)
+	HandleFundingAccrued(feedID string, index *big.Int)
 }
 
 // Client holds the HTTP client (backfill and header reads), the WS client
@@ -70,6 +82,14 @@ type Client struct {
 	openedTopic     common.Hash
 	closedTopic     common.Hash
 	liquidatedTopic common.Hash
+	fundingTopic    common.Hash
+
+	// seeds holds the latest funding index seen per feed, keyed by the same hex
+	// string spelling used in position.Position.FeedID. It is what fills
+	// EntryFundingIndex on an open. Guarded by seedMu because the live
+	// subscription and a reconnecting backfill both write it.
+	seedMu sync.Mutex
+	seeds  map[string]*big.Int
 
 	// blockTime resolves a block number to its timestamp. It is a field so
 	// tests can inject a stub and prove the openedAt path without a node.
@@ -119,7 +139,7 @@ func New(ctx context.Context, cfg Network) (*Client, error) {
 		return nil, fmt.Errorf("chain: read maxProfitBps: %w", err)
 	}
 
-	opened, closed, liquidated, err := eventTopics()
+	opened, closed, liquidated, funding, err := eventTopics()
 	if err != nil {
 		http.Close()
 		ws.Close()
@@ -135,6 +155,8 @@ func New(ctx context.Context, cfg Network) (*Client, error) {
 		openedTopic:     opened,
 		closedTopic:     closed,
 		liquidatedTopic: liquidated,
+		fundingTopic:    funding,
+		seeds:           make(map[string]*big.Int),
 	}
 	c.blockTime = c.fetchBlockTime
 	return c, nil
@@ -163,15 +185,53 @@ func validateChainID(ctx context.Context, r chainIDReader, expected *big.Int) er
 	return nil
 }
 
-// eventTopics returns the canonical topic hashes of the three position events,
+// eventTopics returns the canonical topic hashes of the four watched events,
 // derived from the frozen ABI rather than from hand-typed signatures.
-func eventTopics() (opened, closed, liquidated common.Hash, err error) {
+//
+// FundingAccrued is watched alongside the position events because the funding
+// index is part of the liquidation verdict but absent from PositionOpened (see
+// EventHandler). Its signature is frozen with the rest (IPositionManager.sol).
+func eventTopics() (opened, closed, liquidated, funding common.Hash, err error) {
 	parsed, err := bindings.IPositionManagerMetaData.GetAbi()
 	if err != nil {
-		return opened, closed, liquidated, fmt.Errorf("chain: parse frozen abi: %w", err)
+		return opened, closed, liquidated, funding, fmt.Errorf("chain: parse frozen abi: %w", err)
 	}
 	return parsed.Events["PositionOpened"].ID,
 		parsed.Events["PositionClosed"].ID,
 		parsed.Events["PositionLiquidated"].ID,
+		parsed.Events["FundingAccrued"].ID,
 		nil
+}
+
+// feedIDHex is the spelling of a bytes32 feed id that position.Position uses.
+// It must be the ONLY conversion from a raw feed id to that string, or the
+// seed map and the positions it seeds would key on different spellings.
+func feedIDHex(feed [32]byte) string {
+	return common.BytesToHash(feed[:]).Hex()
+}
+
+// seedFor returns the last observed funding index for a feed, or nil when none
+// has been seen. Nil means "no observation" and the mirror reads it as zero
+// funding — the pre-GAP-41 verdict, not a guess.
+func (c *Client) seedFor(feedID string) *big.Int {
+	c.seedMu.Lock()
+	defer c.seedMu.Unlock()
+	v, ok := c.seeds[feedID]
+	if !ok {
+		return nil
+	}
+	// Copy: the caller stores it on a long-lived Position, and the map entry
+	// stays live for the next accrual to overwrite.
+	return new(big.Int).Set(v)
+}
+
+// observeFunding records the index from a FundingAccrued log. It is the only
+// writer of seeds, so the map cannot drift from the event stream.
+func (c *Client) observeFunding(feedID string, index *big.Int) {
+	if index == nil {
+		return
+	}
+	c.seedMu.Lock()
+	defer c.seedMu.Unlock()
+	c.seeds[feedID] = new(big.Int).Set(index)
 }

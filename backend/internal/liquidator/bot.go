@@ -343,6 +343,14 @@ func (h tableHandler) HandleOpened(p *position.Position) { h.table.ApplyOpen(p) 
 func (h tableHandler) HandleClosed(id uint64)            { h.table.ApplyClose(id) }
 func (h tableHandler) HandleLiquidated(id uint64)        { h.table.ApplyClose(id) }
 
+// HandleFundingAccrued keeps the per-feed index the scanner values funding
+// against. Dropping it — which is what happened before GAP-41 — makes every
+// verdict funding-free, so a position the contract would liquidate on cost of
+// carry alone reads as healthy here.
+func (h tableHandler) HandleFundingAccrued(feedID string, index *big.Int) {
+	h.table.ApplyFundingIndex(feedID, index)
+}
+
 // buildFeed selects the price source. The demo feed reuses the shared write
 // client rather than dialing a fourth connection.
 func buildFeed(ctx context.Context, cfg Config, write *ethclient.Client) (oracle.PriceFeed, func(), error) {

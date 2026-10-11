@@ -38,7 +38,7 @@ func TestPositionFromOpened(t *testing.T) {
 		Raw:           types.Log{BlockNumber: 1234},
 	}
 
-	p := PositionFromOpened(ev, usd(10989), 1_700_000_000)
+	p := PositionFromOpened(ev, usd(10989), 1_700_000_000, big.NewInt(5_000))
 
 	if p.ID != 42 {
 		t.Errorf("ID = %d, want 42", p.ID)
@@ -68,10 +68,33 @@ func TestPositionFromOpened(t *testing.T) {
 	if p.OpenedAt != 1_700_000_000 {
 		t.Errorf("OpenedAt = %d, want 1700000000", p.OpenedAt)
 	}
+	if p.EntryFundingIndex == nil || p.EntryFundingIndex.Cmp(big.NewInt(5_000)) != 0 {
+		t.Errorf("EntryFundingIndex = %v, want 5000", p.EntryFundingIndex)
+	}
+}
+
+// The entryFundingIndex argument is optional because a feed with no observed
+// accrual has nothing to record. Nil is the honest "unknown", not zero.
+func TestPositionFromOpenedWithoutAFundingIndex(t *testing.T) {
+	ev := &bindings.IPositionManagerPositionOpened{
+		PositionId:    big.NewInt(1),
+		Owner:         common.HexToAddress("0x1111111111111111111111111111111111111111"),
+		FeedId:        feedBytes(),
+		CollateralUsd: usd(100),
+		SizeUsd:       usd(1000),
+		EntryPrice:    usd(10),
+		IsLong:        true,
+	}
+	p := PositionFromOpened(ev, usd(1100), 0, nil)
+	if p.EntryFundingIndex != nil {
+		t.Errorf("EntryFundingIndex = %s, want nil", p.EntryFundingIndex)
+	}
 }
 
 // The returned Position must not alias the event's big.Int fields: mutating the
-// result must not change the event, and vice versa.
+// result must not change the event, and vice versa. The caller-supplied entry
+// index is copied for the same reason — it is a snapshot, and the feed's seed
+// map will overwrite its value on the next accrual.
 func TestPositionFromOpenedDoesNotAlias(t *testing.T) {
 	ev := &bindings.IPositionManagerPositionOpened{
 		PositionId:    big.NewInt(1),
@@ -82,12 +105,15 @@ func TestPositionFromOpenedDoesNotAlias(t *testing.T) {
 		EntryPrice:    usd(10),
 		IsLong:        true,
 	}
-	p := PositionFromOpened(ev, usd(1100), 0)
+	entryIndex := big.NewInt(4242)
+	payoutCap := usd(1100)
+	p := PositionFromOpened(ev, payoutCap, 0, entryIndex)
 
 	p.CollateralUSD.SetUint64(0)
 	p.SizeUSD.SetUint64(0)
 	p.EntryPrice.SetUint64(0)
 	p.PayoutCapUSD.SetUint64(0)
+	p.EntryFundingIndex.SetUint64(0)
 
 	if ev.CollateralUsd.Cmp(usd(100)) != 0 {
 		t.Errorf("event CollateralUsd mutated via aliasing")
@@ -97,6 +123,12 @@ func TestPositionFromOpenedDoesNotAlias(t *testing.T) {
 	}
 	if ev.EntryPrice.Cmp(usd(10)) != 0 {
 		t.Errorf("event EntryPrice mutated via aliasing")
+	}
+	if payoutCap.Cmp(usd(1100)) != 0 {
+		t.Errorf("caller's payoutCap mutated via aliasing")
+	}
+	if entryIndex.Cmp(big.NewInt(4242)) != 0 {
+		t.Errorf("caller's entryFundingIndex mutated via aliasing: %s", entryIndex)
 	}
 }
 

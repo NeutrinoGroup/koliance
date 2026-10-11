@@ -8,8 +8,8 @@
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
 > **最后更新**：2026-10-11 · 分支 `feat/liquidation-bot-chain`
-> **本轮**：**GAP-42 新登记**（§5.5）· **GAP-26 `/api/v1/liquidations` ✅**（`docs/changes/025`）
-> **最新登记**：**GAP-42 新登记**（§5.5）· GAP-26 剩「Monad 部署」（观测端点已落地）
+> **本轮**：**GAP-41 ✅ 落地**（§5.4，`docs/changes/026`：Bot 镜像纳入资金费）· GAP-26 `/api/v1/liquidations` ✅（`docs/changes/025`）
+> **最新登记**：GAP-42（§5.5）· **GAP-41 残余**：链上对拍 / 投影指数（§5.4 文末）
 
 ---
 
@@ -95,7 +95,7 @@
 | GAP-38 | WS 断线重连 + `lastProcessedBlock` 水位持久化（ADR-005 §5.3 P1） | 🟠 P1 | ✅ | 见 §5.1（`docs/changes/024`） |
 | GAP-39 | Hermes 生产路径：流式 tick / staleness 边界 / 批量更新 / 置信区间 | 🟡 P2 | 🟠 | 见 §5.2（`docs/changes/023`） |
 | GAP-40 | 本地链端到端集成验证（Bot 提交 `liquidate` 回执）未跑 | 🟠 P1 | 🟠 | 见 §5.3（`docs/changes/024`） |
-| GAP-41 | Bot 镜像不含资金费 → 低估可清算集合 | 🟠 P1 | 🟠 | 见 §5.4（`docs/changes/024`） |
+| GAP-41 | Bot 镜像不含资金费 → 低估可清算集合 | 🟠 P1 | ✅ | 见 §5.4（`docs/changes/026`；残余：链上对拍 / 投影指数） |
 | GAP-42 | 清算观测 `exit_price` 为判定价、`reward`/`block_number` 恒 NULL | 🟡 P2 | 🟠 | 见 §5.5（`docs/changes/025`） |
 
 ---
@@ -463,7 +463,7 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | GAP-13 | 后端接 go-ethereum，`/health` 改为真实探活 | `backend/` | 1 天 |
 | GAP-39 | Hermes 生产路径：SSE/WS 流式 tick、staleness 边界（镜像 `getPriceNoOlderThan`）、批量更新、置信区间 | `backend/internal/oracle/hermes.go`（最小 REST 已就位） | 0.5 天 |
 | GAP-40 | 本地链端到端集成验证（见 §5.3） | `contracts/`（`npx hardhat node` + `demo-seed.ts`）+ `cmd/liquidator` | 0.5 天 |
-| GAP-41 | Bot 镜像纳入资金费（见 §5.4） | `backend/internal/perp/position` + `internal/chain` | 0.5 天 |
+| GAP-41 | ~~Bot 镜像纳入资金费（见 §5.4）~~ **✅ 已落地**（`docs/changes/026`）；残余见 §5.4 文末 | `backend/internal/perp/position` + `internal/chain` | 残余 0.5 天 |
 | GAP-42 | 清算观测回填权威 `exit_price`/`reward`/`block_number`（见 §5.5） | `backend/internal/chain`（`EventHandler` 增补字段）+ `internal/liquidation` | 0.5 天 |
 
 ### 5.1 GAP-38：WS 断线重连与事件水位（ADR-005 §5.3 P1）—— ✅ 已落地
@@ -534,7 +534,19 @@ go run ./cmd/liquidator
 **还差的最小件**：一个「调低 DemoOracle 价」的脚本（`demo-seed.ts` 不降价；`DemoControlPanel.tsx` 是前端按钮，
 headless 集成需要一个等价脚本或 `cast send` 一行）。
 
-### 5.4 GAP-41：Bot 镜像不含资金费 → 低估可清算集合
+### 5.4 GAP-41：Bot 镜像不含资金费 → 低估可清算集合 —— ✅ 已落地（残余见文末）
+
+> ✅ **公式与事件源部分已落地**（`docs/changes/026`，2026-10-11）。
+> `internal/perp/position` 增补 `EntryFundingIndex` / `Funding` / `WAD`，
+> `Equity` / `IsLiquidatable` / `LiquidationPrice` 按合约口径减去资金费，
+> `Table` 增补每 feed 的已观测指数（`ApplyFundingIndex`）并由 `Scan` 取用。
+> `entryFundingIndex` 的来源**选跟踪 `FundingAccrued` 事件**（而非 open 时 `getPosition` 读回）：
+> 合约在 `PositionOpened` **之前**于同一 tx 内 emit `FundingAccrued`（`PositionManager.sol:427` 对 `:476`），
+> 日志顺序保证回放时种子已在手，零额外 RPC。
+> 连带 `internal/chain`（**冻结四包之一，本次显式解冻**）：`EventHandler` 增 `HandleFundingAccrued`、
+> `filterQuery` 3 → 4 topic、`PositionFromOpened` 增一参。
+
+**原始记录（保留，D4 不篡改已发生的事实）**：
 
 `internal/perp/position.Position` **无 `entryFundingIndex`**（该包设计于 ADR-003 逐块资金费之前，
 `position.go:32-35` 明写「liquidator 无用的字段省略」）。故 `position.Scan` 按**纯价格**判清算，而链上
@@ -543,9 +555,20 @@ headless 集成需要一个等价脚本或 `cast send` 一行）。
 **后果（安全方向，演示不阻塞）**：资金费非零时，Bot **低估可清算集合**——漏清算（资金费把仓位推过线时 Bot 看不到）；
 反向（Bot 认为可清算、链上因负资金费不可清算）时链上 `liquidate` 对不可清算仓位 `continue` 静默跳过，**不会 revert**。
 
-**解除条件**：`position.Position` 增补 `EntryFundingIndex`，`chain.positionFromEvent` 从 `PositionOpened` 事件之外
-补该字段（事件本身不携带它，需在 open 时按 `cumulativeFundingIndex` 快照或改事件）；`Scan` 的判定与
-`_isLiquidatable` 对齐。属 `internal/perp/position` + `internal/chain` 的改动，超出 `024` 装配范围。
+**残余（未做，本步明确不做）**：
+
+1. **链上对拍**：Bot 的判定 vs `PositionManager.isLiquidatable` 的实链读数，**未跑**。
+   属 GAP-40 的端到端集成范围——本步只保证「镜像口径对齐合约」，没保证「镜像读数等于链上读数」。
+2. **`indexNow` 是已观测指数，不是链上投影值**：合约用 `_projectedFundingIndex`（投影到当前区块，
+   `PositionManager.sol:866-872`），Bot 用 `FundingAccrued` 的存量指数，两次累积之间**滞后**。
+   方向与本 GAP 同向（欠报），幅度更小。要逐位消除需在 Bot 侧镜像 `_skewWad` / `_fundingDelta` /
+   `lastFundingBlock`——那是第二份资金费模型，**本步不做**。
+3. **回填窗口**：`LIQUIDATOR_START_BLOCK` 晚于某 feed 首次开仓 tx 时，该 feed 无种子 → entry 指数按 nil=0。
+   演示路径（从部署区块回填）不受影响。
+
+**解除条件（原文，已被上条落地满足）**：`position.Position` 增补 `EntryFundingIndex`，`chain.positionFromEvent`
+从 `PositionOpened` 事件之外补该字段（事件本身不携带它，需在 open 时按 `cumulativeFundingIndex` 快照或改事件）；
+`Scan` 的判定与 `_isLiquidatable` 对齐。属 `internal/perp/position` + `internal/chain` 的改动，超出 `024` 装配范围。
 
 ### 5.5 GAP-42：清算观测的权威值回填（`exit_price`/`reward`/`block_number`）
 
