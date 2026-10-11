@@ -61,7 +61,7 @@ export function TokenStudio({
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; msg: string; txHash?: string } | null>(null);
 
   // Fetch token stats
-  const fetchTokenData = async () => {
+  const fetchTokenData = React.useCallback(async () => {
     try {
       setLoadingStats(true);
       const publicClient = createPublicClient({
@@ -108,13 +108,13 @@ export function TokenStudio({
     } finally {
       setLoadingStats(false);
     }
-  };
+  }, [account]);
 
   useEffect(() => {
     fetchTokenData();
     const interval = setInterval(fetchTokenData, 30000);
     return () => clearInterval(interval);
-  }, [account]);
+  }, [fetchTokenData]);
 
   // Add Token to MetaMask
   const handleAddToMetaMask = async () => {
@@ -300,6 +300,9 @@ export function TokenStudio({
               Koliance 原生代币，名称 <strong className="text-white">kol</strong>，符号 <strong className="text-white">KOL</strong>。
               总硬顶恒定 <strong className="text-white">2^30 (1,073,741,824)</strong> 枚，遵循比特币式每 2 年减半释放模型。
             </p>
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 font-mono">
+              [DISCLAIMER] Koliance Testnet Utility Token (No Monetary Value) — Strictly for testing agent escrow fees and credit stake weight.
+            </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
