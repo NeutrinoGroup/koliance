@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { network } from "hardhat";
 // The hardhat-viem helper exposes clients and deployment, not the standalone
@@ -83,7 +83,7 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
     // key because the *user* is the one who signs, and the key only ever
     // identifies which delegation is being spent against.
     sessionKey = agent.account.address;
-    nonce = 1n;
+    nonce = await registry.read.userNonce([user.account.address]);
   }
 
   async function validUntil() {
@@ -475,7 +475,7 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
         maxSpendPerTx: MAX_PER_TX,
         dailySpendLimit: DAILY_LIMIT,
         validUntil: await validUntil(),
-        nonce: 1n,
+        nonce: await second.read.userNonce([outsider.account.address]),
       };
       const signature = await outsider.signTypedData({
         account: outsider.account,
@@ -516,7 +516,7 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
         maxSpendPerTx: MAX_PER_TX,
         dailySpendLimit: DAILY_LIMIT,
         validUntil: await validUntil(),
-        nonce: 2n,
+        nonce: await registry.read.userNonce([outsider.account.address]),
       };
       const signature = await outsider.signTypedData({
         account: outsider.account,

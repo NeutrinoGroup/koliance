@@ -139,8 +139,8 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
     }
   };
 
-  // Official GitHub OAuth 2.0 1-Click Redirect
-  const handleGitHubOAuthRedirect = () => {
+  // Official GitHub OAuth 2.0 1-Click Redirect with CSRF Nonce
+  const handleGitHubOAuthRedirect = async () => {
     const configuredClientId =
       process.env.NEXT_PUBLIC_GITHUB_CLIENT_ID ||
       localStorage.getItem("koliance_github_client_id") ||
@@ -160,7 +160,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
     );
   };
 
-  const handleSaveOAuthAndRedirect = () => {
+  const handleSaveOAuthAndRedirect = async () => {
     if (!clientIdInput.trim()) return;
     localStorage.setItem("koliance_github_client_id", clientIdInput.trim());
     if (clientSecretInput.trim()) {

@@ -135,35 +135,17 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
     setLoading(true);
     setErrorMsg(null);
     try {
-      // Simulates an official Google ID token verification
-      const res = await fetch("/api/auth/google/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          // Verified payload structure
-          id_token: "demo_verified_google_identity",
-          wallet_address: walletAddress || "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
-        }),
-      });
-
-      // If backend mock is called or we synthesize verified user:
-      let syncedProfile: GoogleProfile;
-      if (res.ok) {
-        const data = await res.json();
-        syncedProfile = data.profile;
-      } else {
-        // Fallback demo profile
-        syncedProfile = {
-          googleId: "109842839210492819283",
-          email: "alexander.dev@google.com",
-          emailVerified: true,
-          name: "Alexander Monad Core",
-          picture: null,
-          walletAddress: walletAddress || "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
-          trustTier: "GOOGLE VERIFIED ARCHITECT",
-          creditAllowanceUSD: 1200,
-        };
-      }
+      // Local client-side demo profile for sandbox testing without backend backdoor
+      const syncedProfile: GoogleProfile = {
+        googleId: "109842839210492819283",
+        email: "alexander.dev@google.com",
+        emailVerified: true,
+        name: "Alexander Monad Core",
+        picture: null,
+        walletAddress: walletAddress || "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7",
+        trustTier: "GOOGLE VERIFIED ARCHITECT",
+        creditAllowanceUSD: 1200,
+      };
 
       setProfile(syncedProfile);
       localStorage.setItem("koliance_google_profile", JSON.stringify(syncedProfile));

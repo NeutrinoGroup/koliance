@@ -36,6 +36,7 @@ import { relayTarget } from "@/lib/oauthState";
 import {
   fetchGameStats,
   generateGameplayProof,
+  verifySteamOpenID,
   createStripeCheckout,
   authorizeMicropayment,
   GameStats,
@@ -147,13 +148,35 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
 
     // Detect Steam OpenID callback (claimed_id format: https://steamcommunity.com/openid/id/76561198...)
     const claimedId = params.get("openid.claimed_id") || params.get("openid.identity");
-    const rawMatch = (claimedId || window.location.href).match(/openid\/id\/(\d{17})/) || (claimedId ? claimedId.match(/(\d{17})/) : null);
-    if (rawMatch && rawMatch[1]) {
-      const id = rawMatch[1];
-      localStorage.setItem("koliance_steam_id", id);
-      loadSteamProfile(id);
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return;
+    if (claimedId || params.get("openid.mode")) {
+      const openIdParams: Record<string, string> = {};
+      params.forEach((val, key) => {
+        if (key.startsWith("openid.")) {
+          openIdParams[key] = val;
+        }
+      });
+
+      if (openIdParams["openid.claimed_id"] && openIdParams["openid.sig"]) {
+        setSteamLoading(true);
+        setSteamNotice("正在通过 Valve 官方服务器校验 Steam OpenID 签名...");
+        verifySteamOpenID(openIdParams)
+          .then((verification) => {
+            setSteamLoading(false);
+            if (verification.valid && verification.steamId) {
+              localStorage.setItem("koliance_steam_id", verification.steamId);
+              loadSteamProfile(verification.steamId);
+              setSteamNotice("Steam 官方 OpenID 签名验证通过！已绑定您的真实玩家身份。");
+            } else {
+              setSteamNotice(`Steam 认证安全拦截: ${verification.error || "签名核验未通过，拒绝绑定"}`);
+            }
+          })
+          .catch((err) => {
+            setSteamLoading(false);
+            setSteamNotice(`Steam 认证校验异常: ${String(err)}`);
+          });
+        window.history.replaceState({}, document.title, window.location.pathname);
+        return;
+      }
     }
 
     // Check cached Steam ID

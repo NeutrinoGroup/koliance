@@ -123,6 +123,33 @@ CREATE INDEX IF NOT EXISTS idx_game_proofs_steam_app ON game_proofs(steam_id, ap
 
 -- 6. Google accounts index by email and wallet
 CREATE INDEX IF NOT EXISTS idx_google_accounts_email_wallet ON google_accounts(email, wallet_address);
+
+-- 7. Ensure agent_cards and trading_accounts exist
+CREATE TABLE IF NOT EXISTS agent_cards (
+    card_id VARCHAR(64) PRIMARY KEY,
+    wallet_address VARCHAR(128) NOT NULL,
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS trading_accounts (
+    account_id VARCHAR(64) PRIMARY KEY,
+    user_id VARCHAR(128),
+    account_number VARCHAR(64),
+    status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ==================== ROW LEVEL SECURITY (RLS) ====================
+ALTER TABLE IF EXISTS users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS card_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS session_keys ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS game_proofs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS market_orders ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS google_accounts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS agent_cards ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS trading_accounts ENABLE ROW LEVEL SECURITY;
 `
 
 func main() {
@@ -149,15 +176,19 @@ func main() {
 	}
 	fmt.Println("✅ Successfully connected to Supabase PostgreSQL!")
 
-	fmt.Println("⏳ Initializing database schema...")
+	fmt.Println("⏳ Initializing database schema and RLS policies...")
 	if _, err := pool.Exec(ctx, schemaSQL); err != nil {
 		log.Fatalf("❌ Schema initialization failed: %v", err)
 	}
 
-	fmt.Println("🎉 Database tables successfully created/verified in Supabase:")
-	fmt.Println("   ├─ cards")
-	fmt.Println("   ├─ card_transactions")
-	fmt.Println("   ├─ session_keys")
-	fmt.Println("   ├─ game_proofs")
-	fmt.Println("   └─ market_orders")
+	fmt.Println("🎉 Database tables and RLS successfully created/verified in Supabase:")
+	fmt.Println("   ├─ cards (RLS enabled)")
+	fmt.Println("   ├─ card_transactions (RLS enabled)")
+	fmt.Println("   ├─ session_keys (RLS enabled)")
+	fmt.Println("   ├─ game_proofs (RLS enabled)")
+	fmt.Println("   ├─ users (RLS enabled)")
+	fmt.Println("   ├─ google_accounts (RLS enabled)")
+	fmt.Println("   ├─ agent_cards (RLS enabled)")
+	fmt.Println("   ├─ trading_accounts (RLS enabled)")
+	fmt.Println("   └─ market_orders (RLS enabled)")
 }

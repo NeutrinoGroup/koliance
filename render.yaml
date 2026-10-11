@@ -14,17 +14,17 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: STEAM_API_KEY
-        value: 745B577BC3554647B4FA40BE9635E838
+        sync: false
       - key: STEAM_DOMAIN
         value: koliance.oodai.space
       - key: ALPACA_API_KEY
-        value: PK2SMWLLV64SKRMOJJCQUHUANB
+        sync: false
       - key: ALPACA_API_SECRET
-        value: Eh8yhX5FKFUKhKt3L5dQY7e6MGsJs7XZaCrw6PtcMtgU
+        sync: false
       - key: ALPACA_BASE_URL
         value: https://paper-api.alpaca.markets/v2
       - key: STRIPE_PUBLISHABLE_KEY
-        value: pk_test_51UMQCbEP5h4ijOX4RfqfeOsj5flpshzH2814PRH1FIvK8kPn79Goucx9sAfzvnkVIzdU30f60ozxkD0FC9vejNM300uNY0C82o
+        sync: false
       - key: STRIPE_SECRET_KEY
         sync: false
       - key: DATABASE_URL

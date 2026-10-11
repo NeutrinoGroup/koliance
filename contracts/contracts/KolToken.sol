@@ -18,6 +18,7 @@ contract KolToken {
     uint256 public totalSupply;
     uint256 public immutable startTime;
     uint256 public lastClaimTime;
+    uint256 public lastClaimBlock;
 
     address public owner;
 
@@ -37,6 +38,7 @@ contract KolToken {
         owner = msg.sender;
         startTime = block.timestamp;
         lastClaimTime = block.timestamp;
+        lastClaimBlock = block.number;
     }
 
     // ==================== 减半与区块奖励逻辑 ====================
@@ -46,29 +48,60 @@ contract KolToken {
         return (block.timestamp - startTime) / HALVING_PERIOD;
     }
 
+    /// @notice 获取指定纪元每秒产出的代币数量 (按纪元减半)
+    function rewardRatePerSecondForEra(uint256 era) public pure returns (uint256) {
+        if (era >= 30) return 0; // 30个周期后微量到可忽略，停止产出
+        return (BASE_ERA_SUPPLY >> era) / HALVING_PERIOD;
+    }
+
     /// @notice 获取当前每秒产出的代币数量 (按纪元减半)
     function currentRewardRatePerSecond() public view returns (uint256) {
-        uint256 era = currentEra();
-        if (era >= 30) return 0; // 30个周期后微量到可忽略，停止产出
-        // 每秒产出 = (本纪元总量) / 730天
-        return (BASE_ERA_SUPPLY >> era) / HALVING_PERIOD;
+        return rewardRatePerSecondForEra(currentEra());
+    }
+
+    /// @notice 计算 [fromTime, toTime] 区间内跨纪元准确累积的区块奖励总量
+    function calculateReward(uint256 fromTime, uint256 toTime) public view returns (uint256 reward) {
+        if (toTime <= fromTime || fromTime < startTime) return 0;
+
+        uint256 startEra = (fromTime - startTime) / HALVING_PERIOD;
+        uint256 endEra = (toTime - startTime) / HALVING_PERIOD;
+
+        for (uint256 e = startEra; e <= endEra && e < 30; e++) {
+            uint256 eraStart = startTime + e * HALVING_PERIOD;
+            uint256 eraEnd = eraStart + HALVING_PERIOD;
+            uint256 segStart = fromTime > eraStart ? fromTime : eraStart;
+            uint256 segEnd = toTime < eraEnd ? toTime : eraEnd;
+
+            if (segEnd > segStart) {
+                uint256 rate = rewardRatePerSecondForEra(e);
+                reward += (segEnd - segStart) * rate;
+            }
+        }
     }
 
     /// @notice 任何用户/矿工均可调用此方法“占领区块并领取奖励”
     function claimBlockReward() external returns (uint256 reward) {
+        return claimBlockReward(0);
+    }
+
+    /// @notice 支持设置最低预期收益防抢跑 (front-running protection)
+    function claimBlockReward(uint256 minReward) public returns (uint256 reward) {
+        require(msg.sender == tx.origin, "Smart contracts cannot claim");
         require(block.timestamp > lastClaimTime, "Already claimed in this block");
-        
-        uint256 elapsed = block.timestamp - lastClaimTime;
-        reward = elapsed * currentRewardRatePerSecond();
+        require(block.number > lastClaimBlock, "Already claimed in this block");
+
+        reward = calculateReward(lastClaimTime, block.timestamp);
 
         // 确保不超过硬顶
         if (totalSupply + reward > MAX_SUPPLY) {
-            reward = MAX_SUPPLY - totalSupply;
+            reward = MAX_SUPPLY > totalSupply ? MAX_SUPPLY - totalSupply : 0;
         }
 
         require(reward > 0, "No reward available");
+        require(reward >= minReward, "Reward below minimum (front-running protection)");
 
         lastClaimTime = block.timestamp;
+        lastClaimBlock = block.number;
         totalSupply += reward;
         balanceOf[msg.sender] += reward;
 

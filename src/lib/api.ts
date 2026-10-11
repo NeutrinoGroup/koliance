@@ -140,6 +140,26 @@ export async function generateGameplayProof(steamId: string, walletAddress: stri
   }
 }
 
+export async function verifySteamOpenID(
+  params: Record<string, string>
+): Promise<{ valid: boolean; steamId?: string; error?: string }> {
+  try {
+    const res = await fetch(`${GO_BACKEND_URL}/api/v1/game/steam/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ params }),
+    });
+    const data = await res.json();
+    if (!res.ok || !data.valid) {
+      return { valid: false, error: data.error || "Steam OpenID verification failed" };
+    }
+    return { valid: true, steamId: data.steamId };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { valid: false, error: msg };
+  }
+}
+
 // ==================== AGENTCARD ====================
 export async function generateAgentCard(walletAddress: string, cardholderName: string = "KOLIANCE AGENT", initialDeposit: number = 2500): Promise<VisaCardData | null> {
   try {

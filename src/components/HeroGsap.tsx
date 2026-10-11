@@ -2,7 +2,8 @@
 
 import React, { useEffect, useRef } from "react";
 import gsap from "gsap";
-import { Sparkles, ShieldCheck, Zap, Activity, ArrowRight, Layers } from "lucide-react";
+import { Sparkles, ShieldCheck, Zap, Activity, ArrowRight, Layers, Globe } from "lucide-react";
+import { useLanguage } from "@/lib/i18n";
 
 interface HeroGsapProps {
   onRegisterClick: () => void;
@@ -10,6 +11,7 @@ interface HeroGsapProps {
 }
 
 export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
+  const { lang, setLang, t } = useLanguage();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const headlineRef = useRef<HTMLHeadingElement>(null);
@@ -183,15 +185,25 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[550px] h-[550px] bg-monad-600/20 rounded-full blur-[140px] pointer-events-none -z-10" />
       <div className="absolute top-1/3 left-1/4 w-[350px] h-[350px] bg-cyber-accent/15 rounded-full blur-[120px] pointer-events-none -z-10" />
 
-      {/* Futuristic Monad Badge */}
-      <div
-        ref={badgeRef}
-        className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-panel border border-monad-400/40 text-xs text-monad-200 shadow-glow mb-6"
-      >
-        <Sparkles className="w-3.5 h-3.5 text-cyber-accent animate-spin" style={{ animationDuration: "6s" }} />
-        <span className="font-semibold tracking-wide text-white">NEXT-GEN ON-CHAIN TRUST</span>
-        <span className="text-monad-400">|</span>
-        <span className="text-monad-300 font-mono">10,000 TPS Monad Engine</span>
+      {/* Futuristic Monad Badge & Language Switcher */}
+      <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+        <div
+          ref={badgeRef}
+          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full glass-panel border border-monad-400/40 text-xs text-monad-200 shadow-glow"
+        >
+          <Sparkles className="w-3.5 h-3.5 text-cyber-accent animate-spin" style={{ animationDuration: "6s" }} />
+          <span className="font-semibold tracking-wide text-white">{t("vision.hero_tag")}</span>
+          <span className="text-monad-400">|</span>
+          <span className="text-monad-300 font-mono">{t("vision.hero_engine")}</span>
+        </div>
+
+        <button
+          onClick={() => setLang(lang === "en" ? "zh" : "en")}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full glass-panel border border-white/10 hover:border-white/30 text-xs font-mono text-slate-300 hover:text-white transition cursor-pointer"
+        >
+          <Globe className="w-3.5 h-3.5 text-cyan-400" />
+          <span>{lang === "en" ? "EN / 中文" : "中文 / EN"}</span>
+        </button>
       </div>
 
       {/* Kinetic Headline */}
@@ -199,16 +211,16 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
         ref={headlineRef}
         className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight max-w-4xl text-white leading-[1.1] mb-6"
       >
-        Decentralized <span className="text-gradient">Identity & Trust</span> Architecture
+        {t("vision.title_prefix")}{" "}
+        <span className="text-gradient">{t("vision.title_highlight")}</span>
       </h1>
 
       {/* Subtitle */}
       <p
         ref={subtextRef}
-        className="max-w-2xl text-base sm:text-lg text-monad-200/80 mb-10 font-normal leading-relaxed"
+        className="max-w-3xl text-base sm:text-lg text-monad-200/80 mb-10 font-normal leading-relaxed"
       >
-        Koliance leverages Monad&apos;s parallelized EVM execution to establish verifiable, cryptographic, sub-second
-        identity attestations and decentralized trust credentials.
+        {t("vision.subtitle")}
       </p>
 
       {/* Call to Actions */}
@@ -221,7 +233,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
           className="group relative inline-flex items-center gap-3 px-8 py-3.5 rounded-xl bg-gradient-to-r from-monad-600 via-monad-500 to-monad-600 hover:from-monad-500 hover:to-monad-400 text-white font-semibold text-sm shadow-glow hover:shadow-glow-lg transition-all duration-300 active:scale-95"
         >
           <ShieldCheck className="w-4 h-4 text-cyber-accent" />
-          <span>Register Identity</span>
+          <span>{t("vision.register")}</span>
           <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
         </button>
 
@@ -230,7 +242,7 @@ export function HeroGsap({ onRegisterClick, onExploreClick }: HeroGsapProps) {
           className="inline-flex items-center gap-2.5 px-7 py-3.5 rounded-xl glass-panel hover:bg-monad-900/40 border border-monad-500/30 hover:border-monad-400/60 text-monad-200 hover:text-white font-medium text-sm transition-all duration-300"
         >
           <Layers className="w-4 h-4" />
-          <span>Explore Trust Graph</span>
+          <span>{t("vision.explore")}</span>
         </button>
       </div>
 

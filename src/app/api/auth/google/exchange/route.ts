@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
         credit_allowance_usd: 1200,
       };
 
-      await syncUserToDatabase(demoUser);
+      await syncUserToDatabase(demoUser, true);
 
       return NextResponse.json(
         {
@@ -150,9 +150,17 @@ export async function POST(request: NextRequest) {
       googleUser = await userInfoRes.json();
     } else {
       // Verify ID token via Google TokenInfo API
-      const tokenInfoRes = await fetch(
-        `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(id_token)}`
-      );
+      let tokenInfoRes: Response;
+      try {
+        tokenInfoRes = await fetch(
+          `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(id_token)}`
+        );
+      } catch {
+        return NextResponse.json(
+          { error: "Invalid Google ID token (network verification failed)" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
       if (!tokenInfoRes.ok) {
         return NextResponse.json(
           { error: "Invalid Google ID token" },
@@ -190,7 +198,7 @@ export async function POST(request: NextRequest) {
       wallet_address: wallet_address || null,
       trust_tier: tier,
       credit_allowance_usd: creditAllowanceUSD,
-    });
+    }, true /* isTrustedRatingWorkflow */);
 
     return NextResponse.json(
       {

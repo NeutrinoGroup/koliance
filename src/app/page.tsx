@@ -38,6 +38,7 @@ import { TrustConstellation } from "@/components/TrustConstellation";
 import { ProductStudio } from "@/components/ProductStudio";
 import { MarketTerminal } from "@/components/MarketTerminal";
 import { IdentityCard } from "@/components/IdentityCard";
+import { CoreValueFramework } from "@/components/CoreValueFramework";
 import { TrustAttestationCard } from "@/components/TrustAttestationCard";
 import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
@@ -557,10 +558,13 @@ function MainContent() {
                   onRefresh={fetchData}
                 />
               </div>
+
+              {/* Core Value Framework: Problem Definition, Pipeline & Taxonomy */}
+              <CoreValueFramework />
             </motion.div>
           )}
 
-          {/* TAB 4: MARKET (Yahoo Finance Live Terminal & Gatekeeper) */}
+          {/* TAB 4: MARKET (Alpaca & Pyth Multi-Asset Terminal & Gatekeeper) */}
           {currentView === "MARKET" && (
             <motion.div
               key="view-market"

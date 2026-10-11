@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, writeFileSync } from "node:fs";
 import { buildVectors } from "./liquidation-vectors";
+import { liquidationReward, netCollateralUsd } from "@/lib/perp";
+import { LIQUIDATOR_REWARD_BPS, BPS_DENOMINATOR } from "@/lib/perpConfig";
 
 /**
  * GAP-06: the frontend's liquidation price and the contract's liquidation
@@ -81,5 +83,31 @@ describe("liquidation price parity (GAP-06)", () => {
       if (x.isLong) expect(liq).toBeLessThan(entry);
       else expect(liq).toBeGreaterThan(entry);
     }
+  });
+
+  it("liquidation reward matches on-chain 5% of collateral definition (Task 16)", () => {
+    // PositionManager.sol:580 computes:
+    // reward = (p.collateralUsd * PerpConstants.LIQUIDATOR_REWARD_BPS) / PerpConstants.BPS_DENOMINATOR;
+    // (5% of collateral, never 5% of remaining equity)
+    expect(LIQUIDATOR_REWARD_BPS).toBe(500n);
+    expect(BPS_DENOMINATOR).toBe(10_000n);
+
+    const collateralUsd = 100n * 10n ** 18n;
+    const pos = {
+      collateralUsd,
+      entryPrice: 200n * 10n ** 18n,
+      leverageBps: 100_000n, // 10x
+      isLong: true,
+    };
+
+    const reward = liquidationReward(pos);
+    const expectedOnChain = (collateralUsd * 5n) / 100n;
+    expect(reward).toBe(expectedOnChain);
+
+    // Bankrupt position: equity is 0 or negative
+    // Even when markPrice collapses to 0, reward is still 5% of collateral, not 0!
+    const bankruptReward = liquidationReward(pos, 0n);
+    expect(bankruptReward).toBe(expectedOnChain);
+    expect(bankruptReward).toBeGreaterThan(0n);
   });
 });
