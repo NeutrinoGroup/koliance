@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Ping Render Backend Health Probe
         run: |
-          BACKEND_URL="${{ secrets.BACKEND_API_URL || 'https://koliance-api.onrender.com' }}"
+          BACKEND_URL="${{ secrets.BACKEND_API_URL || 'https://koliance-backend.onrender.com' }}"
           echo "[INFO] Sending keepalive probe to ${BACKEND_URL}/healthz..."
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${BACKEND_URL}/healthz" || echo "000")
           echo "[INFO] Probe response status: ${HTTP_STATUS}"
