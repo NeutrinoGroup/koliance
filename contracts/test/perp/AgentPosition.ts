@@ -49,6 +49,8 @@ describe("Agent opens a position under a session key (ADR-004 connection)", asyn
   const AGENT_ID = 1n;
   const PER_TX = usdc(2_000);
   const DAILY = usdc(3_000);
+  const MAX_TX_PER_WINDOW = 10n;
+  const TX_WINDOW_SECONDS = 60n;
 
   const TYPES = {
     AgentDelegation: [
@@ -57,6 +59,8 @@ describe("Agent opens a position under a session key (ADR-004 connection)", asyn
       { name: "sessionKey", type: "address" },
       { name: "maxSpendPerTx", type: "uint256" },
       { name: "dailySpendLimit", type: "uint256" },
+      { name: "maxTxPerWindow", type: "uint256" },
+      { name: "txWindowSeconds", type: "uint256" },
       { name: "validUntil", type: "uint256" },
       { name: "nonce", type: "uint256" },
     ],
@@ -115,6 +119,8 @@ describe("Agent opens a position under a session key (ADR-004 connection)", asyn
       sessionKey: agent.account.address, // ephemeral key held by the agent
       maxSpendPerTx: PER_TX,
       dailySpendLimit: DAILY,
+      maxTxPerWindow: MAX_TX_PER_WINDOW,
+      txWindowSeconds: TX_WINDOW_SECONDS,
       validUntil: block.timestamp + ONE_DAY * 7n,
       nonce: await ctx.registry.read.userNonce([user.account.address]),
       ...overrides,
@@ -137,13 +143,17 @@ describe("Agent opens a position under a session key (ADR-004 connection)", asyn
     // any edit changes the digest and the recovery fails.
     await ctx.registry.write.registerDelegation(
       [
-        message.user as `0x${string}`,
-        message.agent as `0x${string}`,
-        message.sessionKey as `0x${string}`,
-        message.maxSpendPerTx as bigint,
-        message.dailySpendLimit as bigint,
-        message.validUntil as bigint,
-        message.nonce as bigint,
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
         signature,
       ],
       { account: agent.account },
