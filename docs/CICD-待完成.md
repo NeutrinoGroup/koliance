@@ -30,7 +30,7 @@
 
 | 编号 | 缺什么 | 在哪补 | 实测依据 | 不补的后果 | 谁做 | 阻塞 |
 | --- | --- | --- | --- | --- | --- | --- |
-| **A-1** | `BACKEND_API_URL` | GitHub 仓库 secret | `.github/workflows/keepalive.yml:15` 读 `secrets.BACKEND_API_URL` | 回落到硬编码默认 `https://koliance-api.onrender.com`（同文件 `:15`）。**后端换域名时会静默探错地址**——keepalive 报 `[WARN]` 却不拦任何东西（`:22`），即**失败无声** | 作者 | 否 |
+| **A-1** | `BACKEND_API_URL` | GitHub 仓库 secret | `.github/workflows/keepalive.yml:15` 读 `secrets.BACKEND_API_URL` | 回落到硬编码默认 `https://koliance-backend.onrender.com`（同文件 `:15`，即 `render.yaml` 的服务名 `koliance-backend`）。**后端换域名时会静默探错地址**——keepalive 报 `[WARN]` 却不拦任何东西（`:22`），即**失败无声** | 作者 | 否 |
 | **A-2** | **不需要任何 secret**（**已核实，勿加**） | — | `git grep -n "secrets\\." -- .github/` → **仅命中 `keepalive.yml:15` 一处**；`ci.yml` 的四个 job（`secrets:60` / `contracts:82` / `frontend:134` / `backend:169`）**零 `secrets.` 引用** | 多配 secret 无害但也无用；**且容易让人以为「CI 需要 PRIVATE_KEY」**——它不需要（见 A-3） | — | 否 |
 | **A-3** | `PRIVATE_KEY` / `ETHERSCAN_API_KEY` **不进 CI** | 不要放进 CI secrets | `ci.yml:113-132` 的四步（compile / tsc / test --coverage / 覆盖率地板）**全部在进程内 hardhat 链上跑**，不联网部署；`contracts/hardhat.config.ts:24,30` 的两个 `configVariable("PRIVATE_KEY")` 只在 `monadTestnet` / `monadMainnet` 两个 http 网络下才求值 | 若误把部署私钥放进 CI secret，等于**让任何能改 workflow 的 PR 拿到出金私钥**。这两者属 §D 的本地/人工部署凭证 | 作者（不要做） | 否 |
 
