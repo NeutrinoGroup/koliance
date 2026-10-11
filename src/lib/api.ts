@@ -142,18 +142,31 @@ export async function generateGameplayProof(steamId: string, walletAddress: stri
 
 export async function verifySteamOpenID(
   params: Record<string, string>
-): Promise<{ valid: boolean; steamId?: string; error?: string }> {
+): Promise<{ valid: boolean; steamId?: string; error?: string; synthetic?: boolean }> {
   try {
-    const res = await fetch(`${GO_BACKEND_URL}/api/v1/game/steam/verify`, {
+    // 1. Try Next.js server route
+    const res = await fetch("/api/auth/steam/verify", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ params }),
+      body: JSON.stringify(params),
     });
     const data = await res.json();
-    if (!res.ok || !data.valid) {
-      return { valid: false, error: data.error || "Steam OpenID verification failed" };
+    if (res.ok && data.valid) {
+      return { valid: true, steamId: data.steamId, synthetic: data.synthetic };
     }
-    return { valid: true, steamId: data.steamId };
+    // 2. Fallback to Go backend if available
+    if (GO_BACKEND_URL) {
+      const backendRes = await fetch(`${GO_BACKEND_URL}/api/v1/game/steam/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ params }),
+      });
+      const bData = await backendRes.json();
+      if (backendRes.ok && bData.valid) {
+        return { valid: true, steamId: bData.steamId };
+      }
+    }
+    return { valid: false, error: data.error || "Steam OpenID verification failed" };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     return { valid: false, error: msg };
