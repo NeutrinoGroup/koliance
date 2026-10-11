@@ -70,6 +70,12 @@
       "sourceType": "well-known",
       "computedHash": "bc1aae736aff72aab4c763ad82895b61a79ba72f7492debb0267b2d265aec616",
       "wellKnownDigest": "sha256:21e5013ec9132c30b443ab8a8717f413bcee7d8564f0edb67c71b638cc25bccd"
+    },
+    "video-shotcraft": {
+      "source": "Vincentwei1021/video-shotcraft",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "33d7e4bff87e864d9bcdf434e05f5b420c5930a864d69c7043616fbc932b6401"
     }
   }
 }

@@ -42,3 +42,7 @@ yarn-error.log*
 .DS_Store
 *.pem
 .env*
+
+.agents/skills/*
+
+video/public/audio/*
