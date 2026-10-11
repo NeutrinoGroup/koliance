@@ -1,6 +1,15 @@
 // Koliance API Bridge: Connects to Go high-concurrency backend service
 
-const GO_BACKEND_URL = process.env.NEXT_PUBLIC_GO_BACKEND_URL || "http://localhost:8080";
+import type { Movers } from "@/lib/marketFeed";
+
+/**
+ * The Go gateway's base URL.
+ *
+ * Exported so the server route (`src/app/api/market/route.ts`) imports it
+ * rather than repeating the literal. Two copies of a deployment coordinate is
+ * two places to change and one place to forget (D4).
+ */
+export const GO_BACKEND_URL = process.env.NEXT_PUBLIC_GO_BACKEND_URL || "http://localhost:8080";
 
 export interface StatsResponse {
   chainId: number;
@@ -69,6 +78,56 @@ export interface MarketPosition {
   current_price: string;
 }
 
+/**
+ * One price row from `GET /api/v1/market/prices`.
+ *
+ * Mirrors `market.PythPriceData` (`backend/internal/market/price_oracle.go`).
+ * The Go type is named for a feed it no longer reads — every field here comes
+ * from Alpaca daily bars, and `source` says so on the wire. The JSON keys
+ * cannot be renamed without a coordinated frontend change, so the misleading
+ * Go name is the cheaper of the two costs (GAP-52). What matters for this
+ * client is that the provenance fields travel WITH the number, so no caller
+ * has to remember where the number came from.
+ *
+ * `previousClose` / `change` / `changePercent` are derived on the backend from
+ * the two most recent daily bars of the same request. `feedId` and `confidence`
+ * are vestigial: Alpaca publishes no confidence interval, so `confidence` is
+ * always 0 and must never be rendered as a measurement.
+ */
+export interface MarketPriceRow {
+  symbol: string;
+  feedId: string;
+  price: number;
+  confidence: number;
+  updatedAt: string;
+  previousClose: number;
+  change: number;
+  changePercent: number;
+  source: string;
+  synthetic: boolean;
+}
+
+/** Why a market fetch produced nothing. Four situations, four different fixes. */
+export type MarketFetchReason =
+  | "not-configured"
+  | "upstream-error"
+  | "unreachable"
+  | "invalid-symbol";
+
+/**
+ * The result of a market fetch.
+ *
+ * The previous adapters answered `T | null`, which collapsed "no credentials
+ * were ever set", "Alpaca is down", "the Go gateway is not running" and "that
+ * symbol has no bar" into one indistinguishable nothing. A page cannot tell a
+ * user which of those happened if it is handed `null`, and the difference
+ * matters: three of the four are nobody's fault and one is a deployment
+ * mistake that a retry will never fix.
+ */
+export type MarketFetch<T> =
+  | { ok: true; data: T }
+  | { ok: false; reason: MarketFetchReason; detail: string };
+
 export interface MarketOverviewData {
   account: {
     id: string;
@@ -83,14 +142,28 @@ export interface MarketOverviewData {
     short_market_value?: string;
   };
   positions: MarketPosition[];
-  realtimePrices: Array<{
-    symbol: string;
-    feedId: string;
-    price: number;
-    confidence: number;
-    updatedAt: string;
-  }>;
+  realtimePrices: MarketPriceRow[];
+  /**
+   * Ranked from the same rows as `realtimePrices` by the backend, so the page
+   * can render the movers board (issue #16) without a second upstream call.
+   * Optional on the wire: `MarketOverviewData` also describes what an older
+   * backend returns. `moversFetch` is therefore issued separately, and the
+   * page tells "no ranking was returned" apart from "nothing moved" instead of
+   * rendering an empty board for both.
+   */
+  movers?: Movers;
 }
+
+/** Shape of `GET /api/v1/market/health`, which answers 200 with no credentials. */
+export interface MarketDataHealth {
+  /** False when the deployment has no Alpaca credentials; not an error. */
+  configured: boolean;
+  alpaca: { observed: boolean; ok: boolean; lastError?: string; lastSuccess?: string };
+  priceOracle: { ok: boolean; error?: string; symbols: string[]; instruments: number; latestBar?: string };
+  source: string;
+  synthetic: boolean;
+}
+
 
 export async function fetchBackendStats(): Promise<StatsResponse | null> {
   try {
@@ -202,14 +275,141 @@ export async function authorizeMicropayment(cardId: string, sessionKey: string, 
 }
 
 // ==================== MARKET ====================
-export async function fetchMarketOverview(): Promise<MarketOverviewData | null> {
+//
+// Every market read below goes through the Go gateway, which serves real
+// Alpaca data or refuses (503) — it has no synthetic path. These adapters used
+// to swallow that refusal into `null`, which erased the distinction between a
+// deployment with no credentials and a genuine outage. They now classify it.
+//
+// The classification rules, and why each one exists:
+//
+//   503 -> "not-configured": the gateway's `marketData` middleware answers 503
+//          with an explanatory body when ALPACA_API_KEY/ALPACA_API_SECRET are
+//          absent. `fetch(` does not throw on 503, so a naive adapter reports
+//          success-with-null. Retrying cannot fix this one.
+//   404 -> "invalid-symbol": only `/market/prices?symbol=` can produce it, and
+//          it means the exchange has no bar for that symbol.
+//   other non-2xx -> "upstream-error": Alpaca itself failed. The gateway is
+//          fine; the data is not available right now.
+//   200 that is not JSON, or no response at all -> "unreachable": the gateway
+//          is not running, or something else answered on that port.
+//
+// A body that fails to parse is deliberately classified as `unreachable`
+// rather than treated as an empty dataset. "I could not read an answer" and
+// "the answer was nothing" must not be the same outcome.
+
+/** Reads the gateway's `{"error": "..."}` body without assuming it is JSON. */
+async function errorDetail(res: Response): Promise<string> {
   try {
-    const res = await fetch(`${GO_BACKEND_URL}/api/v1/market/overview`);
-    if (!res.ok) return null;
-    return await res.json();
+    const body = await res.json();
+    if (body && typeof body.error === "string" && body.error) return body.error;
   } catch {
-    return null;
+    // Non-JSON: fall through to the status line.
   }
+  return `HTTP ${res.status}`;
+}
+
+function classifyStatus(status: number, detail: string): { reason: MarketFetchReason; detail: string } {
+  if (status === 503) return { reason: "not-configured", detail };
+  if (status === 404) return { reason: "invalid-symbol", detail };
+  return { reason: "upstream-error", detail };
+}
+
+/**
+ * Shared GET for market endpoints. Never returns a value the caller could
+ * mistake for data: the failure branch carries a reason and the gateway's own
+ * words.
+ */
+async function marketGet<T>(path: string): Promise<MarketFetch<T>> {
+  let res: Response;
+  try {
+    res = await fetch(`${GO_BACKEND_URL}${path}`, { cache: "no-store" });
+  } catch (err) {
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: err instanceof Error ? err.message : String(err),
+    };
+  }
+
+  if (!res.ok) {
+    const detail = await errorDetail(res);
+    return { ok: false, ...classifyStatus(res.status, detail) };
+  }
+
+  try {
+    return { ok: true, data: (await res.json()) as T };
+  } catch (err) {
+    // A 200 we cannot decode is not an empty market. See the note above.
+    return {
+      ok: false,
+      reason: "unreachable",
+      detail: `unreadable response body: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/**
+ * Account, positions and the realtime price rows.
+ *
+ * `null` is no longer a possible answer; see `MarketFetch`.
+ */
+export async function fetchMarketOverviewChecked(): Promise<MarketFetch<MarketOverviewData>> {
+  return marketGet<MarketOverviewData>("/api/v1/market/overview");
+}
+
+/**
+ * Kept for existing callers, but reduced to the success body or `null`.
+ *
+ * Retained only so the change stays inside the market page. New code should
+ * use `fetchMarketOverviewChecked`, which can say why it failed —
+ * `MarketTerminal` does.
+ */
+export async function fetchMarketOverview(): Promise<MarketOverviewData | null> {
+  const res = await fetchMarketOverviewChecked();
+  return res.ok ? res.data : null;
+}
+
+/**
+ * The tracked instruments' prices, each carrying its own provenance and change.
+ *
+ * Pass `symbol` to ask about one instrument; the gateway answers 404 when the
+ * exchange has no bar for it, which this reports as `invalid-symbol` rather
+ * than folding into a generic failure.
+ */
+export async function fetchMarketPrices(symbol?: string): Promise<MarketFetch<MarketPriceRow[]>> {
+  const query = symbol ? `?symbol=${encodeURIComponent(symbol)}` : "";
+  const res = await marketGet<MarketPriceRow[] | MarketPriceRow>(`/api/v1/market/prices${query}`);
+  if (!res.ok) return res;
+
+  // With a symbol the gateway answers a single object; without one, an array.
+  if (Array.isArray(res.data)) return { ok: true, data: res.data };
+  return { ok: true, data: [res.data] };
+}
+
+/**
+ * The ranked gainers / losers board (issue #16).
+ *
+ * The order is the backend's (`market.RankMovers`, a tested pure function with
+ * an explicit symbol tie-break so a refresh cannot reshuffle equal movers).
+ * This client must not re-sort it: two implementations of one ordering is two
+ * sources of truth for the same number (D4).
+ */
+export async function fetchMarketMovers(): Promise<MarketFetch<Movers>> {
+  return marketGet<Movers>("/api/v1/market/movers");
+}
+
+/**
+ * Whether this deployment can serve market data at all.
+ *
+ * Answers 200 even with no credentials — `configured: false` is the fact an
+ * operator needs, and it is deliberately not gated behind the credential check
+ * that guards the data endpoints. That makes it the one call that can
+ * distinguish "this deployment was never wired up" from "the market source is
+ * having a bad day", which is why the terminal asks it before anything else.
+ */
+export async function fetchMarketHealth(): Promise<MarketFetch<MarketDataHealth>> {
+  return marketGet<MarketDataHealth>("/api/v1/market/health");
 }
 
 export async function executeMarketTrade(symbol: string, side: "buy" | "sell", notionalUSD: number, leverage: number = 4) {

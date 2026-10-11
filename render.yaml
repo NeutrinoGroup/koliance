@@ -24,6 +24,15 @@ services:
         sync: false
       - key: ALPACA_BASE_URL
         value: https://paper-api.alpaca.markets/v2
+      # Market-data host. NOT the paper-api host above: different service, same
+      # credentials. Unset would silently fall back to the default, so it is
+      # pinned here for parity with the code's default.
+      - key: ALPACA_DATA_URL
+        value: https://data.alpaca.markets
+      # `iex` is the feed included with the paper tier; `sip` needs a paid
+      # subscription and answers 403 without it.
+      - key: ALPACA_DATA_FEED
+        value: iex
       - key: STRIPE_PUBLISHABLE_KEY
         sync: false
       - key: STRIPE_SECRET_KEY
@@ -36,6 +45,10 @@ services:
         value: "10143"
       - key: KOLIANCE_CONTRACT_ADDRESS
         value: "0x32fDd6B096EE14246b5b6971135286Bad01F4928"
+      # Now actually read: the /health `pyth` probe calls it (before this it was
+      # configured but never used by any code path).
+      - key: PYTH_HERMES_URL
+        value: https://hermes.pyth.network
       # Browser origins allowed by CORS (exact match, comma separated; no "*").
       - key: CORS_ALLOWED_ORIGINS
         value: "https://koliance.oodai.space,http://localhost:3000,http://127.0.0.1:3000"

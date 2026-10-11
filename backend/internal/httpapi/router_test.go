@@ -21,6 +21,15 @@ const opToken = "test-operator-token"
 // upstreams. Every test below fails (or succeeds) before any network call.
 func newTestRouter(t testing.TB, mutate func(*config.Config)) http.Handler {
 	t.Helper()
+	// The health probes would otherwise call Steam, GitHub, Alpaca and Hermes on
+	// every /health request. Pointing them at a closed local port makes the
+	// suite hermetic and makes "unreachable" the deterministic outcome (i.e.
+	// every probe reports false), rather than whatever the network happens to
+	// answer from CI.
+	origSteam, origGitHub := steamProbeBaseURL, githubProbeBaseURL
+	steamProbeBaseURL, githubProbeBaseURL = "http://127.0.0.1:1", "http://127.0.0.1:1"
+	t.Cleanup(func() { steamProbeBaseURL, githubProbeBaseURL = origSteam, origGitHub })
+
 	cfg := &config.Config{
 		SteamDomain:        "koliance.oodai.space",
 		MonadChainID:       "10143",
@@ -32,6 +41,17 @@ func newTestRouter(t testing.TB, mutate func(*config.Config)) http.Handler {
 	}
 	alp := market.NewAlpacaClient("http://127.0.0.1:1", "k", "s")
 	oracle := market.NewPriceOracle("k", "s")
+	oracle.SetDataBaseURL("http://127.0.0.1:1")
+	// cfg.AlpacaConfigured() gates /api/v1/market/*, and the existing tests below
+	// exercise trade *validation*, which must still reach the handler and answer
+	// 400. Credentials that point at a dead host keep both properties: the gate
+	// opens, and nothing can accidentally succeed against a live upstream.
+	if cfg.AlpacaAPIKey == "" && cfg.AlpacaAPISecret == "" {
+		cfg.AlpacaAPIKey, cfg.AlpacaAPISecret = "test-key", "test-secret"
+	}
+	probeCache.Lock()
+	probeCache.entries = map[string]cachedProbe{}
+	probeCache.Unlock()
 	return NewRouter(Deps{
 		Cfg:         cfg,
 		Game:        game.NewService(game.NewSteamClient(""), nil),
@@ -360,4 +380,3 @@ func TestAgentAPIRoutes_BindAndPay(t *testing.T) {
 		t.Fatalf("expected 200 on agents, got %d: %s", agentsRec.Code, agentsRec.Body.String())
 	}
 }
-

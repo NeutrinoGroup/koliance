@@ -7,7 +7,15 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：2026-10-11 · **合并轮**：`feat/liquidation-bot-chain`（PR #11，GAP-38~42）
+> **最后更新**：2026-10-11 · **本轮（前端侧，issue #14/#16，`docs/changes/028`）**：**GAP-52 ✅ 关闭** ——
+> 前端 `/api/market` 由**本地行情生成器**改为**纯代理**（删 `FALLBACK_MARKET_DATA`/`seededRandom`/`synthetic_curated`/
+> `synthetic_fallback`，无兜底路径）· `MarketTerminal` 账户/订单/跑马灯**去硬编码** · 新增
+> `src/lib/marketFeed.ts` 与 `tests/market-no-synthetic.test.ts`（回归守卫）· **新开 GAP-54**（实测确认审计报告 `U-5`：
+> market 页之外仍有多处合成数据，本轮未修）。
+> **上一轮（后端侧，`docs/changes/027`）**：market 后端侧改为**真实 Alpaca 或 503**（无合成路径）·
+> 新增 **`/api/v1/market/movers` 标的涨跌幅排行** · `/health` 的 `steam`/`github`/`alpaca`/`pyth` 四键**改真探活** ·
+> 删 `ALPACA_API_KEY`/`ALPACA_API_SECRET` 两处硬编码默认值；新开 GAP-52 / GAP-53。
+> **合并轮**：`feat/liquidation-bot-chain`（PR #11，GAP-38~42）
 > × `docs/ai-infrastructure-roadmap`（PR #12，`98a0ad8`，GAP-43~50）——**两侧均为台账新增、编号本就错开，故 union 全保留**。
 > **本轮（PR #11）**：**GAP-41 ✅ 落地**（§5.5，`docs/changes/026`：Bot 镜像纳入资金费）· GAP-26 `/api/v1/liquidations` ✅（`docs/changes/025`）
 > **本轮（PR #12）**：**补登记 §5.1**——`项目目标.md §5` 的 P2 项与「五大核心领域」此前**只有正文、无编号**，
@@ -74,9 +82,9 @@
 | GAP-09 | `perpConfig.ts` 的 FEEDS 与链上实测矛盾 | 🟡 P2 | ✅ | `df227bf` |
 | GAP-10 | 无 CI，全部用例是"门外用例" | 🟡 P2 | ✅ | `2b05f05` |
 | GAP-11 | 缺工程骨架目录 | 🟡 P2 | ✅ | `deploy/README.md`（发布环 runbook） |
-| GAP-12 | 凭证硬编码（6 处，含 README 明文） | 🟡 P2 | 🔴 | **需人工轮换密钥**；README 已清理 |
-| GAP-13 | 后端零链上交互 + `/health` 伪指标 | 🟡 P2 | 🟠 | — |
-| GAP-14 | 合成随机行情以"实时数据"形态返回 | 🟡 P2 | ✅ | `docs/changes/018` |
+| GAP-12 | 凭证硬编码（6 处，含 README 明文） | 🟡 P2 | 🔴 | **需人工轮换密钥**；README 已清理；`config.go` 的 Steam / Stripe publishable 默认值仍在，**但 `ALPACA_API_KEY`/`ALPACA_API_SECRET` 两处默认值已删**（`docs/changes/027`） |
+| GAP-13 | 后端零链上交互 + `/health` 伪指标 | 🟡 P2 | 🟠 | **伪指标部分 ✅**（`docs/changes/027`：`steam`/`github`/`alpaca`/`pyth` 四个键改真探活）；**「后端零链上交互」部分仍 🟠** |
+| GAP-14 | 合成随机行情以"实时数据"形态返回 | 🟡 P2 | ✅ | `docs/changes/018`（前端标注）+ `docs/changes/027`（后端侧：真实 Alpaca 或 503，无合成路径）+ **`docs/changes/028`（前端侧：`/api/market` 改为纯代理，合成序列与兜底表已删除）** —— market 一条链上**已无合成行情**。**残留同类见 GAP-54**（market 页之外的组件） |
 | GAP-15 | `docs/changes` 先写后填纪律从未执行 | 🟠 P1 | ✅ | `0193e3a` 起 |
 | GAP-16 | `项目目标.md` 交付缺口 | 🔴 P0 | 🟠 | 部分；见 §3 |
 | GAP-17 | 负向证伪用例未常驻化 | 🟠 P1 | ✅ | `0193e3a` |
@@ -120,6 +128,9 @@
 | **GAP-49** | 无 Supabase 时 DB 层静默降级内存态 | 🟠 P1 | 🟠 | 见 §5.1（此前只被 GAP-24 顺带提过，**未独立编号**） |
 | **GAP-50** | 资金费**收费侧**（费率取负）无链上对拍 | 🟡 P2 | 🟠 | 见 §5（`docs/changes/021`「未做（明确）」） |
 | **GAP-51** | 核心问题区字体浅色低对比与毛玻璃背景缺乏自主波纹动效 | 🟢 P3 | ✅ | 见 `docs/changes/022`；文字深色化与背景自主波纹闭环 |
+| **GAP-52** | **前端 `src/app/api/market/route.ts` 仍在本地生成行情序列**（`synthetic_curated` / `synthetic_fallback` / `FALLBACK_MARKET_DATA` 硬编码常量）；且 `MarketTerminal.tsx` 把账户与订单写死 | 🟠 P1 | ✅ | **✅ 关闭**（`docs/changes/028`，issue #14/#16 前端侧）：路由改为**纯代理**（无生成器、无兜底表），数据源＝后端 `/api/v1/market/{prices,movers,health}`；账户/订单/跑马灯去硬编码；`/api/v1/market/movers` 排行已在 market 页呈现。**回归守卫**：`tests/market-no-synthetic.test.ts` |
+| **GAP-53** | **GitHub 探测与业务共用同一匿名配额**（60 次/小时）；`/health` 探针已加 20s 缓存压低消耗，但 CI/多实例下仍可能相互挤压 | 🟡 P2 | 🟠 | 见 `docs/changes/027` §未做；正解是 `GITHUB_TOKEN` 或探测独立配额 |
+| **GAP-54** | **market 页之外仍有多处「合成数据以实时形态呈现」**（与 GAP-14/GAP-52 同族，**审计报告 `U-5` 当时只是线索，本轮实测确认**）：`EnergyCoreHero.tsx:26/31` 把 `liveTps` 初始化成 `10032` 并每 1.2s 用 `Math.random()` 在 10015~10060 间抖动，而 `lib/api.ts` 的 `fetchBackendStats` 已能取真实 TPS；`AgentCardTerminal.tsx:372-373` 伪造 `slot` 与 `txHash`；`DeveloperConsole.tsx:394/509/526/551/561` 伪造 `simulatedTx` / `payment_id` / `agent_id` / `sessKey`；`IdentityCard.tsx:167` 用 `Math.random()` 造 `ipfs://` metadataHash；`lib/audit.ts:110/117/118` 兜底造 `order_hash`/`tx_hash` | 🟠 P1 | ⬜ | **本轮未修**（超出 #14/#16 范围，且各条需要接不同真实源：链上 / Stripe / AgentCard API）。**注意**：`CursorTrail`/`HeroGsap`/`EnergyCoreBackdrop` 的 `Math.random()` 是**粒子动画**，属正当用途，**不在本项内**（实测区分，避免误伤） |
 
 ---
 
@@ -483,7 +494,10 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | 编号 | 事项 | 起点 | 预估 |
 | --- | --- | --- | --- |
 | GAP-25 | `agentcard` 全局锁 → 需先写基准测试量化 | `backend/internal/agentcard` | 1 天 |
-| GAP-13 | 后端接 go-ethereum，`/health` 改为真实探活 | `backend/` | 1 天 |
+| GAP-13 | ~~后端接 go-ethereum，`/health` 改为真实探活~~ **探活部分 ✅**（`docs/changes/027`）；**接链部分待做**（依赖 GAP-26 的部署） | `backend/`（接链）+ `/health`（已完成） | 接链残余 1 天 |
+| GAP-52 | ~~前端 `/api/market` 改真实数据源（撤掉 `synthetic_*` 生成序列与 `FALLBACK_MARKET_DATA`）+ 账户数字去硬编码~~ **✅ 已落地**（`docs/changes/028`）；残余见 §未做 | `src/app/api/market/route.ts` · `src/components/MarketTerminal.tsx` · `src/lib/api.ts` | 已用 1 天 |
+| GAP-53 | GitHub 探测改用 `GITHUB_TOKEN`（现与业务共用 60/h 匿名配额） | `backend/internal/httpapi/health.go` · `backend/internal/developer/github.go` | 0.5 天 |
+| GAP-54 | 前端其余组件的合成数据接真实源（`liveTps` → `fetchBackendStats` · AgentCard `slot`/`txHash` · DeveloperConsole 的 `payment_id`/`agent_id`/`sessKey` · IdentityCard 的 `metadataHash` · `audit.ts` 的 hash 兜底） | `src/components/{EnergyCoreHero,AgentCardTerminal,DeveloperConsole,IdentityCard}.tsx` · `src/lib/audit.ts` | 1.5 天 |
 | GAP-39 | Hermes 生产路径：SSE/WS 流式 tick、staleness 边界（镜像 `getPriceNoOlderThan`）、批量更新、置信区间 | `backend/internal/oracle/hermes.go`（最小 REST 已就位） | 0.5 天 |
 | GAP-40 | 本地链端到端集成验证（见 §5.4） | `contracts/`（`npx hardhat node` + `demo-seed.ts`）+ `cmd/liquidator` | 0.5 天 |
 | GAP-41 | ~~Bot 镜像纳入资金费（见 §5.5）~~ **✅ 已落地**（`docs/changes/026`）；残余见 §5.5 文末 | `backend/internal/perp/position` + `internal/chain` | 残余 0.5 天 |
