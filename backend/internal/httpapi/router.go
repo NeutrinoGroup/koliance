@@ -34,7 +34,7 @@ type Deps struct {
 	// Liquidations serves the liquidation observation feed written by
 	// cmd/liquidator. Nil (no DATABASE_URL) degrades to an empty list.
 	Liquidations liquidation.Store
-	AgentAPI    *agentapi.Service
+	AgentAPI     *agentapi.Service
 }
 
 // Access model (see docs in backend/README.md):
@@ -62,23 +62,53 @@ func NewRouter(d Deps) http.Handler {
 		}
 		return operator(fn)
 	}
+	// marketData fails closed when the market data credentials are missing.
+	//
+	// The alternative — which is what the code did before — is that a deployment
+	// without credentials answers these endpoints with numbers that came from
+	// somewhere other than the market. Refusing is the only answer that cannot
+	// be mistaken for data (issue #14, GAP-14).
+	//
+	// It deliberately does NOT wrap `trade`/`close`: those keep their existing
+	// auth-first order (a missing operator token must still answer 401/503) and
+	// surface the missing credentials as a 503 from the handler below. It also
+	// does not wrap /api/v1/market/health, which must stay able to report
+	// `configured: false` — that being the fact an operator needs.
+	marketData := func(fn http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if !cfg.AlpacaConfigured() {
+				jsonError(w, http.StatusServiceUnavailable,
+					"market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured (no synthetic data is served)")
+				return
+			}
+			fn(w, r)
+		}
+	}
 
 	healthHandler := func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
 		connected := d.DB != nil && d.DB.IsConnected
+		// Probed, not asserted. Every key below is the outcome of a call made on
+		// this request; the four that used to be literal `true` were an
+		// integration status badge produced by a process that had never
+		// contacted the integration (GAP-13).
+		probes := runHealthProbes(ctx, cfg, d.PriceOracle)
 		jsonResponse(w, http.StatusOK, map[string]interface{}{
 			"status":    "healthy",
 			"network":   fmt.Sprintf("Monad Testnet (Chain ID: %s)", cfg.MonadChainID),
 			"contract":  cfg.KolianceContract,
 			"timestamp": time.Now().UTC(),
 			"services": map[string]bool{
-				"steam":     true,
-				"github":    true,
-				"alpaca":    true,
-				"pyth":      true,
+				"steam":     probes.Steam.OK,
+				"github":    probes.GitHub.OK,
+				"alpaca":    probes.Alpaca.OK,
+				"pyth":      probes.Pyth.OK,
 				"agentcard": true,
 				"stripe":    cfg.StripeSecretKey != "",
 				"database":  connected,
 			},
+			"degraded": probes.Degraded(),
+			"probes":   probes,
 		})
 	}
 
@@ -321,16 +351,22 @@ func NewRouter(d Deps) http.Handler {
 
 	// ==================== MARKET ====================
 
-	h("/api/v1/market/overview", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
-		overview, err := d.Market.GetMarketOverview()
+	// Provenance of everything under /api/v1/market: real Alpaca data, or a
+	// 503. There is no third answer.
+	h("/api/v1/market/health", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, d.Market.GetDataHealth(r.Context()))
+	}))
+
+	h("/api/v1/market/overview", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
+		overview, err := d.Market.GetMarketOverview(r.Context())
 		if err != nil {
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 		jsonResponse(w, http.StatusOK, overview)
-	}))
+	})))
 
-	h("/api/v1/market/prices", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/market/prices", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
 		symbol := r.URL.Query().Get("symbol")
 		if symbol != "" {
 			sym, err := normalizeSymbol(symbol)
@@ -338,17 +374,40 @@ func NewRouter(d Deps) http.Handler {
 				jsonError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			p, err := d.Market.GetPrice(sym)
+			p, err := d.Market.GetPrice(r.Context(), sym)
 			if err != nil {
-				jsonError(w, http.StatusNotFound, err.Error())
+				// A symbol with no bar is a 404; an upstream failure is not the
+				// caller's fault and must not be reported as one.
+				if errors.Is(err, market.ErrNoMarketData) {
+					jsonError(w, http.StatusNotFound, err.Error())
+					return
+				}
+				jsonError(w, http.StatusBadGateway, err.Error())
 				return
 			}
 			jsonResponse(w, http.StatusOK, p)
 			return
 		}
-		prices, _ := d.PriceOracle.GetAllPrices()
+
+		prices, err := d.PriceOracle.PriceList(r.Context())
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, err.Error())
+			return
+		}
 		jsonResponse(w, http.StatusOK, prices)
-	}))
+	})))
+
+	// Issue #16: 标的涨跌幅排行, computed from the last two daily bars of each
+	// tracked instrument. An upstream failure is a 502, never an empty board —
+	// "we could not ask" and "nothing moved" must not look alike.
+	h("/api/v1/market/movers", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
+		movers, err := d.Market.GetMovers(r.Context())
+		if err != nil {
+			jsonError(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		jsonResponse(w, http.StatusOK, movers)
+	})))
 
 	h("/api/v1/market/trade", methodOnly(http.MethodPost, trading(func(w http.ResponseWriter, r *http.Request) {
 		var req market.TradeRequest
@@ -368,9 +427,16 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		req.Leverage = lev
-		res, err := d.Market.ExecuteTrade(req)
+		res, err := d.Market.ExecuteTrade(r.Context(), req)
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			// Misconfiguration is not an order failure: answer 503 rather than a
+			// 200 carrying `success:false`, so a client cannot report "the trade
+			// was rejected by the broker" when no broker was ever configured.
+			if errors.Is(err, market.ErrAlpacaCredentialsMissing) {
+				jsonError(w, http.StatusServiceUnavailable, err.Error())
+				return
+			}
+			jsonResponse(w, http.StatusOK, res)
 			return
 		}
 		jsonResponse(w, http.StatusOK, res)
@@ -388,7 +454,11 @@ func NewRouter(d Deps) http.Handler {
 			jsonError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if err := d.Market.ClosePosition(sym); err != nil {
+		if err := d.Market.ClosePosition(r.Context(), sym); err != nil {
+			if errors.Is(err, market.ErrAlpacaCredentialsMissing) {
+				jsonError(w, http.StatusServiceUnavailable, err.Error())
+				return
+			}
 			jsonError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
