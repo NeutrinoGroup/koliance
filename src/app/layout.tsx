@@ -136,6 +136,7 @@ const jsonLd = {
 };
 
 import { I18nProvider } from "@/lib/i18n";
+import { Providers } from "@/components/Providers";
 
 export default function RootLayout({
   children,
@@ -175,7 +176,9 @@ export default function RootLayout({
           </div>
         </noscript>
         <I18nProvider>
-          {children}
+          <Providers>
+            {children}
+          </Providers>
         </I18nProvider>
       </body>
     </html>

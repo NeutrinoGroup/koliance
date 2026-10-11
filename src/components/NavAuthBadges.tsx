@@ -28,6 +28,7 @@ import { EditProfileModal, UserProfileData } from "@/components/EditProfileModal
 import { TransferModal } from "@/components/TransferModal";
 import { monadTestnet, KOL_TOKEN_ADDRESS, KOL_TOKEN_ABI } from "@/lib/contract";
 import { truncateAddress } from "@/lib/utils";
+import { useKolianceAuth } from "@/components/Providers";
 
 interface NavAuthBadgesProps {
   walletAddress?: string | null;
@@ -42,6 +43,15 @@ export function NavAuthBadges({
   onConnectWallet,
   onDisconnectWallet,
 }: NavAuthBadgesProps) {
+  const {
+    isPrivyEnabled,
+    user: privyUser,
+    login: privyLogin,
+    linkWallet,
+    linkGoogle,
+    linkGithub,
+  } = useKolianceAuth();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
@@ -157,8 +167,36 @@ export function NavAuthBadges({
     return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
-  // 1. Google 1-Click Login Trigger
+  // Sync Privy user authentication state into badges
+  useEffect(() => {
+    if (privyUser?.google && !googleUser) {
+      setGoogleUser({
+        id: privyUser.id,
+        name: (privyUser.google.name as string) || (privyUser.google.email as string),
+        email: privyUser.google.email as string,
+        walletAddress: (privyUser.wallet?.address || walletAddress) as string | null,
+        tier: "GOOGLE VERIFIED (PRIVY)",
+        creditAllowanceUSD: 1200,
+      });
+    }
+    if (privyUser?.github && !githubUser) {
+      setGithubUser({
+        username: privyUser.github.username as string,
+        tier: "BUIDLER (PRIVY)",
+      });
+    }
+  }, [privyUser, walletAddress, googleUser, githubUser]);
+
+  // 1. Google 1-Click Login Trigger (Privy-aware with OAuth fallback)
   const handleGoogleLogin = () => {
+    if (isPrivyEnabled) {
+      if (linkGoogle) {
+        linkGoogle();
+        return;
+      }
+      privyLogin();
+      return;
+    }
     const clientId =
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID;
     const redirectUri = encodeURIComponent("https://koliance.oodai.space");
@@ -173,8 +211,16 @@ export function NavAuthBadges({
     window.location.href = `https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state}&access_type=offline&prompt=consent`;
   };
 
-  // 2. GitHub 1-Click Login Trigger
+  // 2. GitHub 1-Click Login Trigger (Privy-aware with OAuth fallback)
   const handleGithubLogin = () => {
+    if (isPrivyEnabled) {
+      if (linkGithub) {
+        linkGithub();
+        return;
+      }
+      privyLogin();
+      return;
+    }
     // Server route sets the httpOnly CSRF nonce cookie, then redirects to GitHub.
     const qs = new URLSearchParams({ path: window.location.pathname || "/" });
     window.location.href = `/api/auth/github/start?${qs.toString()}`;
@@ -397,6 +443,19 @@ export function NavAuthBadges({
                       <span>断开</span>
                     </button>
                   </div>
+
+                  {isPrivyEnabled && linkWallet && (
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        linkWallet();
+                      }}
+                      className="w-full py-1 px-2 rounded-lg bg-[#1a2134] hover:bg-[#25304a] text-slate-300 hover:text-white text-[10px] font-mono transition flex items-center justify-center gap-1 border border-white/10"
+                    >
+                      <Link2 className="w-3 h-3 text-purple-400" />
+                      <span>关联其他钱包 (Link External Wallet)</span>
+                    </button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">

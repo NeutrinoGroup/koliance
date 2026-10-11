@@ -34,10 +34,10 @@ test.describe("Koliance Production E2E Verification", () => {
     await expect(page.getByText("Financial Access").first()).toBeVisible();
 
     // Verify 4-step pipeline
-    await expect(page.getByText("Verifiable Identity")).toBeVisible();
-    await expect(page.getByText("Verifiable Credit")).toBeVisible();
-    await expect(page.getByText("Scoped Financial Controls")).toBeVisible();
-    await expect(page.getByText("Trusted Autonomous Agency")).toBeVisible();
+    await expect(page.getByText("Verifiable Identity").first()).toBeVisible();
+    await expect(page.getByText("Verifiable Credit").first()).toBeVisible();
+    await expect(page.getByText("Scoped Financial Controls").first()).toBeVisible();
+    await expect(page.getByText("Trusted Autonomous Agency").first()).toBeVisible();
 
     // Verify Strategic Taxonomy Matrix
     await expect(page.getByText("Strategic Architecture & Feature Taxonomy")).toBeVisible();

@@ -33,6 +33,7 @@ import {
 import { BrandIcon } from "@/components/BrandIcon";
 import { Navbar, NavView } from "@/components/Navbar";
 import { CursorTrail } from "@/components/CursorTrail";
+import { HeroGsap } from "@/components/HeroGsap";
 import { EnergyCoreHero } from "@/components/EnergyCoreHero";
 import { TrustConstellation } from "@/components/TrustConstellation";
 import { ProductStudio } from "@/components/ProductStudio";
@@ -51,6 +52,7 @@ import {
   TrustRecordData,
 } from "@/lib/contract";
 import { checkBackendHealth } from "@/lib/api";
+import { useKolianceAuth } from "@/components/Providers";
 
 function MainContent() {
   const searchParams = useSearchParams();
@@ -63,6 +65,18 @@ function MainContent() {
   const [balance, setBalance] = useState("0.00");
   const [chainId, setChainId] = useState<number | null>(null);
   const [networkModalOpen, setNetworkModalOpen] = useState(false);
+
+  const {
+    address: authAddress,
+    login: authLogin,
+    logout: authLogout,
+  } = useKolianceAuth();
+
+  useEffect(() => {
+    if (authAddress) {
+      setAccount(authAddress);
+    }
+  }, [authAddress]);
 
   // Top Nav View: INDEX | DETAIL | PRODUCT | AGENTCARD
   const [currentView, setCurrentView] = useState<NavView>(initialView);
@@ -143,38 +157,34 @@ function MainContent() {
     }
   };
 
-  // Connect Wallet
+  // Connect Wallet (via Privy / Wagmi / injected fallback)
   const handleConnect = async () => {
-    if (typeof window === "undefined" || !window.ethereum) {
-      alert("Please install MetaMask, Rabby, or an EVM-compatible Web3 wallet!");
-      return;
-    }
     try {
-      const accounts = (await window.ethereum.request({
-        method: "eth_requestAccounts",
-      })) as string[];
-      if (accounts && accounts.length > 0) {
-        setAccount(accounts[0] as `0x${string}`);
+      authLogin();
+    } catch {
+      if (typeof window !== "undefined" && (window as any).ethereum) {
+        try {
+          const accounts = (await (window as any).ethereum.request({
+            method: "eth_requestAccounts",
+          })) as string[];
+          if (accounts && accounts.length > 0) {
+            setAccount(accounts[0] as `0x${string}`);
+          }
+        } catch (err) {
+          console.error("Direct wallet connect error:", err);
+        }
       }
-
-      const currentChainIdHex = (await window.ethereum.request({
-        method: "eth_chainId",
-      })) as string;
-      const currentChainId = parseInt(currentChainIdHex, 16);
-      setChainId(currentChainId);
-
-      if (currentChainId !== monadTestnet.id) {
-        setNetworkModalOpen(true);
-      }
-    } catch (err) {
-      console.error("Connect error:", err);
     }
   };
 
-  const handleDisconnect = () => {
-    setAccount(null);
-    setBalance("0.00");
-    setIdentity(null);
+  const handleDisconnect = async () => {
+    try {
+      await authLogout();
+    } finally {
+      setAccount(null);
+      setBalance("0.00");
+      setIdentity(null);
+    }
   };
 
   // Fetch account balance and contract data
@@ -349,10 +359,10 @@ function MainContent() {
               transition={{ duration: 0.35, ease: "easeInOut" }}
               className="w-full"
             >
-              {/* Fixed & Prominent 3D Energy Core Hero */}
-              <EnergyCoreHero
-                onLaunchDApps={() => setCurrentView("PRODUCT")}
-                onExploreDetails={() => setCurrentView("DETAIL")}
+              {/* Official Production Hero with Vision and Language Switcher */}
+              <HeroGsap
+                onRegisterClick={() => setCurrentView("PRODUCT")}
+                onExploreClick={() => setCurrentView("DETAIL")}
               />
 
               {/* Protocol Architecture Bento Highlights */}
@@ -462,6 +472,9 @@ function MainContent() {
                   </div>
                 </div>
               </div>
+
+              {/* Core Problem Definition, 3 Pillars, Progression Pipeline & Feature Taxonomy */}
+              <CoreValueFramework />
             </motion.div>
           )}
 
