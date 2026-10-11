@@ -37,7 +37,7 @@ NEXT_PUBLIC_GO_BACKEND_URL=http://localhost:8080
 
 | 类别 | 端点 | 凭证 |
 |---|---|---|
-| 公开（只读） | `health`、`stats`、`game/steam/profile`、`developer/github/profile`、`market/overview`、`market/prices` | 无 |
+| 公开（只读） | `health`、`stats`、`game/steam/profile`、`developer/github/profile`、`market/overview`、`market/prices`、`market/movers`、`market/health` | 无（`market/*` 另需 Alpaca 凭证，见下） |
 | 公开（演示写入，参数严格校验） | `agentcard/generate`、`game/proof`、`developer/github/proof`、`stripe/checkout-session` | 无 |
 | 卡主 | `GET agentcard/cards/{id}`、`agentcard/session-key`、`agentcard/authorize`（不带 sessionKey 时） | `Authorization: Bearer <cardToken>`（只在 `generate` 响应中返回一次，服务端仅存 SHA-256） |
 | Agent | `agentcard/authorize`（带 sessionKey） | 为**该卡**签发的 `sk_sess_…` |
@@ -49,3 +49,21 @@ NEXT_PUBLIC_GO_BACKEND_URL=http://localhost:8080
   - `CORS_ALLOWED_ORIGINS`：逗号分隔的精确 origin 列表，默认 `https://koliance.oodai.space,http://localhost:3000,http://127.0.0.1:3000`，不支持 `*`。
   - `KOLIANCE_API_TOKEN`：运营方令牌。
   - `DEMO_PUBLIC_TRADING`：`true` 时允许浏览器直接下 Alpaca 模拟盘订单（仍有参数上限），默认 `false`。
+  - `ALPACA_API_KEY` / `ALPACA_API_SECRET`：**无默认值**（此前回退到仓库里提交过的密钥，等于泄漏 + 把误配置伪装成可用）。**未配置时 `/api/v1/market/*` 一律 503**，不做任何合成降级。
+  - `ALPACA_DATA_URL`：行情数据主机，默认 `https://data.alpaca.markets`（**不是** `ALPACA_BASE_URL` 的 paper-api 主机——两者是不同服务）。
+  - `ALPACA_DATA_FEED`：行情 feed，默认 `iex`（免费层可用；`sip` 需付费订阅，否则一律 403）。
+
+## 市场数据端点（issue #14 / #16）
+
+| 端点 | 返回 |
+|---|---|
+| `GET /api/v1/market/health` | 行情子系统自检：`configured`、`alpaca` 最近一次调用的结果、`priceOracle` 的实探结果（含 `instruments` 计数）。**未配置凭据时返回 200 + `configured:false`**，因为它必须能报告"没配"这个事实 |
+| `GET /api/v1/market/prices` | 各标的真实 Alpaca 日线派生价（含 `previousClose` / `change` / `changePercent` / `source` / `synthetic:false`），按 symbol 排序 |
+| `GET /api/v1/market/movers` | **标的涨跌幅排行**（issue #16）：`gainers`（降序）/ `losers`（升序）/ `unchanged` / `unrankedCount` |
+| `GET /api/v1/market/overview` | 账户 + 持仓 + 上述价格 + `movers`（排行复用同一批数据，不额外请求） |
+
+- 涨跌幅取 `GET {ALPACA_DATA_URL}/v2/stocks/bars?timeframe=1Day&limit=2&sort=desc`：**两根日线**才够算"涨跌"（Alpaca 的 bar 不含前收字段）。
+- 排序一律带 **symbol 升序**做 tie-break——上游 bars 是 JSON object，Go 侧即 map，**迭代顺序随机**，不钉死就会让排行榜每次刷新换位。
+- 无前收（只有一根 bar）的标的计入 `unrankedCount`，**不进 `unchanged`**：「没动」与「不知道动没动」是两回事。
+
+`/health` 的 `steam` / `github` / `alpaca` / `pyth` 四个键是**真探活**（此前写死 `true`），并行执行、4s 超时、20s 缓存（Render 会高频 ping `/healthz`，逐次探活会打光 GitHub 匿名配额），并附 `degraded` 列表与 `probes` 明细。**`status` 恒为 `healthy`、HTTP 恒 200**：数据源降级是**可观测**，不是**致命**——`/healthz` 是 Render 的 `healthCheckPath`，让它因上游降级而判死会摘掉整个服务。

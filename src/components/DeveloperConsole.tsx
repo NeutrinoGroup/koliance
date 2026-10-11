@@ -37,6 +37,7 @@ import {
 import { useKolianceAuth } from "@/components/Providers";
 import type { ApiKeyRecord } from "@/lib/apiKeyDb";
 import { getAuditHistory, recordAuditEvent, AuditRecord, AuditCategory } from "@/lib/audit";
+import { useLanguage } from "@/lib/i18n";
 
 interface StatsData {
   wallet_address: string;
@@ -80,6 +81,7 @@ interface BoundAgent {
 }
 
 export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${string}` | null }) {
+  const { lang, t } = useLanguage();
   const { address: authAddress, login: authLogin } = useKolianceAuth();
   const [localDevWallet, setLocalDevWallet] = useState<string | null>(null);
 
@@ -603,11 +605,13 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           <div className="flex items-center gap-2 text-xs font-mono text-slate-400 mb-1">
             <span>Koliance Cloud</span>
             <span>/</span>
-            <span className="text-purple-300 font-semibold">Developer Service Console</span>
+            <span className="text-purple-300 font-semibold">
+              {lang === "en" ? "Developer Service Console" : "开发者服务控制台"}
+            </span>
           </div>
           <h1 className="text-xl sm:text-2xl font-black tracking-tight text-white font-mono flex items-center gap-2.5">
             <Server className="w-5 h-5 text-purple-400" />
-            <span>Agentic Infrastructure & Key Management</span>
+            <span>{lang === "en" ? "Agentic Infrastructure & Key Management" : "自主 Agent 基础设施与密钥管理"}</span>
           </h1>
         </div>
 
@@ -627,12 +631,12 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
       {/* 2. Professional Tab Navigation (Stripe / Vercel Style) */}
       <div className="flex items-center gap-1 border-b border-white/10 pb-px overflow-x-auto no-scrollbar">
         {[
-          { id: "overview", label: "Overview & Analytics", icon: <Activity className="w-4 h-4" /> },
-          { id: "keys", label: "API Keys (api-key 表)", icon: <KeyRound className="w-4 h-4" /> },
-          { id: "playground", label: "Live API Playground", icon: <Terminal className="w-4 h-4" /> },
-          { id: "packages", label: "Quota & Subscription Packs", icon: <Coins className="w-4 h-4" /> },
-          { id: "agents", label: "Bound Agents Registry", icon: <Cpu className="w-4 h-4" /> },
-          { id: "audit", label: "Operation Audit & History", icon: <History className="w-4 h-4" /> },
+          { id: "overview", label: lang === "en" ? "Overview & Analytics" : "概览与分析", icon: <Activity className="w-4 h-4" /> },
+          { id: "keys", label: lang === "en" ? "API Keys (api-key table)" : "API 密钥 (api-key 表)", icon: <KeyRound className="w-4 h-4" /> },
+          { id: "playground", label: lang === "en" ? "Live API Playground" : "在线演练台", icon: <Terminal className="w-4 h-4" /> },
+          { id: "packages", label: lang === "en" ? "Quota & Subscription Packs" : "额度与套餐包", icon: <Coins className="w-4 h-4" /> },
+          { id: "agents", label: lang === "en" ? "Bound Agents Registry" : "已绑定 Agent 列表", icon: <Cpu className="w-4 h-4" /> },
+          { id: "audit", label: lang === "en" ? "Operation Audit & History" : "操作审计与历史", icon: <History className="w-4 h-4" /> },
         ].map((tab) => {
           const isActive = consoleTab === tab.id;
           return (
@@ -663,10 +667,10 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               <div>
                 <div className="text-xs font-mono text-purple-400 font-semibold flex items-center gap-2">
                   <span>[REGISTRATION_REQUIRED]</span>
-                  <span>Console 密钥需要用户注册</span>
+                  <span>{lang === "en" ? "Console API keys require user registration" : "Console 密钥需要用户注册"}</span>
                 </div>
                 <h3 className="text-base font-bold text-white font-mono">
-                  未检测到已注册的开发者身份
+                  {lang === "en" ? "No registered developer identity detected" : "未检测到已注册的开发者身份"}
                 </h3>
               </div>
             </div>
@@ -676,19 +680,21 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                 className="h-9 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition cursor-pointer flex items-center gap-2"
               >
                 <ShieldCheck className="w-4 h-4" />
-                <span>连接钱包登录</span>
+                <span>{lang === "en" ? "Connect Wallet to Login" : "连接钱包登录"}</span>
               </button>
               <button
                 onClick={() => setDevRegisterModalOpen(true)}
                 className="h-9 px-4 rounded-md bg-[#161a29] hover:bg-[#1e2338] border border-white/10 text-slate-200 font-mono text-xs font-semibold active:scale-[0.98] transition cursor-pointer flex items-center gap-2"
               >
                 <UserCheck className="w-4 h-4" />
-                <span>注册开发者账号</span>
+                <span>{lang === "en" ? "Register Dev Account" : "注册开发者账号"}</span>
               </button>
             </div>
           </div>
           <p className="text-xs font-mono text-slate-400 leading-relaxed">
-            Koliance 开放服务 API 与控制台采用严格鉴权隔离。用户必须先完成注册或连接钱包身份，才能创建属于自己的专属 API 密钥并存入 api-key 数据库表。
+            {lang === "en"
+              ? "Koliance Open API and Developer Console enforce isolated credentials. You must complete registration or connect a wallet before issuing dedicated API keys."
+              : "Koliance 开放服务 API 与控制台采用严格鉴权隔离。用户必须先完成注册或连接钱包身份，才能创建属于自己的专属 API 密钥并存入 api-key 数据库表。"}
           </p>
         </div>
       ) : (
@@ -726,7 +732,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                   className="ml-2 h-7 px-2.5 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/30 text-white text-[11px] font-mono flex items-center gap-1 active:scale-[0.98] transition cursor-pointer"
                 >
                   <Plus className="w-3 h-3" />
-                  <span>创建新密钥</span>
+                  <span>{lang === "en" ? "New API Key" : "创建新密钥"}</span>
                 </button>
               </div>
             </div>
@@ -734,14 +740,16 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             {!activeKey ? (
               <div className="p-4 rounded-md bg-[#090b12] border border-dashed border-white/10 text-center space-y-2">
                 <p className="text-xs font-mono text-slate-400">
-                  您尚未创建任何 API 密钥。密钥需要由用户自行创建并保存至 api-key 表。
+                  {lang === "en"
+                    ? "You have not created any API keys yet. Create one to persist to the api-key table."
+                    : "您尚未创建任何 API 密钥。密钥需要由用户自行创建并保存至 api-key 表。"}
                 </p>
                 <button
                   onClick={() => setNewKeyModalOpen(true)}
                   className="h-8 px-4 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold shadow-sm inline-flex items-center gap-1.5 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>创建我的第一个密钥</span>
+                  <span>{lang === "en" ? "Create My First Key" : "创建我的第一个密钥"}</span>
                 </button>
               </div>
             ) : (
@@ -801,13 +809,16 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           {/* Quota & Fast Recharge (4 cols) - Architectural Geometry, Zero Pill */}
           <div className="lg:col-span-4 p-5 rounded-lg bg-[#111420] border border-white/10 space-y-4 flex flex-col justify-between shadow-sm">
             <div className="space-y-1">
-              <div className="text-xs font-mono text-slate-400">Available Quota Balance</div>
+              <div className="text-xs font-mono text-slate-400">
+                {lang === "en" ? "Available Quota Balance" : "可用 API 配额余额"}
+              </div>
               <div className="text-3xl font-extrabold text-white font-mono flex items-baseline gap-2">
                 <span>{quota}</span>
                 <span className="text-xs text-slate-400 font-normal">API Units</span>
               </div>
               <div className="text-xs font-mono text-cyan-300">
-                Free Claims Left: <strong className="text-white">{freeClaimsLeft}/3</strong>
+                {lang === "en" ? "Free Claims Left:" : "剩余免费领取次数:"}{" "}
+                <strong className="text-white">{freeClaimsLeft}/3</strong>
               </div>
             </div>
 
@@ -824,9 +835,9 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               {claiming ? (
                 <RotateCw className="w-3.5 h-3.5 animate-spin" />
               ) : freeClaimsLeft > 0 ? (
-                <span>Claim 100 API Calls (Free)</span>
+                <span>{lang === "en" ? "Claim 100 API Calls (Free)" : "免费领取 100 次 API 调用"}</span>
               ) : (
-                <span>Free Quota Exhausted</span>
+                <span>{lang === "en" ? "Free Quota Exhausted" : "免费额度已耗尽"}</span>
               )}
             </button>
           </div>
@@ -850,28 +861,36 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           {/* Key Metrics Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
-              <div className="text-xs font-mono text-slate-400">Total Requests (24h)</div>
+              <div className="text-xs font-mono text-slate-400">
+                {lang === "en" ? "Total Requests (24h)" : "总请求数 (24h)"}
+              </div>
               <div className="text-2xl font-bold text-white font-mono">{stats.total_calls_24h}</div>
               <div className="text-[11px] font-mono text-emerald-400 flex items-center gap-1">
                 <span>+14.2%</span>
-                <span className="text-slate-500">vs yesterday</span>
+                <span className="text-slate-500">{lang === "en" ? "vs yesterday" : "相比昨日"}</span>
               </div>
             </div>
 
             <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
-              <div className="text-xs font-mono text-slate-400">Success Rate</div>
+              <div className="text-xs font-mono text-slate-400">
+                {lang === "en" ? "Success Rate" : "请求成功率"}
+              </div>
               <div className="text-2xl font-bold text-emerald-400 font-mono">{stats.success_rate_percent}%</div>
               <div className="text-[11px] font-mono text-slate-400">Target SLA: 99.90%</div>
             </div>
 
             <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
-              <div className="text-xs font-mono text-slate-400">Average P95 Latency</div>
+              <div className="text-xs font-mono text-slate-400">
+                {lang === "en" ? "Average P95 Latency" : "平均 P95 响应延迟"}
+              </div>
               <div className="text-2xl font-bold text-cyan-400 font-mono">{stats.avg_latency_ms} ms</div>
               <div className="text-[11px] font-mono text-slate-400">Monad Edge Network</div>
             </div>
 
             <div className="p-4 rounded-lg bg-[#111420] border border-white/10 space-y-1 shadow-sm">
-              <div className="text-xs font-mono text-slate-400">Gross Settlement Volume</div>
+              <div className="text-xs font-mono text-slate-400">
+                {lang === "en" ? "Gross Settlement Volume" : "累计结算流水"}
+              </div>
               <div className="text-2xl font-bold text-purple-300 font-mono">${stats.total_volume_usd.toFixed(2)}</div>
               <div className="text-[11px] font-mono text-slate-400">Multi-Channel Routing</div>
             </div>
@@ -883,7 +902,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             <div className="lg:col-span-5 p-5 rounded-lg bg-[#111420] border border-white/10 space-y-4 shadow-sm">
               <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
                 <Coins className="w-4 h-4 text-purple-400" />
-                <span>Payment Method Routing Distribution</span>
+                <span>{lang === "en" ? "Payment Method Routing Distribution" : "支付方式清算分布"}</span>
               </h3>
 
               <div className="space-y-4 font-mono text-xs">

@@ -9,20 +9,31 @@ import (
 )
 
 type Config struct {
-	Port                string
-	Environment         string
-	DatabaseURL         string
-	SteamAPIKey         string
-	SteamDomain         string
-	AlpacaAPIKey        string
-	AlpacaAPISecret     string
-	AlpacaBaseURL       string
+	Port        string
+	Environment string
+	DatabaseURL string
+	SteamAPIKey string
+	SteamDomain string
+	// AlpacaAPIKey / AlpacaAPISecret have NO default. They used to fall back to
+	// credentials committed in this file, which meant a deployment that forgot
+	// to set the env vars silently authenticated as whoever those keys belonged
+	// to. Missing credentials are now an explicit state (AlpacaConfigured),
+	// never a path to fabricated data. See AlpacaConfigured.
+	AlpacaAPIKey    string
+	AlpacaAPISecret string
+	AlpacaBaseURL   string
+	// AlpacaDataURL / AlpacaDataFeed are the market-data API (a different host
+	// from the trading API in AlpacaBaseURL) and the data feed. Neither is a
+	// secret: they are safe defaults, and they are env-overridable so a
+	// deployment can point at a private feed.
+	AlpacaDataURL        string
+	AlpacaDataFeed       string
 	StripePublishableKey string
-	StripeSecretKey     string
-	PythHermesURL       string
-	MonadRPCURL         string
-	MonadChainID        string
-	KolianceContract    string
+	StripeSecretKey      string
+	PythHermesURL        string
+	MonadRPCURL          string
+	MonadChainID         string
+	KolianceContract     string
 
 	// CORSAllowedOrigins is the exact list of browser origins allowed to call
 	// the API (CORS_ALLOWED_ORIGINS, comma separated). No wildcard support on
@@ -37,6 +48,17 @@ type Config struct {
 	DemoPublicTrading bool
 }
 
+// AlpacaConfigured reports whether both Alpaca credentials are present.
+//
+// This is the single source of truth for "can we serve real market data".
+// Endpoints that would otherwise answer with numbers gate on it and fail
+// closed (503): a deployment without credentials has no market data, and
+// saying so is the only honest answer. Returning a generated series instead
+// is the defect this guards (issue #14, GAP-14).
+func (c *Config) AlpacaConfigured() bool {
+	return c.AlpacaAPIKey != "" && c.AlpacaAPISecret != ""
+}
+
 // DefaultCORSOrigins is used when CORS_ALLOWED_ORIGINS is unset: the
 // production homepage plus the local Next.js dev server.
 const DefaultCORSOrigins = "https://koliance.oodai.space,http://localhost:3000,http://127.0.0.1:3000"
@@ -47,30 +69,49 @@ func Load() *Config {
 		_ = godotenv.Load("../.env")
 	}
 
+	return loadFrom(getEnv)
+}
+
+// loadFrom is Load with an injectable reader, so a test can assert the defaults
+// without depending on (or being defeated by) the ambient environment. The
+// first version of the credential test used t.Setenv("ALPACA_API_KEY", "") and
+// passed for the wrong reason: godotenv.Load() above re-populates the variable
+// from a developer's .env, and godotenv does not overwrite an existing value —
+// but it DOES set one that is merely empty. A test that reads .env is measuring
+// the machine, not the code.
+func loadFrom(read func(key, defaultVal string) string) *Config {
 	cfg := &Config{
-		Port:                getEnv("PORT", "8080"),
-		Environment:         getEnv("ENVIRONMENT", "development"),
-		DatabaseURL:         getEnv("DATABASE_URL", ""),
-		SteamAPIKey:         getEnv("STEAM_API_KEY", "745B577BC3554647B4FA40BE9635E838"),
-		SteamDomain:         getEnv("STEAM_DOMAIN", "koliance.oodai.space"),
-		AlpacaAPIKey:        getEnv("ALPACA_API_KEY", "PK2SMWLLV64SKRMOJJCQUHUANB"),
-		AlpacaAPISecret:     getEnv("ALPACA_API_SECRET", "Eh8yhX5FKFUKhKt3L5dQY7e6MGsJs7XZaCrw6PtcMtgU"),
-		AlpacaBaseURL:       getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets/v2"),
-		StripePublishableKey: getEnv("STRIPE_PUBLISHABLE_KEY", "pk_test_51UMQCbEP5h4ijOX4RfqfeOsj5flpshzH2814PRH1FIvK8kPn79Goucx9sAfzvnkVIzdU30f60ozxkD0FC9vejNM300uNY0C82o"),
-		StripeSecretKey:     getEnv("STRIPE_SECRET_KEY", ""),
-		PythHermesURL:       getEnv("PYTH_HERMES_URL", "https://hermes.pyth.network"),
-		MonadRPCURL:         getEnv("MONAD_RPC_URL", "https://testnet-rpc.monad.xyz"),
-		MonadChainID:        getEnv("MONAD_CHAIN_ID", "10143"),
-		KolianceContract:    getEnv("KOLIANCE_CONTRACT_ADDRESS", "0x32fDd6B096EE14246b5b6971135286Bad01F4928"),
+		Port:        read("PORT", "8080"),
+		Environment: read("ENVIRONMENT", "development"),
+		DatabaseURL: read("DATABASE_URL", ""),
+		SteamAPIKey: read("STEAM_API_KEY", "745B577BC3554647B4FA40BE9635E838"),
+		SteamDomain: read("STEAM_DOMAIN", "koliance.oodai.space"),
+		// No defaults, deliberately. A committed fallback key is a credential
+		// leak that also disguises a misconfigured deployment as a working one.
+		AlpacaAPIKey:         read("ALPACA_API_KEY", ""),
+		AlpacaAPISecret:      read("ALPACA_API_SECRET", ""),
+		AlpacaBaseURL:        read("ALPACA_BASE_URL", "https://paper-api.alpaca.markets/v2"),
+		AlpacaDataURL:        read("ALPACA_DATA_URL", "https://data.alpaca.markets"),
+		AlpacaDataFeed:       read("ALPACA_DATA_FEED", "iex"),
+		StripePublishableKey: read("STRIPE_PUBLISHABLE_KEY", "pk_test_51UMQCbEP5h4ijOX4RfqfeOsj5flpshzH2814PRH1FIvK8kPn79Goucx9sAfzvnkVIzdU30f60ozxkD0FC9vejNM300uNY0C82o"),
+		StripeSecretKey:      read("STRIPE_SECRET_KEY", ""),
+		PythHermesURL:        read("PYTH_HERMES_URL", "https://hermes.pyth.network"),
+		MonadRPCURL:          read("MONAD_RPC_URL", "https://testnet-rpc.monad.xyz"),
+		MonadChainID:         read("MONAD_CHAIN_ID", "10143"),
+		KolianceContract:     read("KOLIANCE_CONTRACT_ADDRESS", "0x32fDd6B096EE14246b5b6971135286Bad01F4928"),
 	}
-	cfg.CORSAllowedOrigins = ParseOrigins(getEnv("CORS_ALLOWED_ORIGINS", DefaultCORSOrigins))
-	cfg.APIToken = getEnv("KOLIANCE_API_TOKEN", "")
-	cfg.DemoPublicTrading = strings.EqualFold(getEnv("DEMO_PUBLIC_TRADING", "false"), "true")
+	cfg.CORSAllowedOrigins = ParseOrigins(read("CORS_ALLOWED_ORIGINS", DefaultCORSOrigins))
+	cfg.APIToken = read("KOLIANCE_API_TOKEN", "")
+	cfg.DemoPublicTrading = strings.EqualFold(read("DEMO_PUBLIC_TRADING", "false"), "true")
 	if cfg.APIToken == "" {
 		log.Println("[Config] KOLIANCE_API_TOKEN not set: operator-only endpoints will refuse every request (fail closed).")
 	}
+	if !cfg.AlpacaConfigured() {
+		log.Println("[Config] ALPACA_API_KEY/ALPACA_API_SECRET not set: /api/v1/market/* will refuse every request (fail closed, 503). No synthetic market data is served.")
+	}
 
-	log.Printf("[Config] Loaded configuration: Port=%s, SteamDomain=%s, AlpacaBase=%s", cfg.Port, cfg.SteamDomain, cfg.AlpacaBaseURL)
+	log.Printf("[Config] Loaded configuration: Port=%s, SteamDomain=%s, AlpacaBase=%s, AlpacaData=%s (credentials configured: %t)",
+		cfg.Port, cfg.SteamDomain, cfg.AlpacaBaseURL, cfg.AlpacaDataURL, cfg.AlpacaConfigured())
 	return cfg
 }
 

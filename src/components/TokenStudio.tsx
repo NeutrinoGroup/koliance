@@ -35,6 +35,7 @@ import {
   KOL_TOKEN_ABI,
 } from "@/lib/contract";
 import { getAuditHistory, recordAuditEvent, AuditRecord } from "@/lib/audit";
+import { useLanguage } from "@/lib/i18n";
 
 interface TokenStudioProps {
   account: `0x${string}` | null;
@@ -47,6 +48,7 @@ export function TokenStudio({
   nativeBalance,
   onRefreshBalance,
 }: TokenStudioProps) {
+  const { lang, t } = useLanguage();
   // Token state
   const [tokenBalance, setTokenBalance] = useState<string>("0.00");
   const [totalSupply, setTotalSupply] = useState<string>("0");
@@ -321,27 +323,26 @@ export function TokenStudio({
               <span>Monad Testnet (Chain ID: 10143)</span>
             </div>
             <h1 className="text-3xl sm:text-4xl font-extrabold text-white tracking-tight flex items-center gap-3">
-              <span>KOL 代币 (KOL)</span>
+              <span>{t("token.title")}</span>
               <span className="text-xs font-mono px-2 py-0.5 rounded-md bg-emerald-500/20 border border-emerald-400/30 text-emerald-400 font-normal">
-                已部署
+                {t("token.deployed")}
               </span>
             </h1>
             <p className="text-sm text-slate-300 max-w-2xl font-sans">
-              Koliance 原生代币，名称 <strong className="text-white">kol</strong>，符号 <strong className="text-white">KOL</strong>。
-              总硬顶恒定 <strong className="text-white">2^30 (1,073,741,824)</strong> 枚，遵循比特币式每 2 年减半释放模型。
+              {t("token.desc")}
             </p>
             <div className="p-3 rounded-md bg-purple-500/10 border border-purple-500/20 text-xs text-purple-300 font-mono">
-              [DISCLAIMER] Koliance Testnet Utility Token (No Monetary Value) — Strictly for testing agent escrow fees and credit stake weight.
+              {t("token.disclaimer")}
             </div>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
             <button
               onClick={handleAddToMetaMask}
-              className="h-10 px-4 rounded-md bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-mono transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98]"
+              className="h-10 px-4 rounded-md bg-white/10 hover:bg-white/15 border border-white/15 text-white text-xs font-mono transition flex items-center justify-center gap-2 shadow-xs active:scale-[0.98] cursor-pointer"
             >
               <PlusCircle className="w-4 h-4 text-purple-400" />
-              <span>添加 KOL 到 MetaMask</span>
+              <span>{t("token.add_metamask")}</span>
             </button>
             <a
               href={`${monadTestnet.blockExplorers.default.url}/address/${KOL_TOKEN_ADDRESS}`}
@@ -350,7 +351,7 @@ export function TokenStudio({
               className="h-10 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white text-xs font-mono transition flex items-center justify-center gap-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98]"
             >
               <ExternalLink className="w-4 h-4" />
-              <span>Monad Explorer 查看</span>
+              <span>{t("token.view_explorer")}</span>
             </a>
           </div>
         </div>
@@ -361,56 +362,56 @@ export function TokenStudio({
         {/* Token Balance */}
         <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>我的 KOL 余额</span>
+            <span>{t("token.my_balance")}</span>
             <Coins className="w-4 h-4 text-purple-400" />
           </div>
           <div className="text-2xl font-bold text-white font-mono">
             {parseFloat(tokenBalance).toFixed(4)} <span className="text-sm text-purple-300 font-normal">KOL</span>
           </div>
           <div className="text-[11px] text-slate-400 font-mono">
-            原生 MON: <span className="text-emerald-400 font-semibold">{nativeBalance} MON</span>
+            {t("token.native_mon")}: <span className="text-emerald-400 font-semibold">{nativeBalance} MON</span>
           </div>
         </div>
 
         {/* Total Supply */}
         <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>当前已产出总量</span>
+            <span>{t("token.total_supply")}</span>
             <Coins className="w-4 h-4 text-purple-400" />
           </div>
           <div className="text-2xl font-bold text-white font-mono">
             {parseFloat(totalSupply).toFixed(2)}
           </div>
           <div className="text-[11px] text-slate-400 font-mono">
-            硬顶: 1,073,741,824 (2^30)
+            {t("token.hard_cap")}
           </div>
         </div>
 
         {/* Current Era / Halving */}
         <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>减半纪元 (Era)</span>
+            <span>{t("token.halving_era")}</span>
             <TrendingDown className="w-4 h-4 text-blue-400" />
           </div>
           <div className="text-2xl font-bold text-white font-mono">
-            第 {currentEra} 纪元
+            {lang === "en" ? `Era ${currentEra}` : `第 ${currentEra} 纪元`}
           </div>
           <div className="text-[11px] text-slate-400 font-mono">
-            周期: 每 2 年 (730 天) 减半 50%
+            {t("token.halving_cycle")}
           </div>
         </div>
 
         {/* Reward Rate */}
         <div className="p-5 rounded-lg bg-[#141824]/90 border border-white/10 space-y-2 shadow-sm">
           <div className="flex items-center justify-between text-slate-400 text-xs font-mono">
-            <span>当前区块产出速率</span>
+            <span>{t("token.reward_rate")}</span>
             <Clock className="w-4 h-4 text-emerald-400" />
           </div>
           <div className="text-2xl font-bold text-white font-mono">
-            {parseFloat(rewardRate).toFixed(3)} <span className="text-xs text-slate-400">/秒</span>
+            {parseFloat(rewardRate).toFixed(3)} <span className="text-xs text-slate-400">{t("token.per_sec")}</span>
           </div>
           <div className="text-[11px] text-emerald-400 font-mono">
-            单槽最终确定性实时产出
+            {t("token.single_slot")}
           </div>
         </div>
       </div>
@@ -458,19 +459,27 @@ export function TokenStudio({
                 <Pickaxe className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white font-mono">占领区块 & 领取矿工奖励</h3>
+                <h3 className="text-base font-bold text-white font-mono">
+                  {lang === "en" ? "Occupy Block & Claim Reward" : "占领区块 & 领取矿工奖励"}
+                </h3>
                 <p className="text-xs text-slate-400 font-mono">
-                  claimBlockReward() · 链上实时铸造
+                  {lang === "en" ? "claimBlockReward() · Real-time on-chain minting" : "claimBlockReward() · 链上实时铸造"}
                 </p>
               </div>
             </div>
 
             <div className="p-4 rounded-md bg-black/40 border border-white/5 space-y-2 text-xs font-sans text-slate-300">
               <p>
-                • <strong>占领机制：</strong> Monad 是 10,000 TPS 极速链，任何用户只要向合约发送一笔交易，即可将上一结算点到当前的区块代币奖励打包并转移到自己的钱包。
+                • <strong>{lang === "en" ? "Occupy Mechanism:" : "占领机制："}</strong>{" "}
+                {lang === "en"
+                  ? "Monad delivers 10,000 TPS speed. Any user sending a transaction packages and transfers accrued block rewards directly into their own wallet."
+                  : "Monad 是 10,000 TPS 极速链，任何用户只要向合约发送一笔交易，即可将上一结算点到当前的区块代币奖励打包并转移到自己的钱包。"}
               </p>
               <p>
-                • <strong>防超发保证：</strong> 合约通过数学位移与时间纪元严格锁死最大硬顶为 2^30，无法任何方式增发或篡改。
+                • <strong>{lang === "en" ? "Hard Cap Guarantee:" : "防超发保证："}</strong>{" "}
+                {lang === "en"
+                  ? "The contract uses bitwise math and epoch time to strictly lock max supply to 2^30, mathematically preventing inflation or tampering."
+                  : "合约通过数学位移与时间纪元严格锁死最大硬顶为 2^30，无法任何方式增发或篡改。"}
               </p>
             </div>
           </div>
@@ -483,14 +492,14 @@ export function TokenStudio({
             {isClaiming ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                <span>正在占领区块并铸造奖励...</span>
+                <span>{lang === "en" ? "Occupying block and minting rewards..." : "正在占领区块并铸造奖励..."}</span>
               </>
             ) : !account ? (
-              <span>请先连接钱包</span>
+              <span>{lang === "en" ? "Connect Wallet First" : "请先连接钱包"}</span>
             ) : (
               <>
                 <Pickaxe className="w-4 h-4" />
-                <span>立即占领区块并领取 KOL</span>
+                <span>{lang === "en" ? "Occupy Block & Claim KOL" : "立即占领区块并领取 KOL"}</span>
               </>
             )}
           </button>
@@ -504,9 +513,11 @@ export function TokenStudio({
                 <Send className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white font-mono">链上转账控制台</h3>
+                <h3 className="text-base font-bold text-white font-mono">
+                  {lang === "en" ? "On-Chain Transfer Portal" : "链上转账控制台"}
+                </h3>
                 <p className="text-xs text-slate-400 font-mono">
-                  支持转账 KOL 与 原生 MON
+                  {lang === "en" ? "Supports transferring KOL and native MON" : "支持转账 KOL 与 原生 MON"}
                 </p>
               </div>
             </div>
@@ -540,7 +551,9 @@ export function TokenStudio({
 
           <form onSubmit={handleTransfer} className="space-y-4">
             <div className="space-y-1.5">
-              <label className="text-xs font-mono text-slate-300">接收方地址 (Recipient Address)</label>
+              <label className="text-xs font-mono text-slate-300">
+                {lang === "en" ? "Recipient Address (0x...)" : "接收方地址 (Recipient Address)"}
+              </label>
               <input
                 type="text"
                 placeholder="0x..."
@@ -553,7 +566,7 @@ export function TokenStudio({
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between text-xs font-mono text-slate-300">
-                <label>转账数量 ({transferType})</label>
+                <label>{lang === "en" ? `Transfer Amount (${transferType})` : `转账数量 (${transferType})`}</label>
                 <button
                   type="button"
                   onClick={() => {
@@ -566,7 +579,7 @@ export function TokenStudio({
                   }}
                   className="text-[11px] text-purple-300 hover:text-purple-200 underline cursor-pointer"
                 >
-                  全部可用 ({transferType === "KOL" ? parseFloat(tokenBalance).toFixed(4) : nativeBalance})
+                  {lang === "en" ? "Max Available" : "全部可用"} ({transferType === "KOL" ? parseFloat(tokenBalance).toFixed(4) : nativeBalance})
                 </button>
               </div>
               <div className="relative">
@@ -593,14 +606,14 @@ export function TokenStudio({
               {isTransferring ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>交易签名确认中...</span>
+                  <span>{lang === "en" ? "Awaiting wallet signature..." : "交易签名确认中..."}</span>
                 </>
               ) : !account ? (
-                <span>请先连接钱包</span>
+                <span>{lang === "en" ? "Connect Wallet First" : "请先连接钱包"}</span>
               ) : (
                 <>
                   <Send className="w-4 h-4" />
-                  <span>立即发送 {transferType} 转账</span>
+                  <span>{lang === "en" ? `Send ${transferType} Transfer` : `立即发送 ${transferType} 转账`}</span>
                 </>
               )}
             </button>
@@ -613,7 +626,9 @@ export function TokenStudio({
         <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-purple-400" />
-            <h3 className="text-sm font-bold text-white font-mono">My KOL Acquisition & Transaction History (获取与交易记录)</h3>
+            <h3 className="text-sm font-bold text-white font-mono">
+              {lang === "en" ? "KOL Acquisition & Transaction History" : "KOL 获取与交易记录"}
+            </h3>
           </div>
           <span className="text-xs font-mono text-slate-400">Verifiable Monad Block Proofs</span>
         </div>
@@ -634,7 +649,9 @@ export function TokenStudio({
               {auditLogs.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-8 text-center text-slate-500">
-                    暂无 KOL 获取或交易记录。点击上方「占领区块并领取 KOL」体验链上铸造。
+                    {lang === "en"
+                      ? "No KOL acquisition or transfer records yet. Click 'Occupy Block & Claim KOL' above to experience on-chain minting."
+                      : "暂无 KOL 获取或交易记录。点击上方「占领区块并领取 KOL」体验链上铸造。"}
                   </td>
                 </tr>
               ) : (

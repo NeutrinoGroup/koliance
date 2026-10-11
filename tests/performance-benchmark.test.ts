@@ -13,7 +13,15 @@ describe("Performance & Reliability Benchmarks", () => {
     vi.unstubAllGlobals();
   });
 
-  it("[BENCHMARK] Market synthetic deterministic feed latency and throughput", async () => {
+  it("[BENCHMARK] Market route relay latency with the gateway unreachable", async () => {
+    // This used to benchmark the locally generated fallback series and assert
+    // `data.synthetic === true` — i.e. it timed the defect (GAP-52). The route
+    // no longer generates anything, so what is worth measuring is the cost of
+    // the refusal path: a market outage must fail fast and cheaply, because the
+    // page renders it while the rest of the terminal stays usable.
+    //
+    // `fetch` is stubbed to reject by the outer beforeEach, so every iteration
+    // takes the unreachable branch.
     const iterations = 50;
     const symbols = ["NVDA", "AAPL", "BTC-USD", "ETH-USD", "MON-USD"];
     const start = performance.now();
@@ -23,15 +31,21 @@ describe("Performance & Reliability Benchmarks", () => {
       const req = new NextRequest(`http://localhost/api/market?symbol=${sym}&range=1mo&interval=1d`);
       const res = await GET(req);
       const data = await res.json();
-      expect(data.synthetic).toBe(true);
-      expect(data.chart.closes.length).toBeGreaterThan(0);
+
+      // The contract under load is the same as at rest: a refusal, and no
+      // price anywhere in it. A regression that reintroduces a generator would
+      // answer 200 with a chart and fail here.
+      expect(res.status).toBe(502);
+      expect(data.chart).toBeUndefined();
+      expect(data.reason).toBe("unreachable");
     }
 
     const duration = performance.now() - start;
     const avgLatencyMs = duration / iterations;
 
-    // Structured logging indicator
-    console.log(`[BENCHMARK] Market Feed Fallback: ${iterations} runs in ${duration.toFixed(2)}ms (avg: ${avgLatencyMs.toFixed(3)}ms/op)`);
+    console.log(
+      `[BENCHMARK] Market Route Refusal: ${iterations} runs in ${duration.toFixed(2)}ms (avg: ${avgLatencyMs.toFixed(3)}ms/op)`
+    );
     expect(avgLatencyMs).toBeLessThan(50); // Must be well within acceptable bounds
   });
 
