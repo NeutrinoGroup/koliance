@@ -676,7 +676,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             </div>
             <div className="flex items-center gap-2">
               <button
-                onClick={authLogin}
+                onClick={() => authLogin()}
                 className="h-9 px-4 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition cursor-pointer flex items-center gap-2"
               >
                 <ShieldCheck className="w-4 h-4" />
@@ -1017,7 +1017,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               </p>
               <div className="flex items-center justify-center gap-2 pt-2">
                 <button
-                  onClick={authLogin}
+                  onClick={() => authLogin()}
                   className="h-9 px-4 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold cursor-pointer"
                 >
                   连接钱包登录
