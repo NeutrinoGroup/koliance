@@ -19,6 +19,7 @@ import {
 import Image from "next/image";
 import { GOOGLE_CLIENT_ID } from "@/lib/authConfig";
 import { EditProfileModal } from "@/components/EditProfileModal";
+import { STORAGE_KEYS, writeAccountState } from "@/lib/authState";
 
 export interface GoogleProfile {
   googleId: string;
@@ -77,7 +78,10 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
       }
 
       setProfile(data.profile);
-      localStorage.setItem("koliance_google_profile", JSON.stringify(data.profile));
+      // Through the shared writer, not `localStorage.setItem`: the navbar
+      // subscribes to that channel, and a direct write leaves it rendering
+      // "Sign In" over a signed-in account (issue #34).
+      writeAccountState("google", data.profile);
       setSyncSuccess(true);
       if (onProfileSynced) onProfileSynced(data.profile);
       setTimeout(() => setSyncSuccess(false), 4000);
@@ -148,7 +152,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
       };
 
       setProfile(syncedProfile);
-      localStorage.setItem("koliance_google_profile", JSON.stringify(syncedProfile));
+      writeAccountState("google", syncedProfile);
       setSyncSuccess(true);
       if (onProfileSynced) onProfileSynced(syncedProfile);
       setTimeout(() => setSyncSuccess(false), 4000);
@@ -162,7 +166,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
 
   const handleDisconnect = () => {
     setProfile(null);
-    localStorage.removeItem("koliance_google_profile");
+    writeAccountState("google", null);
   };
 
   return (
@@ -366,6 +370,11 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
               walletAddress: updated.walletAddress,
             };
             setProfile(updatedProfile);
+            // Keep the navbar's copy in step with the wall's. `EditProfileModal`
+            // writes its own version of the row first; this write runs after it
+            // and carries the fields the modal does not know about (googleId,
+            // trustTier, creditAllowanceUSD), so the two do not fight.
+            writeAccountState("google", updatedProfile);
             if (onProfileSynced) onProfileSynced(updatedProfile);
           }}
         />

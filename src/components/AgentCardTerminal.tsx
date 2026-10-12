@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { TrustRecordData } from "@/lib/contract";
 import { relayTarget } from "@/lib/oauthState";
+import { writeAccountState } from "@/lib/authState";
 import {
   fetchGameStats,
   generateGameplayProof,
@@ -163,7 +164,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
           .then((verification) => {
             setSteamLoading(false);
             if (verification.valid && verification.steamId) {
-              localStorage.setItem("koliance_steam_id", verification.steamId);
+              writeAccountState("steam", verification.steamId);
               loadSteamProfile(verification.steamId);
               setSteamNotice("Steam 官方 OpenID 签名验证通过！已绑定您的真实玩家身份。");
             } else {
@@ -194,7 +195,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
       if (res) {
         setSteamData(res);
         setSteamConnected(true);
-        localStorage.setItem("koliance_steam_id", res.steamId);
+        writeAccountState("steam", res.steamId);
         if (res.totalGames === 0) {
           setSteamNotice("提示：若游戏时长显示为 0，请检查 Steam [个人资料 -> 隐私设置] 是否将『游戏详情』设为公开。");
         }
@@ -443,7 +444,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                 onSwitchAccount={() => {
                   setSteamConnected(false);
                   setSteamData(null);
-                  localStorage.removeItem("koliance_steam_id");
+                  writeAccountState("steam", null);
                   setSteamNotice("已解除 Steam 绑定。可通过官方认证登录或直接在下方输入任意玩家 ID / 昵称。");
                 }}
               />

@@ -25,6 +25,7 @@ import {
   DeveloperProof,
 } from "@/lib/api";
 import { relayTarget } from "@/lib/oauthState";
+import { writeAccountState } from "@/lib/authState";
 
 function githubStartUrl(path: string, customClientId?: string | null): string {
   const qs = new URLSearchParams({ path });
@@ -105,7 +106,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
       if (res.ok && data.success && data.stats) {
         setDevStats(data.stats);
         setGithubConnected(true);
-        localStorage.setItem("koliance_github_user", data.stats.username);
+        writeAccountState("github", data.stats.username);
         setNotice(`GitHub 官方授权登录成功！已绑定 @${data.stats.username}`);
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
@@ -128,7 +129,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
       if (stats) {
         setDevStats(stats);
         setGithubConnected(true);
-        localStorage.setItem("koliance_github_user", stats.username);
+        writeAccountState("github", stats.username);
       } else {
         setNotice(`未检索到 GitHub 开发者 @${cleanUser}，请检查用户名拼写。`);
       }
@@ -180,7 +181,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
   };
 
   const handleSwitchAccount = () => {
-    localStorage.removeItem("koliance_github_user");
+    writeAccountState("github", null);
     setGithubConnected(false);
     setDevStats(null);
     setBuidlProof(null);
