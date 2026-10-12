@@ -25,6 +25,7 @@ import {
   DeveloperProof,
 } from "@/lib/api";
 import { relayTarget } from "@/lib/oauthState";
+import { isGoogleOAuthCallback } from "@/lib/googleAuth";
 import { STORAGE_KEYS, writeAccountState } from "@/lib/authState";
 
 function githubStartUrl(path: string, customClientId?: string | null): string {
@@ -60,7 +61,13 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
     const code = params.get("code");
     const rawState = params.get("state");
 
-    if (code) {
+    // The Google guard matches the one in `AgentCardTerminal`. Google returns
+    // to the site root with `?code=` as well, and spending its code against
+    // `/api/auth/github/exchange` is a guaranteed failure - the code is
+    // single-use, so the attempt also destroys the sign-in that was in flight.
+    // The predicate is shared (`src/lib/googleAuth.ts`) so the two readers
+    // cannot disagree about what a Google callback looks like.
+    if (code && !isGoogleOAuthCallback(params)) {
       // 1. Dual-domain Relay Check:
       // If authorization was initiated from another domain (e.g. started on https://koliance.oodai.space,
       // but GitHub redirected to https://koliance.vercel.app as the registered callback),

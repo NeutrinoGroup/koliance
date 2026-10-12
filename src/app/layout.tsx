@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next";
+﻿import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -138,6 +138,7 @@ const jsonLd = {
 import { I18nProvider } from "@/lib/i18n";
 import { Providers } from "@/components/Providers";
 import { KolianceAuthProvider } from "@/components/KolianceAuthProvider";
+import { GoogleAuthCallback } from "@/components/GoogleAuthCallback";
 
 export default function RootLayout({
   children,
@@ -181,6 +182,15 @@ export default function RootLayout({
             {/* Account state sits above the Privy/Wagmi providers so the navbar
                 and the OAuth walls (both inside `children`) share one writer. */}
             <KolianceAuthProvider>
+              {/* Completes a Google sign-in wherever Google lands. It has to sit
+                  in the layout rather than on a page: the registered redirect
+                  URI is the site root, so the callback arrives at `/` whatever
+                  page the user clicked "Sign In" from, and a handler that lives
+                  on one page is a handler that is usually not mounted when the
+                  code arrives (issue #34, second round). It is inside
+                  `KolianceAuthProvider` so the profile it records notifies the
+                  navbar in the same tree. */}
+              <GoogleAuthCallback />
               {children}
             </KolianceAuthProvider>
           </Providers>

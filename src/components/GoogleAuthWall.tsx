@@ -20,17 +20,19 @@ import Image from "next/image";
 import { GOOGLE_CLIENT_ID } from "@/lib/authConfig";
 import { EditProfileModal } from "@/components/EditProfileModal";
 import { STORAGE_KEYS, writeAccountState } from "@/lib/authState";
+import {
+  exchangeGoogleCode,
+  isGoogleOAuthCallback,
+  recordGoogleProfile,
+  GoogleProfile,
+} from "@/lib/googleAuth";
 
-export interface GoogleProfile {
-  googleId: string;
-  email: string;
-  emailVerified: boolean;
-  name: string;
-  picture?: string | null;
-  walletAddress?: string | null;
-  trustTier: string;
-  creditAllowanceUSD: number;
-}
+/**
+ * Re-exported so `AgentCardTerminal` (and anything else that imports the
+ * profile shape from this component) keeps working. The definition itself lives
+ * in `src/lib/googleAuth.ts` next to the exchange that produces one.
+ */
+export type { GoogleProfile };
 
 interface GoogleAuthWallProps {
   walletAddress?: string | null;
@@ -75,28 +77,20 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
     setLoading(true);
     setErrorMsg(null);
     try {
-      const res = await fetch("/api/auth/google/exchange", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          code: authCode,
-          redirect_uri: "https://koliance.oodai.space",
-          wallet_address: walletAddress || undefined,
-        }),
-      });
+      // The request itself lives in `src/lib/googleAuth.ts`, shared with
+      // `GoogleAuthCallback`. The redirect URI is part of that shared fact on
+      // purpose: it has to be byte-identical to the one in the authorization
+      // request or Google refuses the exchange, and two copies of it in two
+      // components is how one of them goes stale.
+      const exchanged = await exchangeGoogleCode(authCode, walletAddress);
 
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Google 认证授权失败");
-      }
-
-      setProfile(data.profile);
+      setProfile(exchanged);
       // Through the shared writer, not `localStorage.setItem`: the navbar
       // subscribes to that channel, and a direct write leaves it rendering
       // "Sign In" over a signed-in account (issue #34).
-      writeAccountState("google", data.profile);
+      recordGoogleProfile(exchanged);
       setSyncSuccess(true);
-      if (onProfileSynced) onProfileSynced(data.profile);
+      if (onProfileSynced) onProfileSynced(exchanged);
       setTimeout(() => setSyncSuccess(false), 4000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -110,18 +104,14 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
   useEffect(() => {
     if (typeof window === "undefined") return;
     const url = new URL(window.location.href);
-    const code = url.searchParams.get("code");
-    const scope = url.searchParams.get("scope");
 
-    // Only process if it looks like a Google OAuth response (includes google scope or from Google redirect)
-    if (code && scope && scope.includes("googleapis")) {
-      handleExchangeCode(code);
-      // Clean up URL without reload
-      url.searchParams.delete("code");
-      url.searchParams.delete("scope");
-      url.searchParams.delete("authuser");
-      url.searchParams.delete("prompt");
-      window.history.replaceState({}, document.title, url.toString());
+    // In practice `GoogleAuthCallback` (mounted in the layout) has already
+    // claimed and exchanged the code by the time this runs, and the URL has
+    // been cleaned - which is why the predicate is shared rather than
+    // re-spelled here. This branch stays for the case where the wall is the
+    // first to mount on a callback URL.
+    if (isGoogleOAuthCallback(url.searchParams)) {
+      handleExchangeCode(url.searchParams.get("code") as string);
     }
   }, [handleExchangeCode]);
 

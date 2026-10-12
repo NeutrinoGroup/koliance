@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -46,6 +46,7 @@ import {
 import { SteamGameWall, SteamGameItem } from "@/components/SteamGameWall";
 import { GitHubDevWall } from "@/components/GitHubDevWall";
 import { GoogleAuthWall, GoogleProfile } from "@/components/GoogleAuthWall";
+import { isGoogleOAuthCallback } from "@/lib/googleAuth";
 
 interface AgentCardTerminalProps {
   currentAccount: `0x${string}` | null;
@@ -134,9 +135,18 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
     }
 
     // Detect GitHub OAuth callback (?code=... & ?state=...)
+    //
+    // The Google guard is not a nicety. Google returns to the registered
+    // redirect URI - the site root - so a Google sign-in lands HERE, on this
+    // component's page, carrying `?code=` too. Without the guard this branch
+    // claimed it: the tab switched to GitHub, `GoogleAuthWall` was left
+    // unmounted, nobody exchanged the code, and the navbar kept saying "Sign
+    // In" over a user who had just signed in (issue #34, second round).
+    // `GitHubDevWall` is the other half of the same read and carries the same
+    // guard.
     const githubCode = params.get("code");
     const rawState = params.get("state");
-    if (githubCode) {
+    if (githubCode && !isGoogleOAuthCallback(params)) {
       // Relay to the originating domain only if it is an exact allow-listed
       // origin, and carry the state so that domain can verify it.
       const relay = relayTarget(window.location.origin, githubCode, rawState);
