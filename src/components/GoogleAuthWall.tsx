@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe,
@@ -44,6 +44,16 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
+  // `onProfileSynced` is called from an effect, and the caller passes an inline
+  // arrow whose identity changes on every render (`AgentCardTerminal` credits
+  // `creditLimit` there). Holding it in a ref is what lets the cached-read effect
+  // below depend on nothing: with the prop in the dependency list the effect
+  // re-ran after every render, called `setProfile` with a fresh object, notified
+  // the parent, and did it again - an unbounded render loop for any visitor who
+  // already had a stored row.
+  const onProfileSyncedRef = useRef(onProfileSynced);
+  onProfileSyncedRef.current = onProfileSynced;
+
   // Read saved profile from localStorage if present
   useEffect(() => {
     try {
@@ -51,12 +61,12 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
       if (cached) {
         const parsed = JSON.parse(cached);
         setProfile(parsed);
-        if (onProfileSynced) onProfileSynced(parsed);
+        onProfileSyncedRef.current?.(parsed);
       }
     } catch {
       // ignore
     }
-  }, [onProfileSynced]);
+  }, []);
 
   const handleExchangeCode = React.useCallback(async (authCode: string) => {
     setLoading(true);
