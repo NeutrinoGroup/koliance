@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math"
 	"math/big"
-	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -499,64 +498,145 @@ func TestQAJournalConcurrentProducersWithOrderedAppender(t *testing.T) {
 	qaWant(t, "Total", rep.Total, fmt.Sprintf("%d", pairs))
 }
 
-// Sixty-four producers append to ONE journal, in whatever order the scheduler
-// picks.
+// Concurrent append to ONE journal: the same replay position, contended by 64
+// goroutines, eight times over.
 //
-// *** DO NOT ENABLE THIS BY DEFAULT. IT KILLS THE TEST PROCESS. ***
+// This test REPLACES the environment-gated reproducer that used to stand here
+// (docs/changes/044). That reproducer was excluded from CI on purpose - it
+// aborted the test binary - which meant the concurrency contract had no
+// criterion that ever ran; the only evidence was a command someone had to
+// remember to type. It was also only probabilistic evidence even when enabled:
+// measured at 3 false-greens out of 20 runs against the unfixed code.
 //
-// It is here as an executable reproducer for a finding, gated behind an
-// environment variable precisely because the failure is a `fatal error:
-// concurrent map read and map write`, which is NOT a recoverable panic: it
-// aborts the whole test binary and takes every other test's result with it.
-// Run it alone, and expect a non-zero exit that is not a test failure:
+// The assertions below are chosen so that they are DETERMINISTIC ON CORRECT CODE
+// - they do not flake - while the defect still fails them in two independent
+// ways:
 //
-//	$env:QA_CONCURRENT_JOURNAL='1'; go test ./internal/settlement/ -run TestQAJournalConcurrentAppendCrashesTheProcess -count=1
-//	fatal error: concurrent map writes
-//	  ...(*checker).apply(...)  ledger.go:295 (read) / ledger.go:303 (write)
-//	  ...(*Journal).Append(...) ledger.go:408
+//   - The count. With the mutex, "has this ledger_seq been folded?" and "record
+//     it" are one atomic step, so of 64 concurrent appends of the SAME position
+//     exactly ONE can win and the other 63 must be told ErrDuplicateSeq. Without
+//     serialization two goroutines can both read the map as empty and both
+//     return nil, and the count becomes 2.
+//   - The runtime. An actual concurrent map write aborts the process with
+//     `fatal error`, which is a non-zero exit before any assertion is reached.
 //
-// The finding: Journal/checker carry no mutex and no documented concurrency
-// contract. `Append` reaches `c.seenSeq[e.Seq]` (a map read) while another
-// goroutine reaches the same map's write path (`c.states[e.IntentID] = st`), and
-// the Go runtime turns that into an unrecoverable crash - not a test failure.
-// Measured on the W1 commit: 5/5 runs abort, alternating between "concurrent map
-// writes" and "concurrent map read and map write". It is latent today only
-// because no production code path writes to a Journal yet (docs/changes/027
-// §5.7). TestQAIndependentJournalsAreRaceClean covers the contract that IS
-// documented.
-func TestQAJournalConcurrentAppendCrashesTheProcess(t *testing.T) {
-	if os.Getenv("QA_CONCURRENT_JOURNAL") == "" {
-		t.Skip("destructive reproducer: set QA_CONCURRENT_JOURNAL=1 and run this test alone (it aborts the test binary)")
-	}
-	const pairs = 64
-	// A start barrier, so all 128 appends contend inside the same window instead
-	// of draining through the scheduler one at a time. Without it the crash is
-	// timing-dependent; with it the race window is as wide as it can be made.
-	var ready sync.WaitGroup
-	start := make(chan struct{})
+// The closing trial-balance assertion is timing-free: only one leg per round can
+// ever land, so the intent is one-sided no matter which goroutine won.
+func TestQAConcurrentAppendToASharedJournalAdmitsExactlyOnePostingPerReplayPosition(t *testing.T) {
+	const rounds, workers = 8, 64
 	j := NewJournal()
-	var wg sync.WaitGroup
-	for i := 0; i < pairs; i++ {
-		ready.Add(1)
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			ready.Done()
-			<-start
-			for _, e := range []Entry{
-				qaPost(int64(2*i+1), "qa-race", AccountAvailableBalance, "1", ""),
-				qaPost(int64(2*i+2), "qa-race", AccountSettlementClearing, "", "1"),
-			} {
-				_ = j.Append(e)
+	for r := 0; r < rounds; r++ {
+		seq := int64(r + 1)
+		e := qaPost(seq, "qa-conc-shared", AccountAvailableBalance, "1", "")
+
+		// A start barrier, so all 64 calls contend inside the same window instead
+		// of draining through the scheduler one at a time.
+		var ready, done sync.WaitGroup
+		start := make(chan struct{})
+		errs := make([]error, workers)
+		ready.Add(workers)
+		done.Add(workers)
+		for i := 0; i < workers; i++ {
+			go func(i int) {
+				defer done.Done()
+				ready.Done()
+				<-start
+				errs[i] = j.Append(e)
+			}(i)
+		}
+		ready.Wait()
+		close(start)
+		done.Wait()
+
+		accepted := 0
+		for _, err := range errs {
+			switch {
+			case err == nil:
+				accepted++
+			case errors.Is(err, ErrDuplicateSeq):
+				// The expected answer for every loser. apply() checks the duplicate
+				// before the ordering rule, so a loser cannot surface as
+				// ErrOutOfOrder here.
+			default:
+				t.Errorf("round %d: concurrent append returned %v, want nil or ErrDuplicateSeq", r, err)
 			}
-		}(i)
+		}
+		if accepted != 1 {
+			t.Errorf("round %d: %d of %d concurrent appends of ledger_seq %d were accepted, want exactly 1; "+
+				"the duplicate check and the fold are not one atomic step (ledger.go)", r, accepted, workers, seq)
+		}
 	}
-	ready.Wait()
-	close(start)
-	wg.Wait()
-	if _, err := j.Close(); err != nil {
-		t.Logf("Close: %v", err)
+	t.Logf("evidence: %d rounds x %d goroutines contending on one replay position each; every round admitted exactly one posting", rounds, workers)
+
+	if _, err := j.Close(); !errors.Is(err, ErrNotBalanced) {
+		t.Errorf("Close on a journal of single-sided legs: %v, want ErrNotBalanced", err)
 	}
+}
+
+// A Report is a SNAPSHOT, not a window onto live state.
+//
+// Close used to hand out the checker's own *big.Rat pointers, so a journal that
+// kept being appended to rewrote a report the caller already held: the number
+// changed with no error, no crash and no race report. The mutex added for
+// concurrent append does not cover this - mutual exclusion inside the critical
+// section says nothing about who owns the value handed out of it.
+//
+// The second Close is what makes the first one checkable: both come from the
+// same journal, and the first must be unaffected by what happened between them.
+func TestQAReportIsASnapshotNotAViewOfLiveState(t *testing.T) {
+	j := NewJournal()
+	for _, e := range []Entry{
+		qaPost(1, "qa-snapshot", AccountAvailableBalance, "100", ""),
+		qaPost(2, "qa-snapshot", AccountSettlementClearing, "", "100"),
+	} {
+		if err := j.Append(e); err != nil {
+			t.Fatalf("append seq %d: %v", e.Seq, err)
+		}
+	}
+	first, err := j.Close()
+	if err != nil {
+		t.Fatalf("first Close: %v", err)
+	}
+	qaWant(t, "first Total", first.Total, "100")
+
+	// A second, independently balanced pair on the SAME intent: legal, and it
+	// moves every total the first report carries.
+	for _, e := range []Entry{
+		qaPost(3, "qa-snapshot", AccountAvailableBalance, "100", ""),
+		qaPost(4, "qa-snapshot", AccountAvailableBalance, "", "100"),
+	} {
+		if err := j.Append(e); err != nil {
+			t.Fatalf("append seq %d: %v", e.Seq, err)
+		}
+	}
+	second, err := j.Close()
+	if err != nil {
+		t.Fatalf("second Close: %v", err)
+	}
+	qaWant(t, "second Total", second.Total, "200")
+	if second.Intents[0].Entries != 4 {
+		t.Errorf("second report Entries = %d, want 4", second.Intents[0].Entries)
+	}
+
+	// The first report must still describe the journal as it was when it was
+	// taken. These are the assertions the shared-pointer version fails.
+	qaWant(t, "first Total after later appends", first.Total, "100")
+	qaWant(t, "first DebitTotal after later appends", first.Intents[0].DebitTotal, "100")
+	qaWant(t, "first CreditTotal after later appends", first.Intents[0].CreditTotal, "100")
+	if first.Intents[0].Entries != 2 {
+		t.Errorf("first report Entries = %d, want 2 (a later append changed a finished report)", first.Intents[0].Entries)
+	}
+	for _, ab := range first.Intents[0].Accounts {
+		want := map[AccountType]string{
+			AccountAvailableBalance:   "100",
+			AccountSettlementClearing: "-100",
+		}[ab.Account]
+		if got := formatAmount(ab.Balance); got != want {
+			t.Errorf("first report account %s = %s, want %s (a later append changed a finished report)", ab.Account, got, want)
+		}
+	}
+	t.Logf("evidence: first report total=100 entries=2; after a further balanced pair: first.total=%s (unchanged), second.total=%s entries=%d",
+		formatAmount(first.Total), formatAmount(second.Total), second.Intents[0].Entries)
 }
 
 // The contract the package actually documents is "postings arrive in replay

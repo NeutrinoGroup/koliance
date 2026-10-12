@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // AccountType mirrors settlement_accounts.account_type (migration 005). The
@@ -99,6 +100,13 @@ var (
 var decimalLiteral = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
 
 func zero() *big.Rat { return new(big.Rat) }
+
+// copyRat detaches a value from the checker's live state. Any *big.Rat that
+// leaves this package must go through here: a Report that shares a pointer with
+// the checker is a report that a later Append silently rewrites, which is the
+// one failure mode a ledger cannot afford (a number that changes with no error
+// and no crash).
+func copyRat(r *big.Rat) *big.Rat { return new(big.Rat).Set(r) }
 
 // ParseAmount parses a plain decimal literal. The empty string is zero, so a
 // posting's unused column can be left as "" instead of "0".
@@ -335,11 +343,15 @@ func (c *checker) apply(e Entry) error {
 }
 
 // close asserts the trial balance and builds the report.
+//
+// The report is a SNAPSHOT: every amount is copied out of the checker, so a
+// caller that keeps it does not hold a window onto state that later appends
+// mutate. Close was a pure read only because nothing used to append afterwards.
 func (c *checker) close() (*Report, error) {
 	if c.count == 0 {
 		return nil, ErrEmptyJournal
 	}
-	rep := &Report{Intents: make([]IntentReport, 0, len(c.order)), Total: c.total}
+	rep := &Report{Intents: make([]IntentReport, 0, len(c.order)), Total: copyRat(c.total)}
 	for _, id := range c.order {
 		st := c.states[id]
 		if st.debitTotal.Cmp(st.creditTotal) != 0 {
@@ -349,12 +361,12 @@ func (c *checker) close() (*Report, error) {
 		in := IntentReport{
 			IntentID:    id,
 			Entries:     st.entries,
-			DebitTotal:  st.debitTotal,
-			CreditTotal: st.creditTotal,
+			DebitTotal:  copyRat(st.debitTotal),
+			CreditTotal: copyRat(st.creditTotal),
 			Accounts:    make([]AccountBalance, 0, len(st.order)),
 		}
 		for _, acc := range st.order {
-			in.Accounts = append(in.Accounts, AccountBalance{Account: acc, Balance: st.balances[acc]})
+			in.Accounts = append(in.Accounts, AccountBalance{Account: acc, Balance: copyRat(st.balances[acc])})
 		}
 		rep.Intents = append(rep.Intents, in)
 	}
@@ -395,8 +407,26 @@ func CheckEntries(entries []Entry) (*Report, error) {
 // at Close. Per-posting rules bite immediately; the trial balance is asserted
 // by Close, because a voucher is legitimately unbalanced while it is being
 // written.
+//
+// CONCURRENCY CONTRACT (added in docs/changes/044): one Journal is safe for
+// concurrent use by multiple goroutines. Append and Close are serialized by an
+// internal mutex, so callers never touch the checker's maps at the same time -
+// without it, two Appends reaching c.seenSeq (read) and c.states (write)
+// concurrently make the Go runtime abort the whole process with `fatal error:
+// concurrent map writes`, which is not a recoverable panic and takes every other
+// test result in the binary with it.
+//
+// What the lock does NOT change: a posting whose ledger_seq is not greater than
+// the last one folded is still refused with ErrOutOfOrder. Concurrency is not a
+// way to relax replay order - a sequence hands out ledger_seq, and the journal
+// follows it. Callers that only ever append in that order cannot observe the
+// lock at all.
+//
+// A failed Append leaves the journal exactly as it was; a Report returned by
+// Close is an immutable snapshot and is unaffected by later appends.
 type Journal struct {
-	c *checker
+	mu sync.Mutex
+	c  *checker
 }
 
 // NewJournal returns an empty journal.
@@ -405,8 +435,17 @@ func NewJournal() *Journal { return &Journal{c: newChecker()} }
 // Append adds one posting. The journal is unchanged when the posting is
 // refused. Seq must be strictly greater than the previous posting's, which is
 // what a monotonic sequence gives.
-func (j *Journal) Append(e Entry) error { return j.c.apply(e) }
+func (j *Journal) Append(e Entry) error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.c.apply(e)
+}
 
 // Close asserts the trial balance and returns the report. The journal may keep
-// being appended to afterwards; Close is a read.
-func (j *Journal) Close() (*Report, error) { return j.c.close() }
+// being appended to afterwards; Close is a read, and the report it hands back
+// cannot be changed by it.
+func (j *Journal) Close() (*Report, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.c.close()
+}
