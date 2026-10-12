@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { truncateAddress } from "@/lib/utils";
+import { writeAccountState } from "@/lib/authState";
 
 export interface UserProfileData {
   id: string;
@@ -98,14 +99,15 @@ export function EditProfileModal({
         walletAddress: payload.wallet_address,
       };
 
-      // Update localStorage cached profile
-      localStorage.setItem("koliance_google_profile", JSON.stringify({
+      // Update the cached profile through the shared writer, which also
+      // notifies every subscriber. The bare `window.dispatchEvent(new
+      // Event("storage"))` this replaces could not do that job: the spec fires
+      // `storage` only in other documents, so the tab performing the edit never
+      // received its own event, and any listener inside it was on its own.
+      writeAccountState("google", {
         ...updatedProfile,
         googleId: profile.id.replace("did:koliance:google:", ""),
-      }));
-
-      // Fire storage event to notify other components
-      window.dispatchEvent(new Event("storage"));
+      });
 
       onProfileUpdated(updatedProfile);
       setSaveSuccess(true);
