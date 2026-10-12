@@ -29,3 +29,10 @@ f41f8d815c5106f5d3952595c6e1e8ee4d67c7a8:src/components/DeveloperConsole.tsx:gen
 # 1 on the author's feat/video-demo-onchain branch (iasi777): a hardcoded
 # contract-address fallback, scanned because fetch-depth:0 pulls every branch.
 5ef8dc0cda592e08a0cdf4ce084e29c7845d6143:contracts/scripts/demo-agent-delegation.ts:generic-api-key:55
+# 1 introduced 2026-10-12 by this branch (W1): a change record pasted a real test
+# stdout containing a generated kol_live_... API key. The value is REDACTED at
+# HEAD (docs/changes/045); the historical fingerprint remains. The key was
+# never persisted (no DB) and the generator is local, so it is not a live
+# credential -- but it must not be re-printed, and the value should be treated
+# as burnt regardless.
+be3adc2045c9937e81606eb98c21da50b37923dd:docs/changes/045-developer-keys的DB守卫与withDB注释收窄.md:generic-api-key:167

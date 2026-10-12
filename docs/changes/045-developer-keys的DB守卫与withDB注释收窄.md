@@ -164,7 +164,7 @@ $ go test ./internal/httpapi/ -run 'TestQARouteBehaviorWithoutDatabaseHandle|Tes
     POST /api/v1/developer/keys ("not json"): 400, want 503
 --- FAIL: TestPersistedRoutesRefuseWithoutDBHandle
     POST /api/v1/developer/keys without a DB handle: 200 {"code":200,"data":{"key_id":"key_85e9a9d5c429",
-    ...,"raw_key":"kol_live_85e9a9d5c4292730dee1dfeecd7234a3b7f69c09671ebf39"},"response":"SUCCESS"}
+    ...,"raw_key":"kol_live_<REDACTED>"},"response":"SUCCESS"}
     POST /api/v1/developer/keys: refusal does not name the cause: {...}
 FAIL
 exit=1
