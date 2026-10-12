@@ -1,0 +1,840 @@
+// Judgements for the request-logging middleware (ADR-006 §3.2; §4.1 P4, §4.2 N5).
+//
+// Two of these carry weight beyond the usual "does it work", and they only work
+// as a pair:
+//
+//	P4 — the middleware does not alter the response body, asserted byte-for-byte
+//	     against the same handler served without the middleware.
+//	N5 — the same comparison, run against a middleware mutated to write one byte
+//	     into the body, and REQUIRED to fail.
+//
+// P4 on its own cannot be trusted, for the reason AGENTS.md §5 records about the
+// progress hook: a middleware that never touches the body and a middleware that
+// is not running at all are observationally identical under a byte comparison —
+// both green. Only N5 still having teeth is what lets P4's green be read as
+// "nothing was rewritten" rather than "the judgement is dead". ADR-006 §4.2
+// names N5 as the mutation that would refute the ADR itself, which is why it is
+// run here rather than described.
+//
+// N5 carries a second, less obvious guard: phase 1 runs the mutant with the
+// injection switched OFF and requires it to agree with the real middleware
+// byte-for-byte. Without that, "the mutated copy went red" would be
+// indistinguishable from "the copy had drifted from the thing it copies", and
+// the red would prove nothing about the real middleware.
+package httpapi
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"regexp"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+)
+
+// reqIDShapeRe is the shape a generated request id must have: requestIDBytes
+// (16) of crypto/rand, hex encoded. Pinned as a shape rather than an example
+// because the value is random by construction.
+var reqIDShapeRe = regexp.MustCompile(`^[0-9a-f]{32}$`)
+
+// logSink captures the middleware's output. The handler is JSON, so the line
+// can be decoded and asserted field by field instead of substring-matched.
+func logSink() (*bytes.Buffer, *slog.Logger) {
+	buf := &bytes.Buffer{}
+	return buf, slog.New(slog.NewJSONHandler(buf, nil))
+}
+
+// logLine decodes the single JSON object the middleware wrote.
+//
+// "Exactly one" is part of the judgement, not a convenience: a middleware that
+// logs twice per request doubles the log volume and makes the requestId no
+// longer identify one line, and nothing else in this file would notice.
+func logLine(t *testing.T, buf *bytes.Buffer) map[string]any {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	if len(lines) != 1 {
+		t.Fatalf("want exactly one log line per request, got %d:\n%s", len(lines), buf.String())
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(lines[0]), &obj); err != nil {
+		t.Fatalf("log line is not a JSON object: %v (%s)", err, lines[0])
+	}
+	return obj
+}
+
+func strField(t *testing.T, obj map[string]any, key string) string {
+	t.Helper()
+	v, ok := obj[key]
+	if !ok {
+		t.Fatalf("log line has no %q field: %v", key, obj)
+	}
+	s, ok := v.(string)
+	if !ok {
+		t.Fatalf("log field %q = %#v, want a string", key, v)
+	}
+	return s
+}
+
+// headerKeysOnlyIn returns the keys present in a but not in b.
+func headerKeysOnlyIn(a, b http.Header) []string {
+	var only []string
+	for k := range a {
+		if _, ok := b[k]; !ok {
+			only = append(only, k)
+		}
+	}
+	slices.Sort(only)
+	return only
+}
+
+// ---------------------------------------------------------------------------
+// P4 — the middleware does not alter the response body (ADR-006 §4.1)
+// ---------------------------------------------------------------------------
+
+// TestLoggingMiddlewareDoesNotAlterBody is P4.
+//
+// The claim under test is a property of the middleware, so the control is the
+// same handler served without it: same request, same handler, one response
+// through loggingMiddleware and one without, compared byte-for-byte. Four
+// handler shapes rather than one, because the shapes that break a body-rewriting
+// middleware are exactly the ones a single JSON endpoint does not exercise — a
+// bodiless 204, and a body written in more than one Write call.
+//
+// Status and headers are compared as well as the body. The ADR's "不改状态码"
+// is a separate sentence from "不改响应体", and a middleware that answered 200
+// for a handler's 503 would pass a body-only comparison whenever the body was
+// empty.
+func TestLoggingMiddlewareDoesNotAlterBody(t *testing.T) {
+	cases := []struct {
+		name   string
+		handle http.HandlerFunc
+	}{
+		{
+			name: "200 via jsonResponse",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				jsonResponse(w, http.StatusOK, map[string]string{"status": "healthy"})
+			},
+		},
+		{
+			name: "503 refusal via jsonError",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				jsonError(w, http.StatusServiceUnavailable, "market data unavailable")
+			},
+		},
+		{
+			// The shape a buffering middleware breaks first: there is no body to
+			// buffer, and net/http treats a 204 as "no content" on the wire.
+			name: "204 with no body",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			},
+		},
+		{
+			// Two Write calls with no explicit WriteHeader: the implicit 200 is
+			// net/http's, and statusWriter.observeStatus has to report that same
+			// 200 rather than a zero.
+			name: "body written in two calls, implicit 200",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(`{"part":`))
+				_, _ = w.Write([]byte(`1}`))
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf, logger := logSink()
+			req := func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/api/v1/market/prices?symbol=BTCUSD", nil)
+			}
+
+			bare := httptest.NewRecorder()
+			tc.handle(bare, req())
+
+			wrapped := httptest.NewRecorder()
+			loggingMiddleware(logger, tc.handle).ServeHTTP(wrapped, req())
+
+			if bare.Code != wrapped.Code {
+				t.Errorf("status: wrapped %d, bare %d — the middleware changed the status code", wrapped.Code, bare.Code)
+			}
+			if !bytes.Equal(bare.Body.Bytes(), wrapped.Body.Bytes()) {
+				t.Errorf("body is not byte-identical:\n bare    %q\n wrapped %q", bare.Body.Bytes(), wrapped.Body.Bytes())
+			}
+			for k, want := range bare.Header() {
+				if got := wrapped.Header().Values(k); !slices.Equal(got, want) {
+					t.Errorf("header %s: wrapped %v, bare %v", k, got, want)
+				}
+			}
+			// The middleware may add the request id and nothing else. A middleware
+			// that also set Content-Type or Content-Length would be deciding what
+			// the handler meant, which is the class of change P4 exists to catch.
+			if only := headerKeysOnlyIn(wrapped.Header(), bare.Header()); !slices.Equal(only, []string{requestIDHeader}) {
+				t.Errorf("wrapped response adds headers %v, want exactly [%s]", only, requestIDHeader)
+			}
+			if only := headerKeysOnlyIn(bare.Header(), wrapped.Header()); len(only) != 0 {
+				t.Errorf("wrapped response is missing headers %v the bare one had", only)
+			}
+
+			// And the line was actually written. A middleware that silently skipped
+			// logging would satisfy every assertion above.
+			line := logLine(t, buf)
+			if got := strField(t, line, "path"); got != "/api/v1/market/prices" {
+				t.Errorf("logged path = %q, want /api/v1/market/prices", got)
+			}
+		})
+	}
+}
+
+// TestStatusWriterKeepsResponseControllerWorking pins the reason statusWriter
+// carries an Unwrap method.
+//
+// http.NewResponseController walks `Unwrap() http.ResponseWriter` to reach the
+// underlying writer (net/http/responsecontroller.go). Without it, Flush/Hijack/
+// SetWriteDeadline answer http.ErrNotSupported through the wrapper — which for
+// a streaming endpoint is a silent behaviour change: the code path simply takes
+// its "not supported" branch and nobody is told. Asserting the error is nil is
+// the whole judgement; a test that only compared bodies would pass against a
+// wrapper without Unwrap.
+func TestStatusWriterKeepsResponseControllerWorking(t *testing.T) {
+	buf, logger := logSink()
+
+	var flushErr error
+	handle := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		flushErr = http.NewResponseController(w).Flush()
+		_, _ = w.Write([]byte("chunk"))
+	})
+
+	rr := httptest.NewRecorder()
+	loggingMiddleware(logger, handle).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/stream", nil))
+
+	if flushErr != nil {
+		t.Fatalf("Flush through the middleware: %v — statusWriter.Unwrap is not being followed", flushErr)
+	}
+	if !rr.Flushed {
+		t.Error("the underlying writer was never flushed: the wrapper swallowed the Flush")
+	}
+	if got := rr.Body.String(); got != "chunk" {
+		t.Errorf("body = %q, want %q", got, "chunk")
+	}
+	_ = logLine(t, buf)
+}
+
+// ---------------------------------------------------------------------------
+// N5 — inject a body write and P4 must go red (ADR-006 §4.2)
+// ---------------------------------------------------------------------------
+
+// n5WriteBody is the injection switch for mutatedLoggingMiddleware. False makes
+// the mutant a faithful copy; true adds the single byte.
+var n5WriteBody bool
+
+// mutatedLoggingMiddleware is a copy of loggingMiddleware (reqlog.go:151-172)
+// with exactly one statement added, guarded by n5WriteBody: a one-byte Write
+// into the response body, from inside the middleware.
+//
+// It is a copy rather than a wrapper around the real middleware, and the reason
+// is not pedantry. A wrapper that wrote after next.ServeHTTP returned would be
+// an injection from outside — "the middleware wrote the body" is the claim
+// under test, so the write has to happen on the same path the handler's output
+// takes. The cost of copying is drift, and phase 1 of the test below pays it
+// down: with the switch off the copy must produce byte-identical responses to
+// the real middleware. If this copy stops resembling the one in reqlog.go, that
+// comparison goes red and says so, instead of quietly making the red in phase 2
+// unattributable.
+func mutatedLoggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		id := strings.TrimSpace(r.Header.Get(requestIDHeader))
+		if !validRequestID(id) {
+			id = newRequestID()
+		}
+		w.Header().Set(requestIDHeader, id)
+
+		r = r.WithContext(context.WithValue(r.Context(), ctxKeyRequestID{}, id))
+
+		sw := &statusWriter{ResponseWriter: w}
+		if n5WriteBody {
+			// The injection. One byte, and the handler is untouched.
+			_, _ = sw.Write([]byte("!"))
+		}
+		next.ServeHTTP(sw, r)
+
+		recordRequest(logger, r, id, sw.observeStatus(), time.Since(start))
+	})
+}
+
+// TestN5InjectedBodyWriteTurnsP4Red is N5.
+//
+// Phase 1 (control): with the injection off, the mutant must agree with the
+// real middleware byte-for-byte. Without this, a red in phase 2 could equally
+// mean "the copy drifted" — and a mutation test that cannot tell those apart
+// proves nothing about the code under test.
+//
+// Phase 2 (the judgement): with the injection on, the same P4 comparison must
+// FAIL. If it still passes, P4 has no teeth and its green in the test above is
+// worthless.
+func TestN5InjectedBodyWriteTurnsP4Red(t *testing.T) {
+	handle := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, map[string]string{"status": "healthy"})
+	})
+	req := func() *http.Request {
+		return httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+	}
+
+	// The comparison P4 makes, factored out so both phases run the same one.
+	altered := func(t *testing.T, wrapped http.Handler) bool {
+		t.Helper()
+		bare := httptest.NewRecorder()
+		handle(bare, req())
+
+		got := httptest.NewRecorder()
+		wrapped.ServeHTTP(got, req())
+
+		return bare.Code != got.Code ||
+			!bytes.Equal(bare.Body.Bytes(), got.Body.Bytes()) ||
+			len(headerKeysOnlyIn(got.Header(), bare.Header())) != 1
+	}
+
+	_, logger := logSink()
+
+	// Phase 1 — the mutant is a faithful copy of the real middleware.
+	n5WriteBody = false
+	t.Cleanup(func() { n5WriteBody = false })
+
+	real := httptest.NewRecorder()
+	loggingMiddleware(logger, handle).ServeHTTP(real, req())
+	copied := httptest.NewRecorder()
+	mutatedLoggingMiddleware(logger, handle).ServeHTTP(copied, req())
+
+	if !bytes.Equal(real.Body.Bytes(), copied.Body.Bytes()) || real.Code != copied.Code {
+		t.Fatalf("control failed: the mutated copy does not match the real middleware even with the injection off\n real   %d %q\n copy   %d %q\n"+
+			"fix the copy before reading anything into phase 2",
+			real.Code, real.Body.Bytes(), copied.Code, copied.Body.Bytes())
+	}
+	if altered(t, mutatedLoggingMiddleware(logger, handle)) {
+		t.Fatal("control failed: with the injection off the copy already reads as altered — the comparison is not measuring the injection")
+	}
+
+	// Phase 2 — inject one byte and require the comparison to notice.
+	n5WriteBody = true
+	if !altered(t, mutatedLoggingMiddleware(logger, handle)) {
+		t.Fatal("N5 FAILED: a middleware that writes one byte into the response body still passes the byte-for-byte comparison, " +
+			"so P4 (TestLoggingMiddlewareDoesNotAlterBody) has no teeth and its green proves nothing")
+	}
+
+	// Named explicitly, so the failure mode is not just "something differed":
+	// one byte, and the body is no longer the handler's. Logged rather than
+	// only asserted, so the difference is readable in the stdout of any run.
+	handlerBody := `{"status":"healthy"}` + "\n"
+	got := httptest.NewRecorder()
+	mutatedLoggingMiddleware(logger, handle).ServeHTTP(got, req())
+	t.Logf("N5 injection: handler produced %q, the mutated middleware produced %q", handlerBody, got.Body.String())
+	if got.Body.String() != "!"+handlerBody {
+		t.Errorf("the injected write did not land where expected: %q", got.Body.String())
+	}
+}
+
+// ---------------------------------------------------------------------------
+// request-id behaviour
+// ---------------------------------------------------------------------------
+
+// TestRequestIDEchoedGeneratedAndReplaced covers the three outcomes the
+// middleware can produce for the id, and the two sinks it must agree across.
+//
+// The hostile rows are the point of the table. The id is caller-controlled and
+// lands in a response header and a log line; a value carrying CR/LF is a header
+// splitting attempt, and a value with no bound is an unbounded caller-supplied
+// string in every log line. "Replaced" is asserted as "the response header does
+// not contain what was sent", not as "the response header is non-empty" —
+// the weaker form passes against a middleware that echoes anything it is given.
+func TestRequestIDEchoedGeneratedAndReplaced(t *testing.T) {
+	const wellFormed = "0123456789abcdef0123456789abcdef"
+
+	cases := []struct {
+		name     string
+		sent     string
+		set      bool
+		wantEcho bool
+	}{
+		{name: "absent header", set: false},
+		{name: "well-formed token", sent: wellFormed, set: true, wantEcho: true},
+		{name: "token alphabet: hyphen underscore dot", sent: "req-1_A.B", set: true, wantEcho: true},
+		{name: "boundary: exactly maxRequestIDLen", sent: strings.Repeat("a", maxRequestIDLen), set: true, wantEcho: true},
+		{name: "empty header", sent: "", set: true},
+		{name: "whitespace only", sent: "   ", set: true},
+		{name: "CRLF header splitting attempt", sent: "abc\r\nX-Injected: 1", set: true},
+		{name: "bare LF", sent: "abc\nX-Injected: 1", set: true},
+		{name: "one past the length bound", sent: strings.Repeat("a", maxRequestIDLen+1), set: true},
+		{name: "space inside", sent: "abc def", set: true},
+		{name: "double quote", sent: `abc"def`, set: true},
+		{name: "semicolon", sent: "abc;def", set: true},
+		{name: "non-ascii", sent: "abc\u00e9def", set: true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf, logger := logSink()
+
+			var seenByHandler string
+			h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				seenByHandler = requestIDFrom(r.Context())
+				w.WriteHeader(http.StatusOK)
+			}))
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+			if tc.set {
+				req.Header.Set(requestIDHeader, tc.sent)
+			}
+			rr := httptest.NewRecorder()
+			h.ServeHTTP(rr, req)
+
+			got := rr.Header().Get(requestIDHeader)
+			if got == "" {
+				t.Fatalf("no %s on the response", requestIDHeader)
+			}
+			if tc.wantEcho {
+				if got != tc.sent {
+					t.Errorf("well-formed id was not echoed: sent %q, got %q", tc.sent, got)
+				}
+			} else {
+				// Not echoed means replaced by a freshly minted id, not merely
+				// "something non-empty" — the weaker form passes against a
+				// middleware that reflects anything it is handed.
+				if got == tc.sent {
+					t.Errorf("hostile id was echoed back verbatim: %q", got)
+				}
+				if !reqIDShapeRe.MatchString(got) {
+					t.Errorf("replacement id = %q, want 32 lowercase hex characters", got)
+				}
+			}
+			if strings.ContainsAny(got, "\r\n") {
+				t.Errorf("response %s carries a line break: %q", requestIDHeader, got)
+			}
+			// One id across all three places it is observable, or the id does not
+			// join the log line to the response the caller is holding.
+			if seenByHandler != got {
+				t.Errorf("handler saw requestIDFrom = %q, response header = %q", seenByHandler, got)
+			}
+			if id := strField(t, logLine(t, buf), "requestId"); id != got {
+				t.Errorf("log requestId = %q, response header = %q", id, got)
+			}
+		})
+	}
+}
+
+// TestNewRequestIDIsOpaqueAndUnique pins the shape of a generated id: full
+// entropy, no collisions, and not a counter.
+//
+// The uniqueness half is not decoration. A counter would be cheaper than
+// crypto/rand and would satisfy "32 hex characters" too, and the property it
+// breaks — two requests sharing an id — is invisible until someone greps a log
+// line and gets several.
+func TestNewRequestIDIsOpaqueAndUnique(t *testing.T) {
+	const n = 256
+	seen := make(map[string]struct{}, n)
+	for i := 0; i < n; i++ {
+		id := newRequestID()
+		if !reqIDShapeRe.MatchString(id) {
+			t.Fatalf("id %d = %q, want 32 lowercase hex characters", i, id)
+		}
+		if _, dup := seen[id]; dup {
+			t.Fatalf("id %q was generated twice in %d draws", id, n)
+		}
+		seen[id] = struct{}{}
+	}
+}
+
+// TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement records a measured
+// defect rather than asserting a property, and it is written this way on
+// purpose.
+//
+// reqlog.go:47-57 justifies the hex encoding with a claim: that a hex id
+// carries no `\d{3,}` run, so when ADR-006 §3.6 puts `requestId` into the
+// response envelope and on the UI, market_test.go:199-201's "a refusal carries
+// no JSON number" assertion will not trip. The claim is false. Measured over
+// 100000 generated ids, 99203 (99.2030%) contain a `\d{3,}` run, because three
+// consecutive hex digits are common; the first id this test ever produced was
+// "0c7e264530aad5c50531ea8b082181ea", carrying "264530".
+//
+// The measurement is pinned as a floor instead of as an example, so it cannot
+// rot: the day someone makes the id run-free the assertion goes red and the
+// comment in reqlog.go can be rewritten to match, which is the honest way for a
+// wrong justification to die. The id itself is not wrong — it is opaque, unique
+// and unguessable, which is what an id needs to be. What is wrong is the reason
+// written down for it, and the consequence: whoever lands §3.6 will find
+// market_test.go:182-184 red, and the ADR already says that red is expected and
+// must be resolved by changing the judgement with a negative control rather
+// than by deleting it.
+func TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement(t *testing.T) {
+	const draws = 1000
+	matching := 0
+	var example string
+	for i := 0; i < draws; i++ {
+		id := newRequestID()
+		m := priceShapedInText.FindString(id)
+		if m == "" {
+			continue
+		}
+		matching++
+		if example == "" {
+			example = fmt.Sprintf("%s -> %q", id, m)
+		}
+	}
+	// Measured 99.2030% over 100000 draws; the floor is deliberately below that
+	// and far above zero, so this cannot pass by accident and cannot fail on
+	// sampling noise.
+	if matching < draws*9/10 {
+		t.Fatalf("only %d/%d generated ids contain a priceShapedInText match (example: %s). "+
+			"If this is 0, the id shape changed and the comment at reqlog.go:47-57 is now true — update it rather than this test",
+			matching, draws, example)
+	}
+	t.Logf("%d/%d generated ids match priceShapedInText (example: %s) — see the doc comment above", matching, draws, example)
+}
+
+// TestValidRequestIDBoundaries pins the predicate directly, including the two
+// ends of the length bound that the table above can only reach through the
+// middleware.
+func TestValidRequestIDBoundaries(t *testing.T) {
+	cases := []struct {
+		in   string
+		want bool
+	}{
+		{"", false},
+		{"a", true},
+		{strings.Repeat("a", maxRequestIDLen), true},
+		{strings.Repeat("a", maxRequestIDLen+1), false},
+		{"abc\r\n", false},
+		{"abc\ndef", false},
+		{"abc\tdef", false},
+		{"abc/def", false},
+		{"abc+def", false},
+		{"-_.-_.", true},
+	}
+	for _, tc := range cases {
+		if got := validRequestID(tc.in); got != tc.want {
+			t.Errorf("validRequestID(%q) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+// ---------------------------------------------------------------------------
+// the log line
+// ---------------------------------------------------------------------------
+
+// TestMiddlewareLogsOneJSONLinePerRequest pins the field set and, in the same
+// test, the field that must NOT be there.
+//
+// The path is logged as r.URL.Path and never r.URL.RequestURI: the query string
+// is where a token ends up (?token=…), and this line is written for every
+// request. Asserting the token's absence is what makes that a judgement rather
+// than a comment.
+func TestMiddlewareLogsOneJSONLinePerRequest(t *testing.T) {
+	buf, logger := logSink()
+
+	h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusTeapot, map[string]string{"ok": "yes"})
+	}))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/market/prices?symbol=BTCUSD&token=sk-live-do-not-log", nil))
+
+	line := logLine(t, buf)
+
+	if got := strField(t, line, "method"); got != http.MethodGet {
+		t.Errorf("method = %q, want GET", got)
+	}
+	if got := strField(t, line, "path"); got != "/api/v1/market/prices" {
+		t.Errorf("path = %q, want the path without the query string", got)
+	}
+	if got := strField(t, line, "requestId"); !reqIDShapeRe.MatchString(got) {
+		t.Errorf("requestId = %q, want 32 lowercase hex characters", got)
+	}
+	if got := strField(t, line, "err"); got != "" {
+		t.Errorf("err = %q, want the empty string when the handler recorded no error", got)
+	}
+	if got, ok := line["status"].(float64); !ok || int(got) != http.StatusTeapot {
+		t.Errorf("status = %#v, want %d", line["status"], http.StatusTeapot)
+	}
+	if got, ok := line["durationMs"].(float64); !ok || got < 0 {
+		t.Errorf("durationMs = %#v, want a non-negative number", line["durationMs"])
+	}
+	if strings.Contains(buf.String(), "sk-live-do-not-log") {
+		t.Errorf("the query string reached the log line: %s", buf.String())
+	}
+	// Every field the ADR names is present every time; a consumer must not have
+	// to branch on a key that only sometimes exists.
+	for _, key := range []string{"requestId", "method", "path", "status", "durationMs", "err"} {
+		if _, ok := line[key]; !ok {
+			t.Errorf("log line is missing %q: %v", key, line)
+		}
+	}
+}
+
+// TestMiddlewareLogsTheStatusTheHandlerWrote covers observeStatus on both
+// branches: an explicit WriteHeader, and the implicit 200 a body-only handler
+// gets from net/http. A middleware that reported 0 for the second case would be
+// describing a response that never went out.
+func TestMiddlewareLogsTheStatusTheHandlerWrote(t *testing.T) {
+	cases := []struct {
+		name   string
+		handle http.HandlerFunc
+		want   int
+	}{
+		{
+			name:   "explicit status",
+			handle: func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusCreated) },
+			want:   http.StatusCreated,
+		},
+		{
+			name:   "implicit 200 from a body-only handler",
+			handle: func(w http.ResponseWriter, r *http.Request) { _, _ = w.Write([]byte("ok")) },
+			want:   http.StatusOK,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			buf, logger := logSink()
+			rr := httptest.NewRecorder()
+			loggingMiddleware(logger, tc.handle).ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/x", nil))
+
+			if rr.Code != tc.want {
+				t.Errorf("response status = %d, want %d", rr.Code, tc.want)
+			}
+			line := logLine(t, buf)
+			if got, ok := line["status"].(float64); !ok || int(got) != tc.want {
+				t.Errorf("logged status = %#v, want %d", line["status"], tc.want)
+			}
+		})
+	}
+}
+
+// TestStatusWriterKeepsOnlyTheFirstWriteHeader pins net/http's own rule: a
+// second WriteHeader is superfluous and ignored on the wire, so the log must
+// report the first one. Copying the last value instead would make the log
+// disagree with the response the caller received.
+func TestStatusWriterKeepsOnlyTheFirstWriteHeader(t *testing.T) {
+	rr := httptest.NewRecorder()
+	sw := &statusWriter{ResponseWriter: rr}
+
+	sw.WriteHeader(http.StatusNotFound)
+	sw.WriteHeader(http.StatusInternalServerError)
+
+	if got := sw.observeStatus(); got != http.StatusNotFound {
+		t.Errorf("observeStatus = %d, want the first code written (%d)", got, http.StatusNotFound)
+	}
+	if sw.Unwrap() != http.ResponseWriter(rr) {
+		t.Error("Unwrap does not return the wrapped writer")
+	}
+}
+
+// TestMiddlewareLogsHandlerRecordedErrorRedacted exercises the seam
+// (errContextKey / requestError) the handler-migration round will write into,
+// and the redaction that must happen before the text reaches the sink.
+//
+// The handler has to mutate the request in place — `*r = *r.WithContext(...)` —
+// and that is a finding, not a trick: the middleware reads r.Context() on the
+// same *http.Request it handed down, and a derived request returned by
+// r.WithContext does not travel back up. Any handler that records an error must
+// therefore either mutate the struct it was given or go through a helper. See
+// docs/changes/055 §6.
+func TestMiddlewareLogsHandlerRecordedErrorRedacted(t *testing.T) {
+	buf, logger := logSink()
+
+	raw := errors.New("alpaca refused: ALPACA_API_KEY=sk-live-do-not-log via postgres://koliance:hunter2@db.internal.example:5432/koliance")
+	h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		*r = *r.WithContext(context.WithValue(r.Context(), errContextKey{}, raw))
+		jsonError(w, http.StatusBadGateway, "upstream unavailable")
+	}))
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/market/prices", nil))
+
+	line := logLine(t, buf)
+	got := strField(t, line, "err")
+	if got == "" {
+		t.Fatal("the handler recorded an error but the log line's err field is empty")
+	}
+	for _, secret := range []string{"sk-live-do-not-log", "hunter2", "db.internal.example"} {
+		if strings.Contains(got, secret) {
+			t.Errorf("logged err still carries %q: %q", secret, got)
+		}
+	}
+	if !strings.Contains(got, markEnv) || !strings.Contains(got, markDSN) {
+		t.Errorf("logged err = %q, want the env-assignment and DSN markers %q/%q", got, markEnv, markDSN)
+	}
+	// The recorded error must not change the response: recording is not
+	// classifying (ADR-006 §3.2, "中间件不做分类").
+	if rr.Code != http.StatusBadGateway {
+		t.Errorf("status = %d, want the handler's own %d", rr.Code, http.StatusBadGateway)
+	}
+	if body := rr.Body.String(); strings.Contains(body, "ALPACA_API_KEY") {
+		t.Errorf("response body carries the raw error: %s", body)
+	}
+}
+
+// TestRecordRequestWithNilLoggerDoesNotPanic covers the nil guard. It is
+// unreachable through NewRouter (which substitutes a default) and stays because
+// the alternative is a panic inside the request path.
+func TestRecordRequestWithNilLoggerDoesNotPanic(t *testing.T) {
+	recordRequest(nil, httptest.NewRequest(http.MethodGet, "/x", nil), "id", http.StatusOK, time.Millisecond)
+}
+
+// ---------------------------------------------------------------------------
+// sanitization (ADR-006 §3.4)
+// ---------------------------------------------------------------------------
+
+// TestSanitizeLogValue walks the seven §3.4 classes plus two controls.
+//
+// The controls matter more than the hits. A sanitizer that redacted everything
+// would pass every "the secret is gone" assertion in this file while destroying
+// the diagnostic value the log exists for — and the last two rows are the
+// specific things reqlog.go:298-311 claims to leave alone (a bare URL path, and
+// ordinary prose with no secret in it).
+func TestSanitizeLogValue(t *testing.T) {
+	cases := []struct {
+		name       string
+		in         string
+		wantExact  string
+		wantMarker string
+		absent     []string
+	}{
+		{
+			name:       "env assignment",
+			in:         "ALPACA_API_KEY=sk-live-do-not-log",
+			wantExact:  markEnv,
+			wantMarker: markEnv,
+			absent:     []string{"sk-live-do-not-log"},
+		},
+		{
+			name:       "env name without a value",
+			in:         "ALPACA_API_KEY/ALPACA_API_SECRET are not configured",
+			wantExact:  markEnvName + "/" + markEnvName + " are not configured",
+			wantMarker: markEnvName,
+			absent:     []string{"ALPACA_API_KEY"},
+		},
+		{
+			name:       "DSN with an inline password",
+			in:         "postgres://koliance:hunter2@db.internal.example:5432/koliance",
+			wantExact:  markDSN,
+			wantMarker: markDSN,
+			absent:     []string{"hunter2", "db.internal.example"},
+		},
+		{
+			name:       "go stack frame",
+			in:         "goroutine 1 [running]:",
+			wantMarker: markStack,
+			absent:     []string{"goroutine 1"},
+		},
+		{
+			name:       "go source location",
+			in:         "panic at /usr/local/go/src/runtime/panic.go:770",
+			wantMarker: markStack,
+			absent:     []string{"panic.go:770"},
+		},
+		{
+			name:       "sql text and constraint name",
+			in:         `duplicate key value violates unique constraint "cards_pkey" (SQLSTATE 23505)`,
+			wantMarker: markSQL,
+			absent:     []string{"cards_pkey", "23505"},
+		},
+		{
+			name:       "third-party response body",
+			in:         `{"message":"invalid symbol","code":40110000}`,
+			wantExact:  markUpstream,
+			wantMarker: markUpstream,
+			absent:     []string{"invalid symbol"},
+		},
+		{
+			name:       "file path in prose",
+			in:         "open /var/lib/koliance/keys.pem: permission denied",
+			wantMarker: markPath,
+			absent:     []string{"/var/lib/koliance/keys.pem"},
+		},
+		{
+			name:       "internal address",
+			in:         "dial tcp 10.0.3.7:5432: connect: connection refused",
+			wantMarker: markHost,
+			absent:     []string{"10.0.3.7"},
+		},
+		{
+			name:       "internal hostname",
+			in:         "lookup db.internal.example: no such host",
+			wantMarker: markHost,
+			absent:     []string{"db.internal.example"},
+		},
+		{
+			// Control 1: the diagnostic value the middleware keeps. If a future
+			// rule starts matching a bare URL path, the log line stops saying which
+			// endpoint failed.
+			name:      "control: a bare url path is left alone",
+			in:        "/api/v1/market/prices",
+			wantExact: "/api/v1/market/prices",
+		},
+		{
+			// Control 2: prose with no secret in it must survive verbatim, or the
+			// sanitizer has become a redaction machine.
+			name:      "control: ordinary prose is left alone",
+			in:        "market data unavailable: upstream did not answer",
+			wantExact: "market data unavailable: upstream did not answer",
+		},
+		{
+			name:      "empty string",
+			in:        "",
+			wantExact: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := sanitizeLogValue(tc.in)
+			if tc.wantExact != "" || tc.in == "" {
+				if got != tc.wantExact {
+					t.Errorf("sanitizeLogValue(%q) = %q, want %q", tc.in, got, tc.wantExact)
+				}
+			}
+			if tc.wantMarker != "" && !strings.Contains(got, tc.wantMarker) {
+				t.Errorf("sanitizeLogValue(%q) = %q, want the %s marker", tc.in, got, tc.wantMarker)
+			}
+			for _, secret := range tc.absent {
+				if strings.Contains(got, secret) {
+					t.Errorf("sanitizeLogValue(%q) = %q still carries %q", tc.in, got, secret)
+				}
+			}
+		})
+	}
+}
+
+// TestErrorChainTextExpandsAndBounds covers both halves of errorChainText: the
+// %w chain is rendered with its links named, and the walk stops.
+//
+// The bound is a denial-of-service guard, not tidiness: Unwrap is implemented
+// by the error value, so a self-referential wrapper would spin forever inside a
+// request. The deep case below is 40 links against a maxDepth of 32
+// (reqlog.go:235).
+func TestErrorChainTextExpandsAndBounds(t *testing.T) {
+	base := errors.New("disk full")
+	wrapped := fmt.Errorf("write audit log: %w", base)
+
+	want := "write audit log: disk full | caused by: disk full"
+	if got := errorChainText(wrapped); got != want {
+		t.Errorf("errorChainText = %q, want %q", got, want)
+	}
+
+	deep := errors.New(base.Error())
+	for i := 0; i < 40; i++ {
+		deep = fmt.Errorf("layer %d: %w", i, deep)
+	}
+	got := errorChainText(deep)
+	if !strings.HasSuffix(got, "| (chain truncated)") {
+		t.Errorf("a 40-link chain was not truncated: %q", got)
+	}
+	if n := strings.Count(got, "| caused by: "); n != 32 {
+		t.Errorf("rendered %d links, want the maxDepth of 32", n)
+	}
+}
