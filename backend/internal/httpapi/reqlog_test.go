@@ -635,23 +635,57 @@ func TestNewRequestIDIsOpaqueAndUnique(t *testing.T) {
 //
 // reqlog.go:47-57 justifies the hex encoding with a claim: that a hex id
 // carries no `\d{3,}` run, so when ADR-006 §3.6 puts `requestId` into the
-// response envelope and on the UI, market_test.go:199-201's "a refusal carries
-// no JSON number" assertion will not trip. The claim is false. Measured over
-// 100000 generated ids, 99203 (99.2030%) contain a `\d{3,}` run, because three
+// response envelope and on the UI, market_test.go's "a refusal carries no JSON
+// number" assertion will not trip. The claim is false. Measured over 100000
+// generated ids, 99203 (99.2030%) contain a `\d{3,}` run, because three
 // consecutive hex digits are common; the first id this test ever produced was
 // "0c7e264530aad5c50531ea8b082181ea", carrying "264530".
 //
-// The measurement is pinned as a floor instead of as an example, so it cannot
-// rot: the day someone makes the id run-free the assertion goes red and the
-// comment in reqlog.go can be rewritten to match, which is the honest way for a
-// wrong justification to die. The id itself is not wrong — it is opaque, unique
-// and unguessable, which is what an id needs to be. What is wrong is the reason
-// written down for it, and the consequence: whoever lands §3.6 will find
-// market_test.go:182-184 red, and the ADR already says that red is expected and
-// must be resolved by changing the judgement with a negative control rather
-// than by deleting it.
+// # Which assertion actually goes red (corrected — see docs/changes/055 §6.1)
+//
+// The first version of this comment, and of 055 §6.1, named the wrong one. Read
+// at the source, assertRefusal makes two independent checks:
+//
+//	market_test.go:182-184  the TOP-LEVEL KEY SET must be exactly [error]
+//	market_test.go:199-201  the body must carry ZERO JSON numbers
+//
+// Adding a `requestId` STRING to the refusal envelope adds a key. The key-set
+// check is what fails, and it fails for every id — not just the 99.2% that also
+// match priceShapedInText. The number check is not reached, because a hex string
+// is not a JSON number and `priceShapedInText` is only applied to the `error`
+// value's prose (market_test.go:188), never to the id.
+//
+// The distinction is not pedantry: it changes the fix. "The id's shape broke it"
+// invites a search for an id format with no digits, which hex cannot provide —
+// the alphabet has six of them and a 32-character id contains a run of three
+// with probability ~0.992. "The key set broke it" points at the thing that must
+// actually change: the allowed-key set, which is a 03-环 judgement change and
+// needs a negative control (ADR-006 §6 负面后果 4 already says so).
+//
+// # What this test can and cannot see
+//
+// It is a MEASUREMENT, not a property. The floor is a band, deliberately narrow
+// because a floor with no discriminating power is not a judgement: the first
+// version asserted `>= 0.90` against a true rate of 0.992, which needs a ~9-point
+// collapse to fire — P(fail) ≈ 0, so it could never have said anything. The band
+// is now [0.97, 1.0] over 1000 draws, which is ~2.2 points of slack for sampling
+// noise (P(fail) by noise ≈ 1e-9) and fires the moment the id shape actually
+// changes, in either direction.
+//
+// Two things it structurally cannot see, stated here rather than left implied:
+//
+//   - It calls this package's own newRequestID and priceShapedInText. If either
+//     changes, this test changes with it. It pins the relationship between the
+//     two, not an independent property of the id.
+//   - It measures the SHAPE that would break the refusal judgement. It does not
+//     run assertRefusal against a real envelope; the judgement that does is
+//     market_test.go's, and it cannot be driven from here without landing §3.6.
 func TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement(t *testing.T) {
 	const draws = 1000
+	// The band. Low enough to absorb sampling noise, high enough that any real
+	// change in the id shape moves it.
+	const floorPct = 0.97
+
 	matching := 0
 	var example string
 	for i := 0; i < draws; i++ {
@@ -665,15 +699,15 @@ func TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement(t *testing.T) {
 			example = fmt.Sprintf("%s -> %q", id, m)
 		}
 	}
-	// Measured 99.2030% over 100000 draws; the floor is deliberately below that
-	// and far above zero, so this cannot pass by accident and cannot fail on
-	// sampling noise.
-	if matching < draws*9/10 {
-		t.Fatalf("only %d/%d generated ids contain a priceShapedInText match (example: %s). "+
-			"If this is 0, the id shape changed and the comment at reqlog.go:47-57 is now true — update it rather than this test",
-			matching, draws, example)
+	low := int(draws * floorPct)
+	if matching < low || matching > draws {
+		t.Fatalf("measured %d/%d generated ids containing a priceShapedInText match, outside the band [%d, %d] "+
+			"(example: %s). The rate is expected to be ~99.2%% because three consecutive hex digits are common. "+
+			"If it has DROPPED, the id shape changed and the comment at reqlog.go:47-57 may now be true — update the comment, then re-pin this band",
+			matching, draws, low, draws, example)
 	}
-	t.Logf("%d/%d generated ids match priceShapedInText (example: %s) — see the doc comment above", matching, draws, example)
+	t.Logf("%d/%d generated ids match priceShapedInText, band [%d, %d] (example: %s) — a measurement, not a property; see the doc comment",
+		matching, draws, low, draws, example)
 }
 
 // TestValidRequestIDBoundaries pins the predicate directly, including the two

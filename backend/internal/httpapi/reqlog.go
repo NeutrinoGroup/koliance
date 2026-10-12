@@ -46,14 +46,27 @@ const requestIDHeader = "X-Request-Id"
 
 // requestIDBytes is the entropy per generated id: 16 bytes = 32 hex characters.
 //
-// Hex, not a decimal counter, and the reason is concrete rather than
-// stylistic. market_test.go:166 defines `priceShapedInText` as
-// `\d+\.\d{2,}|\d{3,}`, and market_test.go:199-201 asserts that a refusal body
-// carries no JSON number at all. This middleware does not touch the body, so
-// that assertion cannot see it today — but ADR-006 §3.6 puts `requestId` in
-// the response envelope and on the UI, and a digit-string id would then turn
-// that assertion red somewhere nobody is looking. An opaque hex id costs
-// nothing and closes the whole class.
+// Hex, not a decimal counter. The reason recorded here for that choice was
+// wrong, and the correction is part of the record rather than a rewrite of it.
+// The claim used to be: market_test.go:166 defines `priceShapedInText` as
+// `\d+\.\d{2,}|\d{3,}`, so an id with no `\d{3,}` run would not trip the
+// refusal-shape judgement when ADR-006 §3.6 puts `requestId` in the response
+// envelope — "16 bytes of hex is opaque and carries no digit run".
+//
+// The second half is false. Measured over 100000 ids, 99.2030% contain a
+// `\d{3,}` run; three consecutive hex digits are simply common. So §3.6 will
+// turn market_test.go:182-184 red, and it will do so because the envelope gains
+// a KEY, not because of the id's digits — a hex string is not a JSON number, and
+// priceShapedInText is only applied to the `error` value's prose
+// (market_test.go:188), never to the id. Correcting the attribution matters
+// because it changes the fix: the allowed-key set is what must move, and no id
+// format can avoid the key.
+//
+// The encoding stays hex anyway, for the reason that was always true: it is
+// opaque, unique and unguessable, which is what an id needs to be. What changed
+// is that the comment no longer claims a property it does not have.
+// TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement pins the 99.2% as a
+// band, so the day this text and the measurement disagree, a test says so.
 const requestIDBytes = 16
 
 // maxRequestIDLen bounds an accepted inbound id. Beyond the length, an

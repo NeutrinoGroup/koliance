@@ -180,7 +180,7 @@ git log --all --diff-filter=A --name-only --pretty=format: | Select-String "docs
 
 ---
 
-## 6.1 ⚠️ 实测推翻了一条写进源码的理由（**须独立复核**）
+## 6.1 ⚠️ 实测推翻了一条写进源码的理由，并更正了本条自己的归因（**须独立复核**）
 
 `reqlog.go:47-57` 给 hex 编码写的理由是：
 
@@ -194,18 +194,55 @@ ids containing a priceShapedInText match: 99203/100000 = 99.2030%
 first example: 28bf4eff3907e1e32e64e2d9c282ae09 -> 3907
 ```
 
-连续三位十六进制数字太常见，**99.2% 的 id 都命中**。故 §3.6 一旦把 `requestId` 放进响应体，
-`market_test.go:199-201`（"拒绝体零 JSON 数字"）会**因为 id 本身**而红——
-**不是**因为中间件改了什么，而是因为这条 id 就长这样。
+连续三位十六进制数字太常见，**99.2% 的 id 都命中**。
+
+### 6.1.1 ⚠️ 更正：红的不是 `:199-201`，是 `:182-184`（**A5，本轮修**）
+
+**本节初版把成因归到了错的行。** 逐条读 `assertRefusal`（`market_test.go:168-212`），
+它做的是**两条彼此独立**的检查：
+
+| 行 | 检查 | 加一个 `requestId`（**字符串**）会怎样 |
+| --- | --- | --- |
+| `market_test.go:182-184` | 顶层**键集**必须恰好是 `[error]` | **红**——多了一个键。**与 id 是不是数字串无关** |
+| `market_test.go:199-201` | 拒绝体**零 JSON 数字** | **不会红**——hex 是字符串，不是 JSON number |
+
+而且 `priceShapedInText` 只被施加于 **`error` 值的文案**（`market_test.go:188`），
+**从不施加于 id**。所以 `:199-201` 这条判据**根本看不见 id**。
+
+**为什么这个区别不是咬文嚼字**：它决定**怎么修**。
+"id 的形态把它弄红了"会引导人去改 id 形态（找一个无数字串的编码）——**这条路走不通**：
+十六进制字母表里有六个数字字符，32 位 id 出现三位连续数字的概率就是 ~0.992。
+"键集把它弄红了"才指向真正要改的东西：**键的允许集**，那是 03 环的判据变更，
+且必须带负向对照（ADR-006 §6 负面后果 4 已经这么写了）。
+**照初版归因去修，改的是 id，红的是键集——改完照旧红。**
+
+### 6.1.2 那条判据原本**没有分辨力**（A5，本轮修）
+
+初版把它"钉成地板（要求 ≥90%）"。以真实命中率 0.992 对地板 0.90 计算：
+需要命中率**塌掉约 9 个百分点**才会触发，`P(失败) ≈ 0`。
+**一条永远不可能失败的判据不是判据**——它与"脚本死了"在观测上等价
+（`AGENTS.md` §5 对进度页 hook 的同一句推理）。
+
+**修法**：地板改成**区间** `[0.97, 1.0]`（1000 次抽样）。对真值 0.992 留约 2.2 个百分点的
+抽样余量（`P(因噪声失败) ≈ 1e-9`），而 id 形态**一旦真变**，两个方向都会立刻触发。
+实测：`993/1000`，band `[970, 1000]`。
+
+### 6.1.3 它看不见的两件事（如实标注，不是补充说明）
+
+- **它调用的是同包标识符**：`newRequestID` 与 `priceShapedInText` 都来自 `httpapi` 包。
+  改这两个中的任何一个，这条判据会**跟着一起变**。它钉住的是**两者之间的关系**，
+  **不是** id 的一条独立性质。
+- **它是测量，不是性质断言**：它不拿真实的拒绝信封去跑 `assertRefusal`。
+  做那件事的判据是 `market_test.go` 的，且在 §3.6 落地之前**无法从本文件驱动**。
+
+### 6.1.4 其余
 
 - **id 本身不算错**：不透明、唯一、不可猜，这是 id 该有的性质。**错的是写给它的那条理由**，
-  以及由此产生的预期偏差——§3.6 的落地者会撞上一条**与本改动无关**的红。
-- **已固化为判据**：`TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement`
-  （`reqlog_test.go`）把 99.2% 这个读数**钉成地板**（要求 ≥90%）。它不是在断言一条性质，
-  而是**在记录一个测量**：哪天 id 变成真的无数字串，它会**变红**，那时该改的是
-  `reqlog.go:47-57` 的注释——这是让一条**错误理由**体面退场的唯一方式。
+  以及由此产生的预期偏差。本轮已把 `reqlog.go` 那段注释改写为**照录错误理由 + 更正**
+  （保留"曾经这么写、为什么错"，而不是抹掉）。
 - **与 ADR-006 §6 负面后果 4 是同一条**：ADR 已写明 `market_test.go:182-184` 会先红，
-  且**处置属 03 环**（改判据要带负向对照，不许直接删）。本条**收窄了它的成因**。
+  且**处置属 03 环**（改判据要带负向对照，不许直接删）。本条**更正了它的成因**——
+  ADR 那处**本来就是对的**，错的是本文件 §6.1 的初版。
 - **为什么只能由外部裁**：这是"我推翻我自己上一轮写的注释"。判据是我写的，
   读数是本机实测的，**两者都不构成独立证据**（D3）。请独立复核下面这条命令的输出。
 - **复核命令**（仓库内即可复跑，不依赖任何临时脚本）：
@@ -214,9 +251,9 @@ first example: 28bf4eff3907e1e32e64e2d9c282ae09 -> 3907
   cd backend && go test -count=1 -v -run TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement ./internal/httpapi/
   ```
 
-  它打印的 `N/1000 generated ids match priceShapedInText` 就是上面 99.2% 的同口径读数
-  （1000 次抽样的期望命中约 992）。上表那行 10 万次的读数由一次性探针得出，**未入库**；
-  入库的是这条判据，它把同一件事变成了**每次 CI 都跑**的测量。
+  它打印的 `N/1000 generated ids match priceShapedInText, band [970, 1000]` 就是上面 99.2% 的
+  同口径读数（1000 次抽样的期望命中约 992）。上表那行 10 万次的读数由一次性探针得出，
+  **未入库**；入库的是这条判据，它把同一件事变成了**每次 CI 都跑**的测量。
 
 **未登记新编号**：本条不是新的"还没做"，而是 ADR-006 §3.6 落地时必须处理的
 **既有冲突的新增成因**，故并入 **GAP-74**（与 §6 其它残余同一口径，不另开号）。
@@ -247,6 +284,10 @@ ok  	github.com/koliance/backend/internal/liquidator	1.962s
 ok  	github.com/koliance/backend/internal/market	2.054s
 ?   	github.com/koliance/backend/internal/model	[no test files]
 ok  	github.com/koliance/backend/internal/oracle	1.990s
+> **§7.1 是本轮（A1/A4/A5/A7）修完之后的复跑读数**，不是初版那次。
+> §7.2 起的标题保留初版编号，新加的段落以 `.1` 后缀插入，**不改旧段的编号**——
+> 旧读数仍然对应它当时的那份代码，改写它等于篡改证据链（`AGENTS.md` §5）。
+
 ok  	github.com/koliance/backend/internal/perp/nonce	1.462s
 ok  	github.com/koliance/backend/internal/perp/position	1.479s
 ok  	github.com/koliance/backend/internal/platform/database	2.429s
@@ -281,6 +322,11 @@ $ go test -race -count=1 -v -run "TestLoggingMiddlewareDoesNotAlterBody|TestStat
     reqlog_test.go:498: 997/1000 generated ids match priceShapedInText (example: f5844bded57a6ded89b60e30bf85a3ae -> "5844") — see the doc comment above
 --- PASS: TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement (0.02s)
 PASS
+> ⚠️ **本段是初版的读数，保留原样。** 它记录的是**GET-only** 的那一版——
+> 也就是 §4.3 所说的"两半一起瞎"的那一版。**保留它的理由正是这个**：
+> 它下面 `=== RUN` 的行里**没有一行 POST**，而这在当时**看起来是全绿的**。
+> 修完之后的读数见 §7.2.1。
+
 ok  	github.com/koliance/backend/internal/httpapi	2.363s
                                                      -> exit 0
 ```
@@ -312,6 +358,171 @@ $ go run ./scripts/coverage-gate
 > 注释说"每个地板取自本表读数"**——注释与表已经不一致。**改门禁表的注释属 03/10 环**，
 > 本轮**不动**（硬边界），**在此点名**。
 > ③ 逐函数实测：`reqlog.go` 12 个函数中 11 个 **100%**，唯一例外是
+### 7.2.1 P4 / N5 / N5(POST)（修后复跑，`-race -v` 原文）
+
+```
+$ go test -race -count=1 -v -run "TestLoggingMiddlewareDoesNotAlterBody|TestStatusWriterKeepsResponseControllerWorking|TestN5" ./internal/httpapi/
+
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_200_via_jsonResponse
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_503_refusal_via_jsonError
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_204_with_no_body
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_body_written_in_two_calls,_implicit_200
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_200
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_400_refusal
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/POST_204_with_no_body
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/DELETE_405_from_methodOnly
+--- PASS: TestLoggingMiddlewareDoesNotAlterBody (0.02s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_200_via_jsonResponse (0.01s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_503_refusal_via_jsonError (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_204_with_no_body (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_body_written_in_two_calls,_implicit_200 (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_200 (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_400_refusal (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/POST_204_with_no_body (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/DELETE_405_from_methodOnly (0.00s)
+=== RUN   TestStatusWriterKeepsResponseControllerWorking
+--- PASS: TestStatusWriterKeepsResponseControllerWorking (0.00s)
+=== RUN   TestN5InjectedBodyWriteTurnsP4Red
+    reqlog_test.go:432: N5 injection: handler produced "{\"status\":\"healthy\"}\n", the mutated middleware produced "!{\"status\":\"healthy\"}\n"
+--- PASS: TestN5InjectedBodyWriteTurnsP4Red (0.00s)
+=== RUN   TestN5PostOnlyInjectedBodyWriteTurnsP4Red
+    reqlog_test.go:493: N5(POST) injection: handler produced "{\"orderId\":\"ord-1\",\"success\":true}\n", the mutated middleware produced "!{\"orderId\":\"ord-1\",\"success\":true}\n"
+    reqlog_test.go:504: a GET-only comparison over the POST-only mutant is CLEAN — that is the blind spot the method-crossed P4 table closes
+--- PASS: TestN5PostOnlyInjectedBodyWriteTurnsP4Red (0.00s)
+PASS
+ok  	github.com/koliance/backend/internal/httpapi	2.371s
+                                                     -> exit 0
+```
+
+### 7.2.2 ⚠️ A1 负向对照：往**真中间件**里注入 POST-only 一字节（**真跑，已还原**）
+
+注入的不是变异体，是 `reqlog.go` 的 `loggingMiddleware` 本体：
+
+```go
+sw := &statusWriter{ResponseWriter: w}
+if r.Method == http.MethodPost {
+	_, _ = sw.Write([]byte("!"))
+}
+next.ServeHTTP(sw, r)
+```
+
+```
+$ go test -count=1 -v -run "TestLoggingMiddlewareDoesNotAlterBody|TestN5InjectedBodyWriteTurnsP4Red" ./internal/httpapi/
+
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_200_via_jsonResponse
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_503_refusal_via_jsonError
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_204_with_no_body
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/GET_body_written_in_two_calls,_implicit_200
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_200
+    reqlog_test.go:265: body: wrapped "!{\"orderId\":\"ord-1\",\"success\":true}\n", bare "{\"orderId\":\"ord-1\",\"success\":true}\n"
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_400_refusal
+    reqlog_test.go:265: status: wrapped 200, bare 400
+    reqlog_test.go:265: body: wrapped "!{\"error\":\"notionalUSD: must be positive\"}\n", bare "{\"error\":\"notionalUSD: must be positive\"}\n"
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/POST_204_with_no_body
+    reqlog_test.go:265: status: wrapped 200, bare 204
+    reqlog_test.go:265: body: wrapped "!", bare ""
+    reqlog_test.go:265: wrapped response adds headers [Content-Type X-Request-Id], want exactly [X-Request-Id]
+=== RUN   TestLoggingMiddlewareDoesNotAlterBody/DELETE_405_from_methodOnly
+--- FAIL: TestLoggingMiddlewareDoesNotAlterBody (0.01s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_200_via_jsonResponse (0.01s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_503_refusal_via_jsonError (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_204_with_no_body (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/GET_body_written_in_two_calls,_implicit_200 (0.00s)
+    --- FAIL: TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_200 (0.00s)
+    --- FAIL: TestLoggingMiddlewareDoesNotAlterBody/POST_with_a_request_body,_400_refusal (0.00s)
+    --- FAIL: TestLoggingMiddlewareDoesNotAlterBody/POST_204_with_no_body (0.00s)
+    --- PASS: TestLoggingMiddlewareDoesNotAlterBody/DELETE_405_from_methodOnly (0.00s)
+=== RUN   TestN5InjectedBodyWriteTurnsP4Red
+    reqlog_test.go:432: N5 injection: handler produced "{\"status\":\"healthy\"}\n", the mutated middleware produced "!{\"status\":\"healthy\"}\n"
+--- PASS: TestN5InjectedBodyWriteTurnsP4Red (0.00s)
+FAIL
+FAIL	github.com/koliance/backend/internal/httpapi	0.898s
+                                                     -> exit 1
+```
+
+**三行读数就是 A1 的全部证据**：
+
+1. **4 个 POST 行转红，4 个 GET 行仍绿**——方法维确实是新判据抓到的，不是噪声。
+2. **`TestN5InjectedBodyWriteTurnsP4Red` 仍然是 `--- PASS`**——**旧的那对判据在这个变异体上依旧全绿**。
+   这正是 §4.3 说的"两半一起瞎"：负向对照没有牙，于是 P4 的绿**证明不了任何事**。
+3. 修完之后 `MUTANT_EXIT=1`（红），**还原后复跑 exit 0**（绿）——见 §7.1。
+
+### 7.2.3 A4 脱敏：修后全表（`-v` 原文，节选）
+
+```
+$ go test -count=1 -v -run "TestSanitizeLogValue" ./internal/httpapi/
+
+--- PASS: TestSanitizeLogValue (0.00s)
+    --- PASS: TestSanitizeLogValue/keyword_DSN_(host/user/dbname,_no_://) (0.00s)
+    --- PASS: TestSanitizeLogValue/keyword_DSN_with_only_a_password (0.00s)
+    --- PASS: TestSanitizeLogValue/in-package_function_name (0.00s)
+    --- PASS: TestSanitizeLogValue/qualified_function_name (0.00s)
+    --- PASS: TestSanitizeLogValue/sql_quoted_relation_name (0.00s)
+    --- PASS: TestSanitizeLogValue/sqlstate_with_a_colon (0.00s)
+    --- PASS: TestSanitizeLogValue/credential_value_with_no_NAME= (0.00s)
+    --- PASS: TestSanitizeLogValue/file_path_with_no_leading_space (0.00s)
+    --- PASS: TestSanitizeLogValue/windows_file_path (0.00s)
+    --- PASS: TestSanitizeLogValue/ipv6_internal_address (0.00s)
+    --- PASS: TestSanitizeLogValue/single-label_host_with_a_port (0.00s)
+    --- PASS: TestSanitizeLogValue/localhost_with_a_port (0.00s)
+    --- PASS: TestSanitizeLogValue/hostname_with_an_underscore (0.00s)
+    --- PASS: TestSanitizeLogValue/control:_a_bare_url_path_is_left_alone (0.00s)
+    --- PASS: TestSanitizeLogValue/control:_ordinary_prose_is_left_alone (0.00s)
+    --- PASS: TestSanitizeLogValue/control:_a_package_qualifier_is_left_alone (0.00s)
+--- PASS: TestSanitizeLogValueKnownResiduals (0.00s)
+    --- PASS: TestSanitizeLogValueKnownResiduals/truncated_third-party_body (0.00s)
+    --- PASS: TestSanitizeLogValueKnownResiduals/third-party_body_with_a_brace_inside_a_string_value (0.00s)
+    --- PASS: TestSanitizeLogValueKnownResiduals/bare_single-label_hostname_with_no_port (0.00s)
+    --- PASS: TestSanitizeLogValueKnownResiduals/bare_credential_value_with_no_label_and_no_known_prefix (0.00s)
+PASS
+ok  	github.com/koliance/backend/internal/httpapi	0.883s
+                                                     -> exit 0
+```
+
+> **两个 `control:` 行是本节的要点，不是陪衬。** 放宽路径规则（补 `reFilePathRel`）与
+> 放宽主机规则（补 IPv6 / 下划线 / 端口）**都有可能吃掉 URL 路径或包限定名**——
+> 前者是本中间件最有排查价值的字段，后者是初版注释承诺不动的。
+> 这两个控制行**就是为那两处放宽准备的**：`/api/v1/market/prices` 必须原样留下，
+> `errors.Unwrap` 必须原样留下。**去掉任意一条放宽，对应控制行不会红**（它是控制，不是断言），
+> 所以它们的作用是**防止过度脱敏**，与"密钥必须消失"是**两个方向**的判据。
+
+### 7.2.4 A5 与 A7（`-race -v` 原文）
+
+```
+$ go test -race -count=1 -v -run "TestGeneratedRequestID" ./internal/httpapi/
+    reqlog_test.go:709: 994/1000 generated ids match priceShapedInText, band [970, 1000] (example: 53d0ebec9e38677c1342190f9b937c78 -> "38677") — a measurement, not a property; see the doc comment
+--- PASS: TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement (0.02s)
+ok  	github.com/koliance/backend/internal/httpapi	2.367s
+                                                     -> exit 0
+
+$ go test -race -count=1 -v -run "TestCORS" ./internal/httpapi/
+--- PASS: TestCORSAllowList (0.01s)
+--- PASS: TestCORSExposesTheRequestIDToCrossOriginScripts (0.00s)
+PASS
+ok  	github.com/koliance/backend/internal/httpapi	2.366s
+                                                     -> exit 0
+```
+
+### 7.4 A7 负向对照：去掉 `Access-Control-Expose-Headers`（**真跑，已还原**）
+
+```
+$ # 把 middleware.go 的 Set("Access-Control-Expose-Headers", corsExposeHeaders) 注释掉
+$ go test -count=1 -run "TestCORSExposesTheRequestIDToCrossOriginScripts" ./internal/httpapi/
+--- FAIL: TestCORSExposesTheRequestIDToCrossOriginScripts (0.01s)
+    router_test.go:153: Access-Control-Expose-Headers = "", does not name X-Request-Id — the response header is on the wire and invisible to JS
+    router_test.go:163: GET response Access-Control-Expose-Headers = "", does not name X-Request-Id
+FAIL
+FAIL	github.com/koliance/backend/internal/httpapi	1.017s
+                                                     -> exit 1
+
+$ # 还原后
+$ go test -count=1 -run "TestCORSExposesTheRequestIDToCrossOriginScripts" ./internal/httpapi/
+ok  	github.com/koliance/backend/internal/httpapi	1.002s
+                                                     -> exit 0
+```
+
 > `newRequestID` **75%** —— 未覆盖的是 `rand.Read` 失败分支。该分支在 Go 1.24+
 > **不可达**（`crypto/rand.Read` 失败时 panic），`reqlog.go:68-71` 已写明。
 > 这是**接受的残余**，不是遗漏。
