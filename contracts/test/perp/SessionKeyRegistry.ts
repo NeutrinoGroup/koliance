@@ -50,6 +50,9 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
   const ONE_DAY = 86_400n;
   const MAX_PER_TX = usdc(100);
   const DAILY_LIMIT = usdc(250);
+  /** Frequency limit: generous by default so the cap tests are not rate-limited. */
+  const MAX_TX_PER_WINDOW = 10n;
+  const TX_WINDOW_SECONDS = 60n;
 
   /** The typed structure, in viem's shape. Must mirror the contract constant. */
   const DOMAIN = () =>
@@ -67,6 +70,8 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       { name: "sessionKey", type: "address" },
       { name: "maxSpendPerTx", type: "uint256" },
       { name: "dailySpendLimit", type: "uint256" },
+      { name: "maxTxPerWindow", type: "uint256" },
+      { name: "txWindowSeconds", type: "uint256" },
       { name: "validUntil", type: "uint256" },
       { name: "nonce", type: "uint256" },
     ],
@@ -99,6 +104,8 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       sessionKey,
       maxSpendPerTx: MAX_PER_TX,
       dailySpendLimit: DAILY_LIMIT,
+      maxTxPerWindow: MAX_TX_PER_WINDOW,
+      txWindowSeconds: TX_WINDOW_SECONDS,
       validUntil: await validUntil(),
       nonce,
       ...overrides,
@@ -118,13 +125,17 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
     const { message, signature } = await sign(user.account, overrides);
     await registry.write.registerDelegation(
       [
-        message.user as `0x${string}`,
-        message.agent as `0x${string}`,
-        message.sessionKey as `0x${string}`,
-        message.maxSpendPerTx as bigint,
-        message.dailySpendLimit as bigint,
-        message.validUntil as bigint,
-        message.nonce as bigint,
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
         signature,
       ],
       { account: user.account },
@@ -212,6 +223,8 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
       message.sessionKey as `0x${string}`,
       message.maxSpendPerTx as bigint,
       message.dailySpendLimit as bigint,
+      message.maxTxPerWindow as bigint,
+      message.txWindowSeconds as bigint,
       message.validUntil as bigint,
       message.nonce as bigint,
     ]);
@@ -275,16 +288,20 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
     const { message, signature } = await sign(user.account);
     await expectRevert(
       registry.write.registerDelegation(
-        [
-          message.user as `0x${string}`,
-          message.agent as `0x${string}`,
-          message.sessionKey as `0x${string}`,
-          message.maxSpendPerTx as bigint,
-          message.dailySpendLimit as bigint,
-          message.validUntil as bigint,
-          message.nonce as bigint,
-          signature,
-        ],
+      [
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
+        signature,
+      ],
         { account: user.account },
       ),
       "NonceAlreadyUsed",
@@ -317,16 +334,21 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await expectRevert(
       registry.write.registerDelegation(
-        [
-          message.user as `0x${string}`,
-          message.agent as `0x${string}`,
-          message.sessionKey as `0x${string}`,
-          usdc(1_000_000), // <- inflated
+      [
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: usdc(1_000_000),
+          dailySpendLimit: // <- inflated
           message.dailySpendLimit as bigint,
-          message.validUntil as bigint,
-          message.nonce as bigint,
-          signature,
-        ],
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
+        signature,
+      ],
         { account: outsider.account },
       ),
       "InvalidSignature",
@@ -341,16 +363,20 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await expectRevert(
       registry.write.registerDelegation(
-        [
-          message.user as `0x${string}`,
-          message.agent as `0x${string}`,
-          message.sessionKey as `0x${string}`,
-          message.maxSpendPerTx as bigint,
-          message.dailySpendLimit as bigint,
-          message.validUntil as bigint,
-          message.nonce as bigint,
-          signature,
-        ],
+      [
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
+        signature,
+      ],
         { account: outsider.account },
       ),
       "InvalidSignature",
@@ -374,16 +400,20 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await expectRevert(
       registry.write.registerDelegation(
-        [
-          message.user as `0x${string}`,
-          message.agent as `0x${string}`,
-          message.sessionKey as `0x${string}`,
-          message.maxSpendPerTx as bigint,
-          message.dailySpendLimit as bigint,
-          message.validUntil as bigint,
-          message.nonce as bigint,
-          malleable,
-        ],
+      [
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
+        malleable,
+      ],
         { account: outsider.account },
       ),
       "SignatureMalleable",
@@ -474,6 +504,8 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
         sessionKey, // same key
         maxSpendPerTx: MAX_PER_TX,
         dailySpendLimit: DAILY_LIMIT,
+        maxTxPerWindow: MAX_TX_PER_WINDOW,
+        txWindowSeconds: TX_WINDOW_SECONDS,
         validUntil: await validUntil(),
         nonce: await second.read.userNonce([outsider.account.address]),
       };
@@ -494,13 +526,17 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await second.write.registerDelegation(
       [
-        m2.user as `0x${string}`,
-        m2.agent as `0x${string}`,
-        m2.sessionKey as `0x${string}`,
-        m2.maxSpendPerTx as bigint,
-        m2.dailySpendLimit as bigint,
-        m2.validUntil as bigint,
-        m2.nonce as bigint,
+        {
+          user: m2.user as `0x${string}`,
+          agent: m2.agent as `0x${string}`,
+          sessionKey: m2.sessionKey as `0x${string}`,
+          maxSpendPerTx: m2.maxSpendPerTx as bigint,
+          dailySpendLimit: m2.dailySpendLimit as bigint,
+          maxTxPerWindow: m2.maxTxPerWindow as bigint,
+          txWindowSeconds: m2.txWindowSeconds as bigint,
+          validUntil: m2.validUntil as bigint,
+          nonce: m2.nonce as bigint,
+        },
         s2,
       ],
       { account: outsider.account },
@@ -515,6 +551,8 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
         sessionKey,
         maxSpendPerTx: MAX_PER_TX,
         dailySpendLimit: DAILY_LIMIT,
+        maxTxPerWindow: MAX_TX_PER_WINDOW,
+        txWindowSeconds: TX_WINDOW_SECONDS,
         validUntil: await validUntil(),
         nonce: await registry.read.userNonce([outsider.account.address]),
       };
@@ -530,16 +568,20 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await expectRevert(
       registry.write.registerDelegation(
-        [
-          message.user as `0x${string}`,
-          message.agent as `0x${string}`,
-          message.sessionKey as `0x${string}`,
-          message.maxSpendPerTx as bigint,
-          message.dailySpendLimit as bigint,
-          message.validUntil as bigint,
-          message.nonce as bigint,
-          signature,
-        ],
+      [
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
+        signature,
+      ],
         { account: outsider.account },
       ),
       "SessionKeyAlreadyBound",
@@ -623,16 +665,20 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await expectRevert(
       registry.write.registerDelegation(
-        [
-          message.user as `0x${string}`,
-          message.agent as `0x${string}`,
-          message.sessionKey as `0x${string}`,
-          message.maxSpendPerTx as bigint,
-          message.dailySpendLimit as bigint,
-          message.validUntil as bigint,
-          message.nonce as bigint,
-          signature,
-        ],
+      [
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
+        signature,
+      ],
         { account: user.account },
       ),
       "InvalidNonce",
@@ -651,16 +697,20 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await expectRevert(
       registry.write.registerDelegation(
-        [
-          message.user as `0x${string}`,
-          message.agent as `0x${string}`,
-          message.sessionKey as `0x${string}`,
-          message.maxSpendPerTx as bigint,
-          message.dailySpendLimit as bigint,
-          message.validUntil as bigint,
-          message.nonce as bigint,
-          signature,
-        ],
+      [
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
+        signature,
+      ],
         { account: user.account },
       ),
       "DelegationIsFrozen",
@@ -670,13 +720,17 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
     await registry.write.unfreeze([sessionKey], { account: user.account });
     await registry.write.registerDelegation(
       [
-        message.user as `0x${string}`,
-        message.agent as `0x${string}`,
-        message.sessionKey as `0x${string}`,
-        message.maxSpendPerTx as bigint,
-        message.dailySpendLimit as bigint,
-        message.validUntil as bigint,
-        message.nonce as bigint,
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
         signature,
       ],
       { account: user.account },
@@ -705,13 +759,17 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
 
     await registry.write.registerDelegation(
       [
-        message.user as `0x${string}`,
-        message.agent as `0x${string}`,
-        message.sessionKey as `0x${string}`,
-        message.maxSpendPerTx as bigint,
-        message.dailySpendLimit as bigint,
-        message.validUntil as bigint,
-        message.nonce as bigint,
+        {
+          user: message.user as `0x${string}`,
+          agent: message.agent as `0x${string}`,
+          sessionKey: message.sessionKey as `0x${string}`,
+          maxSpendPerTx: message.maxSpendPerTx as bigint,
+          dailySpendLimit: message.dailySpendLimit as bigint,
+          maxTxPerWindow: message.maxTxPerWindow as bigint,
+          txWindowSeconds: message.txWindowSeconds as bigint,
+          validUntil: message.validUntil as bigint,
+          nonce: message.nonce as bigint,
+        },
         signature,
       ],
       { account: user.account },
@@ -733,5 +791,110 @@ describe("SessionKeyRegistry (EIP-712 delegation)", async function () {
     await publicClient.request({ method: "evm_mine" } as never);
     assert.equal(await registry.read.remainingDailyAllowance([sessionKey]), DAILY_LIMIT);
     await registry.write.authorizeSpend([sessionKey, half], { account: agent.account });
+  });
+
+  // ==================== Frequency limit (max spends per window) ====================
+
+  it("frequency limit: allows up to maxTxPerWindow spends and reports the remaining count", async function () {
+    await reset();
+    await register({ maxTxPerWindow: 3n, txWindowSeconds: 60n });
+
+    assert.equal(await registry.read.remainingTxInWindow([sessionKey]), 3n);
+
+    const small = usdc(1);
+    for (let i = 0; i < 3; i++) {
+      await registry.write.authorizeSpend([sessionKey, small], { account: agent.account });
+    }
+
+    const d = await registry.read.getDelegation([sessionKey]);
+    assert.equal(d.txInWindow, 3n);
+    assert.equal(d.maxTxPerWindow, 3n);
+    assert.equal(d.txWindowSeconds, 60n);
+    assert.equal(await registry.read.remainingTxInWindow([sessionKey]), 0n);
+    assert.equal(await registry.read.isAuthorized([sessionKey, small]), false, "isAuthorized ignores the rate limit");
+  });
+
+  it("frequency limit: refuses the next spend in the same window with ExceededRateLimit", async function () {
+    // Continues from the previous test: 3 of 3 spends used inside the window.
+    await expectRevert(
+      registry.write.authorizeSpend([sessionKey, usdc(1)], { account: agent.account }),
+      "ExceededRateLimit",
+    );
+    // The refused call consumed nothing.
+    const d = await registry.read.getDelegation([sessionKey]);
+    assert.equal(d.txInWindow, 3n);
+    assert.equal(d.spentInWindow, usdc(3));
+  });
+
+  it("frequency limit: resets after the window closes, independently of the daily cap", async function () {
+    const resetsAt = await registry.read.txWindowResetsAt([sessionKey]);
+    const now = (await publicClient.getBlock()).timestamp;
+    assert.ok(resetsAt > now, "window should still be open");
+
+    await publicClient.request({ method: "evm_increaseTime", params: [Number(resetsAt - now) + 1] } as never);
+    await publicClient.request({ method: "evm_mine" } as never);
+
+    assert.equal(await registry.read.remainingTxInWindow([sessionKey]), 3n);
+    assert.equal(await registry.read.isAuthorized([sessionKey, usdc(1)]), true);
+    await registry.write.authorizeSpend([sessionKey, usdc(1)], { account: agent.account });
+
+    const d = await registry.read.getDelegation([sessionKey]);
+    assert.equal(d.txInWindow, 1n, "tx window did not restart from zero");
+    // The daily window did not roll: the frequency limit has its own clock.
+    assert.equal(d.spentInWindow, usdc(4));
+  });
+
+  it("frequency limit: the module path (chargeSpend) is rate-limited too", async function () {
+    await reset();
+    await registry.write.setSpendConsumer([deployer.account.address]);
+    await register({ maxTxPerWindow: 1n, txWindowSeconds: 60n });
+
+    await registry.write.chargeSpend([sessionKey, usdc(1)], { account: deployer.account });
+    await expectRevert(
+      registry.write.chargeSpend([sessionKey, usdc(1)], { account: deployer.account }),
+      "ExceededRateLimit",
+    );
+  });
+
+  it("frequency limit: per-tx cap is checked first and a refused spend does not use a slot", async function () {
+    await reset();
+    await register({ maxTxPerWindow: 2n, txWindowSeconds: 60n });
+
+    await expectRevert(
+      registry.write.authorizeSpend([sessionKey, MAX_PER_TX + 1n], { account: agent.account }),
+      "ExceededPerTxLimit",
+    );
+    assert.equal(await registry.read.remainingTxInWindow([sessionKey]), 2n);
+  });
+
+  it("frequency limit: refuses a delegation without one (zero count or zero window)", async function () {
+    await reset();
+    await expectRevert(register({ maxTxPerWindow: 0n }), "InvalidRateLimit");
+    await expectRevert(register({ txWindowSeconds: 0n }), "InvalidRateLimit");
+  });
+
+  it("frequency limit: is signed — a relayer cannot loosen it", async function () {
+    await reset();
+    const { message, signature } = await sign(user.account, { maxTxPerWindow: 2n });
+    await expectRevert(
+      registry.write.registerDelegation(
+        [
+          {
+            user: message.user as `0x${string}`,
+            agent: message.agent as `0x${string}`,
+            sessionKey: message.sessionKey as `0x${string}`,
+            maxSpendPerTx: message.maxSpendPerTx as bigint,
+            dailySpendLimit: message.dailySpendLimit as bigint,
+            maxTxPerWindow: 1_000n, // tampered after signing
+            txWindowSeconds: message.txWindowSeconds as bigint,
+            validUntil: message.validUntil as bigint,
+            nonce: message.nonce as bigint,
+          },
+          signature,
+        ],
+        { account: agent.account },
+      ),
+      "InvalidSignature",
+    );
   });
 });

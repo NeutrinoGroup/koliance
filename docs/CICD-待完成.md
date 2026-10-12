@@ -22,6 +22,21 @@
 
 ---
 
+## 0.1 阻塞当前进度的 6 项清单（单列）
+
+> 以下 6 项标为「**阻塞=是**」，是阻断合约部署、生产联调或准出验收的关键瓶颈，已从下文 29 项明细中单独抽引汇总结算：
+
+| 编号 | 缺什么 | 在哪补 | 实测依据 | 不补的后果 | 谁做 | 影响面 / 阻塞关系 |
+| --- | --- | --- | --- | --- | --- | --- |
+| **D-1** | `PRIVATE_KEY`（含 Monad 测试币） | 本地 `contracts/.env` | `contracts/hardhat.config.ts:24,30`、`deploy/README.md:45-48` | perp 栈与 `SessionKeyRegistry` 无法部署，阻塞 **GAP-26** 与 **GAP-45**；**[已补充]** 本地实测地址 `0x7C8C5E...` 余额 17.55 MON 充足，随时可执行部署 | 作者 | P0 最大单点，阻断全部链上交互（凭据已补充） |
+| **C-3** | Perp 四地址（`USDC` / `ORACLE` / `VAULT` / `POSITION_MANAGER`） | Vercel 面板 | `src/lib/perpConfig.ts:95-98`、`src/components/PositionPanel.tsx:409-417` | 前端拒绝渲染数字，页面常驻「Perp 模块未配置」 | 作者 | 阻断 Perp 前端交互，强依赖 D-1 |
+| **C-2** | 服务端密钥四项（含 `NEXT_PUBLIC_GO_BACKEND_URL`） | Vercel 面板 | `src/lib/api.ts:3`、`src/lib/supabaseServer.ts:11` | 前端请求回落至 `localhost:8080`，线上真数据联调全断 | 作者 | 阻断 Vercel 生产前后端联调 |
+| **B-2** | `KOLIANCE_API_TOKEN` | Render 面板（`render.yaml:44-45`） | `backend/internal/config/config.go:67-71` | Operator 端点全部 503 拒决（`batch-settle` 等无法执行） | 作者 | 阻断演示运营与算力结算路径 |
+| **C-4** | `NEXT_PUBLIC_OAUTH_RELAY_ORIGINS` | Vercel 面板（`.env.example:25`） | `src/lib/oauthState.ts:22-27,38-40` | 若 Vercel 生产域名不在默认 4 个白名单内，OAuth 回跳被拒 | 作者 | 阻断非标域名下的 OAuth 登录 |
+| **F-1** | 分支保护 required check（CI 门禁） | GitHub 仓库 Settings → Branches | `docs/planning/执行方案-自治Agent清结算.md:405`、`docs/GAP台账.md:169` | CI 红灯 PR 仍可合入，门禁形同虚设 | 作者 | 03 环准出的唯一核心凭据 |
+
+---
+
 ## 1. 总览：缺什么 / 在哪补 / 为什么 / 不补的后果
 
 > 依据列的文件路径**均在仓库内**（本仓即框架，见 `AGENTS.md` §5 入库策略），clone 后可直接打开核对。
@@ -30,7 +45,7 @@
 
 | 编号 | 缺什么 | 在哪补 | 实测依据 | 不补的后果 | 谁做 | 阻塞 |
 | --- | --- | --- | --- | --- | --- | --- |
-| **A-1** | `BACKEND_API_URL` | GitHub 仓库 secret | `.github/workflows/keepalive.yml:15` 读 `secrets.BACKEND_API_URL` | 回落到硬编码默认 `https://koliance-api.onrender.com`（同文件 `:15`）。**后端换域名时会静默探错地址**——keepalive 报 `[WARN]` 却不拦任何东西（`:22`），即**失败无声** | 作者 | 否 |
+| **A-1** | `BACKEND_API_URL` | GitHub 仓库 secret | `.github/workflows/keepalive.yml:15` 读 `secrets.BACKEND_API_URL` | 回落到硬编码默认 `https://koliance-backend.onrender.com`（同文件 `:15`，即 `render.yaml` 的服务名 `koliance-backend`）。**后端换域名时会静默探错地址**——keepalive 报 `[WARN]` 却不拦任何东西（`:22`），即**失败无声** | 作者 | 否 |
 | **A-2** | **不需要任何 secret**（**已核实，勿加**） | — | `git grep -n "secrets\\." -- .github/` → **仅命中 `keepalive.yml:15` 一处**；`ci.yml` 的四个 job（`secrets:60` / `contracts:82` / `frontend:134` / `backend:169`）**零 `secrets.` 引用** | 多配 secret 无害但也无用；**且容易让人以为「CI 需要 PRIVATE_KEY」**——它不需要（见 A-3） | — | 否 |
 | **A-3** | `PRIVATE_KEY` / `ETHERSCAN_API_KEY` **不进 CI** | 不要放进 CI secrets | `ci.yml:113-132` 的四步（compile / tsc / test --coverage / 覆盖率地板）**全部在进程内 hardhat 链上跑**，不联网部署；`contracts/hardhat.config.ts:24,30` 的两个 `configVariable("PRIVATE_KEY")` 只在 `monadTestnet` / `monadMainnet` 两个 http 网络下才求值 | 若误把部署私钥放进 CI secret，等于**让任何能改 workflow 的 PR 拿到出金私钥**。这两者属 §D 的本地/人工部署凭证 | 作者（不要做） | 否 |
 
@@ -45,7 +60,7 @@
 | **B-3** | `STEAM_API_KEY` | Render 面板（`render.yaml:17-18`） | 读取处 `config.go:54`，**该行带明文默认值** | 后端不再从面板取值，**静默回落到已泄露的旧密钥**——正是 GAP-12 要拆掉的那条路 | 作者 | 否 |
 | **B-4** | `ALPACA_API_KEY` / `ALPACA_API_SECRET` | Render 面板（`render.yaml:21-24`） | 读取处 `config.go:56-57`，**两行均带明文默认值** | 同 B-3：静默回落到已泄露的旧值；Alpaca 侧一旦轮换，**线上行情/下单直接失效** | 作者 | 否 |
 | **B-5** | `STRIPE_SECRET_KEY` | Render 面板（`render.yaml:29-30`） | 读取处 `config.go:60`，**默认空串** | Stripe checkout / customer 调用失败（充值路径不可用） | 作者 | 否 |
-| **B-6** | `STRIPE_PUBLISHABLE_KEY` | Render 面板（`render.yaml:27-28`） | 读取处 `config.go:59`，**带明文默认值** | 同 B-3（可发布键，风险较低，但轮换后仍需同步） | 作者 | 否 |
+| **B-6** | `STRIPE_PUBLISHABLE_KEY` | Render 面板（`render.yaml:27-28`） | 读取处 `config.go`，~~带明文默认值~~ 已移除默认值，仅从环境变量读取 | 同 B-3（可发布键，风险较低，但轮换后仍需同步） | 作者 | 否 |
 | **B-7** | `CORS_ALLOWED_ORIGINS` | **已配**（`render.yaml:40-41` 有值） | 读取处 `config.go:66`；默认值 `config.go:42` | 仅当前端域名变更时需改；**改动即影响浏览器能否调后端** | 作者 | 否 |
 | **B-8** | `DEMO_PUBLIC_TRADING` 的**取值裁定** | Render 面板或 `render.yaml:49-50` | 读取处 `config.go:68`；`render.yaml:49-50` 现为 `"true"` | 现值 `true` = **浏览器无需 operator token 即可下 Alpaca paper 单**（`render.yaml:46-48` 的注释即此意）。演示后若要收回，**这是要改的那一行** | 作者（需裁定） | 否 |
 | **B-9** | `STEAM_DOMAIN` 是否仍为 `koliance.oodai.space` | Render 面板 / `render.yaml:19-20` | 该值被用于 **Stripe 成功/取消回跳**（`backend/internal/httpapi/router.go:428,434`），非仅显示 | 域名变更而不改此值 → Stripe 回跳到旧域；且 `SteamDomain` 的命名与用途已不符（**命名误导，非缺陷**） | 作者 | 否 |
@@ -67,7 +82,7 @@
 
 | 编号 | 缺什么 | 在哪补 | 实测依据 | 不补的后果 | 谁做 | 阻塞 |
 | --- | --- | --- | --- | --- | --- | --- |
-| **D-1** | `PRIVATE_KEY`（**该地址还需有 Monad 测试币**） | 本地 `contracts/.env`（模板 `contracts/.env.example:1`） | `contracts/hardhat.config.ts:24,30` 用 `configVariable("PRIVATE_KEY")`；`deploy/README.md:45-48` 明写「这是 GAP-26 唯一剩余的阻塞」；`docs/GAP台账.md:185` 同判 | perp 栈与 `SessionKeyRegistry` **一个都没部署**；连带 **GAP-26**（perp 未部署）、**GAP-45**（清算大屏无数据源）、§C-3（前端四地址无从取值）；`/perp` 永久显示「未配置」 | 作者 | **是**（P0，最大单点） |
+| **D-1** | `PRIVATE_KEY`（**该地址还需有 Monad 测试币**） | 本地 `contracts/.env`（模板 `contracts/.env.example:1`） | `contracts/hardhat.config.ts:24,30` 用 `configVariable("PRIVATE_KEY")`；`deploy/README.md:45-48` 明写「这是 GAP-26 唯一剩余的阻塞」；`docs/GAP台账.md:185` 同判 | perp 栈与 `SessionKeyRegistry` **一个都没部署**；连带 **GAP-26**（perp 未部署）、**GAP-45**（清算大屏无数据源）、§C-3（前端四地址无从取值）；`/perp` 永久显示「未配置」。**[实测已补充]**：本地 `contracts/.env` 已注入私钥，链上实测地址 `0x7C8C5E...` 余额 17.55 MON，具备随时部署条件 | 作者 | **是**（P0，最大单点；本地凭据已补充） |
 | **D-2** | `ETHERSCAN_API_KEY` | 本地 `contracts/.env`（模板 `contracts/.env.example:2`） | `contracts/hardhat.config.ts:40`（`verify.etherscan.enabled: true`，`:38`） | 合约**验证**这一步不可用。`hardhat.config.ts:17-33`（`networks`）与 `:34-46`（`verify`）是两段独立配置；本文件**只断言 verify 需要该 key**，**不断言 ignition 部署是否受影响**——二者关系**未实测**，[未能验证] | 作者 | 否 |
 
 ### E. 凭证轮换（GAP-12）—— 纯外部后台操作，AI 无法代办
