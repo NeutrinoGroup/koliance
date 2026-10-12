@@ -8,9 +8,11 @@ import {
   effectiveWalletAddress,
   githubAccountFromStorage,
   googleAccountFromProfile,
+  googleRowKey,
   mergeIdentity,
   readAccountState,
   steamAccountFromStorage,
+  storedGoogleRow,
   writeAccountState,
 } from "../src/lib/authState";
 
@@ -349,24 +351,41 @@ function sourceFiles(dir: string): string[] {
 }
 
 /**
- * A direct write is not a style violation - it is the defect returning.
+ * A direct access to one of the three identity keys is not a style violation -
+ * it is the defect returning, in either direction.
  *
- * `src/lib/authState.ts` is the only place allowed to touch these keys by name,
- * because it is the only place that also fires the notification. A component
- * that calls `localStorage.setItem("koliance_google_profile", …)` writes a
- * value the navbar has no reason to re-read: issue #34, exactly, with no test
- * failure anywhere to say so.
+ * **Writes** (`setItem` / `removeItem`): `src/lib/authState.ts` is the only place
+ * allowed to write these keys by name, because it is the only place that also
+ * fires the notification. A component that calls
+ * `localStorage.setItem("koliance_google_profile", …)` writes a value the navbar
+ * has no reason to re-read: issue #34, exactly, with no test failure anywhere to
+ * say so.
+ *
+ * **Reads** (`getItem`) are the other half of the same channel, and the half that
+ * was still spelled out longhand after #34 was fixed (`GoogleAuthWall.tsx:60`,
+ * `GitHubDevWall.tsx:80`, `AgentCardTerminal.tsx:184`). A read that goes through
+ * `STORAGE_KEYS` cannot miss a rename of the key; a literal can, silently, and it
+ * fails as "this visitor is signed out" rather than as an error.
  *
  * The single writer is identified as `src/lib/authState.ts` **or** as any file
  * that exports `writeAccountState` - never by "everything that matched came out
  * empty". An empty allow-list is what this guard returns when its pattern is
  * broken, so the test below asserts the writer was actually found.
  */
-const DIRECT_WRITE =
-  /localStorage\.(setItem|removeItem)\(\s*["'](koliance_google_profile|koliance_github_user|koliance_steam_id)["']/;
+const DIRECT_ACCESS =
+  /localStorage\.(setItem|removeItem|getItem)\(\s*["'](koliance_google_profile|koliance_github_user|koliance_steam_id)["']/;
 
 function isTheSharedWriter(relativePath: string, source: string): boolean {
   return relativePath === "lib/authState.ts" || /export function writeAccountState\b/.test(source);
+}
+
+function directAccessOffenders(relative: (file: string) => string): string[] {
+  return sourceFiles(SRC_ROOT)
+    .filter((file) => {
+      const source = readFileSync(file, "utf8");
+      return DIRECT_ACCESS.test(source) && !isTheSharedWriter(relative(file), source);
+    })
+    .map(relative);
 }
 
 describe("the identity rows have exactly one writer", () => {
@@ -396,34 +415,40 @@ describe("the identity rows have exactly one writer", () => {
       "the shared writer was not found - the guard below would pass vacuously"
     ).toEqual(["lib/authState.ts"]);
 
-    const offenders = sourceFiles(SRC_ROOT)
-      .filter((file) => {
-        const source = readFileSync(file, "utf8");
-        return DIRECT_WRITE.test(source) && !isTheSharedWriter(relative(file), source);
-      })
-      .map(relative);
+    const offenders = directAccessOffenders(relative);
 
     expect(
       offenders,
-      `these files write an identity row behind the shared channel, so a sign-in they ` +
-        `perform will not reach the navbar (issue #34): ${offenders.join(", ")}`
+      `these files name an identity key behind the shared channel, so a sign-in they ` +
+        `perform will not reach the navbar, or a rename of the key will silently miss ` +
+        `them (issue #34): ${offenders.join(", ")}`
     ).toEqual([]);
   });
 
-  it("has teeth on each of the three keys", () => {
-    // Negative control, per key. Without it, a typo in DIRECT_WRITE would report
-    // "no offenders" forever - indistinguishable from a clean tree.
+  it("has teeth on each of the three keys, in both directions", () => {
+    // Negative control, per key and per direction. Without it, a typo in
+    // DIRECT_ACCESS would report "no offenders" forever - indistinguishable from
+    // a clean tree.
     const reintroduced = [
       `localStorage.setItem("koliance_google_profile", JSON.stringify(profile));`,
       `localStorage.setItem("koliance_github_user", data.stats.username);`,
       `localStorage.removeItem("koliance_steam_id");`,
+      // The read half: this is the exact shape that was left in three components
+      // after #34 was fixed.
+      `const cached = localStorage.getItem("koliance_google_profile");`,
+      `const cachedUser = localStorage.getItem("koliance_github_user");`,
+      `const cached = localStorage.getItem("koliance_steam_id");`,
     ];
     for (const line of reintroduced) {
-      expect(DIRECT_WRITE.test(line), `the pattern misses: ${line}`).toBe(true);
+      expect(DIRECT_ACCESS.test(line), `the pattern misses: ${line}`).toBe(true);
     }
-    // And it does not fire on a key read, or on a different key.
-    expect(DIRECT_WRITE.test(`localStorage.getItem("koliance_google_profile")`)).toBe(false);
-    expect(DIRECT_WRITE.test(`localStorage.setItem("koliance_audit_log", "x")`)).toBe(false);
+    // And it does not fire on a different key, in either direction.
+    expect(DIRECT_ACCESS.test(`localStorage.getItem("koliance_google_profile")`)).toBe(true);
+    expect(DIRECT_ACCESS.test(`localStorage.setItem("koliance_audit_log", "x")`)).toBe(false);
+    expect(DIRECT_ACCESS.test(`localStorage.getItem("koliance_lang")`)).toBe(false);
+    // A read through the shared constant is the shape the components now use,
+    // and must not be flagged.
+    expect(DIRECT_ACCESS.test(`localStorage.getItem(STORAGE_KEYS.google)`)).toBe(false);
   });
 
   it("is subscribed to by the provider that re-renders the tree", () => {
@@ -481,5 +506,178 @@ describe("the Sign In entry point opens a session", () => {
     const source = readFileSync(NAV, "utf8");
     expect(source).toMatch(/signOut\(\)/);
     expect(source).toContain('t("auth.logout")');
+  });
+});
+
+// ==================== THE TWO REGRESSIONS AN INDEPENDENT FALSIFIER FOUND ====================
+
+describe("a repeated write is not news (the bridge's termination condition)", () => {
+  it("stays silent when the stored bytes are unchanged, and only then", () => {
+    const onAccountChanged = vi.fn();
+    windowStub.addEventListener(ACCOUNT_STATE_EVENT, onAccountChanged);
+
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(onAccountChanged).toHaveBeenCalledTimes(1);
+
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(onAccountChanged).toHaveBeenCalledTimes(1);
+
+    // A real change still notifies - the guard must not be a mute button.
+    writeAccountState("google", { ...EXCHANGE_PROFILE, name: "Ada L." });
+    expect(onAccountChanged).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays silent when clearing a rail that holds nothing", () => {
+    // A sign-out that clears three rails must not emit three notifications over
+    // a store that already held none; that noise is what re-arms a subscribing
+    // effect and is the class of defect being closed here.
+    const onAccountChanged = vi.fn();
+    windowStub.addEventListener(ACCOUNT_STATE_EVENT, onAccountChanged);
+    writeAccountState("google", null);
+    writeAccountState("github", null);
+    writeAccountState("steam", null);
+    expect(onAccountChanged).not.toHaveBeenCalled();
+  });
+
+  it("sees a value re-read from the store as unchanged", () => {
+    // The property the bridge relies on: what it re-derives from the store
+    // serialises to the same bytes it just wrote, so its own write is the last
+    // one it hears about.
+    writeAccountState("google", EXCHANGE_PROFILE);
+    const stored = storage.raw(STORAGE_KEYS.google);
+    expect(stored).toBe(JSON.stringify(EXCHANGE_PROFILE));
+    writeAccountState("google", JSON.parse(stored as string));
+    expect(storage.raw(STORAGE_KEYS.google)).toBe(stored);
+  });
+});
+
+describe("the credit allowance survives the database spelling", () => {
+  it("reads credit_allowance_usd from a row spelled the way select(*) returns it", () => {
+    // `GET /api/user/profile` hands back the row under its column names
+    // (`001_init_and_composite_indexes.sql:92`). Reading only the camelCase name
+    // silently substituted the $600 default for the real allowance - and the
+    // number is not cosmetic: the navbar renders it and `AgentCardTerminal`
+    // adds it to the card's credit limit.
+    const account = googleAccountFromProfile({
+      id: "did:koliance:google:42",
+      email: "db@example.com",
+      trust_tier: "GOOGLE VERIFIED CITIZEN",
+      credit_allowance_usd: 2500,
+    });
+    expect(account?.creditAllowanceUSD).toBe(2500);
+  });
+
+  it("prefers the JSON spelling when a row carries both", () => {
+    const account = googleAccountFromProfile({ ...EXCHANGE_PROFILE, credit_allowance_usd: 9999 });
+    expect(account?.creditAllowanceUSD).toBe(EXCHANGE_PROFILE.creditAllowanceUSD);
+  });
+
+  it("keeps a zero allowance that arrives in the database spelling", () => {
+    const account = googleAccountFromProfile({
+      ...EXCHANGE_PROFILE,
+      creditAllowanceUSD: undefined,
+      credit_allowance_usd: 0,
+    });
+    expect(account?.creditAllowanceUSD).toBe(0);
+  });
+
+  it("falls back to the documented default only when neither spelling is present", () => {
+    const account = googleAccountFromProfile({ ...EXCHANGE_PROFILE, creditAllowanceUSD: undefined });
+    expect(account?.creditAllowanceUSD).toBe(600);
+  });
+
+  it("folds the database's 1 for synthetic into the flag", () => {
+    // `select("*")` yields column names, so a synthetic demo row read back from
+    // the database arrived with `synthetic` false and would have rendered as a
+    // real, credited identity.
+    expect(googleAccountFromProfile({ ...EXCHANGE_PROFILE, synthetic: 1 })?.synthetic).toBe(true);
+    expect(googleAccountFromProfile({ ...EXCHANGE_PROFILE, synthetic: true })?.synthetic).toBe(true);
+    expect(googleAccountFromProfile({ ...EXCHANGE_PROFILE, synthetic: 0 })?.synthetic).toBe(false);
+  });
+});
+
+describe("the Privy bridge recognises a stored row in either spelling", () => {
+  it("gives the exchange route's row and a re-spelled row the same key", () => {
+    // The bridge's previous termination test compared the DERIVED row's `id`
+    // against a freshly built `did:koliance:google:<subject>`. The derivation
+    // prefers a stored `id`, and `EditProfileModal` writes one alongside a
+    // rewritten name - so the two disagreed, the test was always false, and the
+    // effect re-ran on every write it made, each pass adding the allowance to
+    // the card's credit limit again.
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(googleRowKey(storedGoogleRow())).toBe(`did:koliance:google:${EXCHANGE_PROFILE.googleId}`);
+
+    // Same identity, different name (the round-trip `EditProfileModal` performs).
+    writeAccountState("google", { ...EXCHANGE_PROFILE, name: "Renamed By The Modal" });
+    expect(googleRowKey(storedGoogleRow())).toBe(`did:koliance:google:${EXCHANGE_PROFILE.googleId}`);
+
+    // A row that carries the derived `id` instead of `googleId` resolves the same.
+    writeAccountState("google", {
+      id: `did:koliance:google:${EXCHANGE_PROFILE.googleId}`,
+      email: EXCHANGE_PROFILE.email,
+    });
+    expect(googleRowKey(storedGoogleRow())).toBe(`did:koliance:google:${EXCHANGE_PROFILE.googleId}`);
+  });
+
+  it("is null for an empty store and for a row that identifies nobody", () => {
+    expect(storedGoogleRow()).toBeNull();
+    expect(googleRowKey(null)).toBeNull();
+    expect(googleRowKey({ name: "Nobody" })).toBeNull();
+  });
+
+  it("keys off googleId when a row carries a disagreeing id", () => {
+    // `EditProfileModal` spreads a `UserProfileData` (whose `id` is derived) next
+    // to a recomputed `googleId`, so the two CAN disagree in a real row. Keying
+    // off `id` first would make the bridge read such a row as a different
+    // account, overwrite it, and silently discard the user's edit.
+    expect(
+      googleRowKey({
+        id: "did:koliance:google:stale-from-the-modal",
+        googleId: "109842839210492819283",
+        email: "ada@example.com",
+      })
+    ).toBe("did:koliance:google:109842839210492819283");
+  });
+});
+
+describe("Sign Out sticks", () => {
+  it("raises the gate before the rows are cleared, and releases it on failure too", () => {
+    // STRUCTURAL, and labelled as such: `handleSignOut` is a closure inside a
+    // React component and this suite has no renderer, so its timing cannot be
+    // executed here. What is checkable is the ORDER, which is the whole fix.
+    //
+    // Bound: this reads lines, so it cannot see control flow. It also cannot
+    // prove `privyLogout()` resolves before `signOut()` runs - only that the
+    // `await` is written before it. Fail-to-pass in the other direction is
+    // covered by the negative mutation recorded in `docs/changes/050`.
+    const lines = readFileSync(NAV, "utf8").split(/\r?\n/);
+    const start = lines.findIndex((line) => line.includes("const handleSignOut"));
+    expect(start, "handleSignOut was not found by name").toBeGreaterThan(-1);
+    const body = lines.slice(start, start + 40).join("\n");
+
+    const gateAt = body.indexOf("setSigningOut(true)");
+    const logoutAt = body.indexOf("await privyLogout()");
+    const clearAt = body.indexOf("signOut()", gateAt + 1);
+    expect(gateAt, "the sign-out gate is gone").toBeGreaterThan(-1);
+    expect(logoutAt, "the Privy session is no longer ended").toBeGreaterThan(-1);
+    expect(clearAt, "the local rows are no longer cleared").toBeGreaterThan(-1);
+    expect(gateAt, "the gate must be raised before the session is ended").toBeLessThan(logoutAt);
+    expect(logoutAt, "the rows must be cleared only after the session is gone").toBeLessThan(clearAt);
+    // The gate is released on the failure path as well, or a rejected logout
+    // would leave the navbar unable to reflect a later sign-in.
+    expect(body).toMatch(/\}\s*finally\s*\{\s*setSigningOut\(false\);\s*\}/);
+  });
+
+  it("closes the bridge effect while signing out", () => {
+    // The gate is what makes the clear above stick. Without it the bridge re-runs
+    // on the cleared state while `privyUser` is still populated, writes the
+    // profile straight back, and the next reload shows a signed-in navbar over a
+    // signed-out Privy session - the half-signed-in state issue #34 named.
+    const source = readFileSync(NAV, "utf8");
+    expect(source).toMatch(/Bridge the Privy user/);
+    expect(
+      source,
+      "the bridge must return early while signing out, and depend on the gate"
+    ).toMatch(/if\s*\(signingOut\)\s*return;[\s\S]{0,1600}?\},\s*\[privyUser,\s*state\.google,\s*signingOut\]\);/);
   });
 });
