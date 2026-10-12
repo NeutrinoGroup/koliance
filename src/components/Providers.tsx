@@ -30,12 +30,12 @@ export interface KolianceAuthContextValue {
   login: (options?: WalletOnlyLoginOptions) => void;
   logout: () => Promise<void>;
   /**
-   * Privy only: opens the wallet-connect modal **for an already authenticated
-   * user**, i.e. it links a wallet to the current account. It is not a way to
-   * start a session - see `resolveWalletRailAction` in `@/lib/walletLogin` for
-   * the dispatch that keeps those two apart.
+   * Privy only, and **not a way to start a session**: it opens the
+   * wallet-connect modal *for an already authenticated user*, i.e. it attaches
+   * a wallet to the current account. See `resolveWalletRailAction` in
+   * `@/lib/walletLogin` for the dispatch that keeps that apart from starting a
+   * session - which is what issue #30 was about.
    */
-  connectWallet?: () => void;
   linkWallet?: () => void;
   linkGoogle?: () => void;
   linkGithub?: () => void;
@@ -66,7 +66,6 @@ function PrivyAuthBridge({ children }: { children: ReactNode }) {
     user,
     login,
     logout: privyLogout,
-    connectWallet,
     linkWallet,
     linkGoogle,
     linkGithub,
@@ -88,7 +87,6 @@ function PrivyAuthBridge({ children }: { children: ReactNode }) {
     isConnected: isConnected || !!user?.wallet?.address,
     login,
     logout: handleLogout,
-    connectWallet,
     linkWallet,
     linkGoogle,
     linkGithub,
