@@ -15,6 +15,7 @@ import {
   EMPTY_ACCOUNT_STATE,
   STORAGE_KEYS,
   readAccountState,
+  unlinkRail,
   writeAccountState,
 } from "@/lib/authState";
 
@@ -38,7 +39,12 @@ export interface KolianceAccountContextValue {
   state: AccountState;
   /** Re-reads the rows. The effect below does this on every change already. */
   reload: () => void;
-  /** Clears one rail. Signing out of Google must not unlink GitHub. */
+  /**
+   * Removes one rail as the user's decision: the row is cleared **and its
+   * identity held** until a sign-in/sign-out releases it, so the session that
+   * still carries it cannot write it back. Signing out of Google must not unlink
+   * GitHub, which is why this is per-rail while `signOut` is not.
+   */
   unlink: (rail: keyof typeof STORAGE_KEYS) => void;
   /** Clears every rail: what "Sign Out" means to the navbar. */
   signOut: () => void;
@@ -81,7 +87,11 @@ export function KolianceAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const unlink = useCallback((rail: keyof typeof STORAGE_KEYS) => {
-    writeAccountState(rail, null);
+    // `unlinkRail`, not a bare `writeAccountState(rail, null)`: removing a rail
+    // is the user's decision, and the identity it carried has to be held so the
+    // session that still carries it cannot write it back (F7). Sign Out below
+    // stays a plain clear, because it also ends that session.
+    unlinkRail(rail);
   }, []);
 
   const signOut = useCallback(() => {

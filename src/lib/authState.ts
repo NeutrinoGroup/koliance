@@ -278,6 +278,138 @@ export function googleRowKey(row: Record<string, unknown> | null): string | null
 }
 
 /**
+ * The identity a write carries, spelled the way `googleRowKey` spells it, so a
+ * hold raised off a *row* can be recognised in whatever spelling the writer uses.
+ *
+ * The GitHub and Steam rails key on their bare stored string; only the Google
+ * rail has a row with several spellings of the same identity.
+ */
+function writeKey(value: unknown): string | null {
+  if (typeof value === "string") return value.length > 0 ? value : null;
+  if (typeof value === "object" && value !== null) {
+    const row = value as Record<string, unknown>;
+    return googleRowKey(row) ?? asString(row.username);
+  }
+  return null;
+}
+
+/**
+ * The identity the user has asked to end, held until the session that keeps
+ * re-asserting it is gone.
+ *
+ * Why a held fact and not "the user unlinked, so do not write": the removal is a
+ * single instant, while the thing that undoes it is an *open session*. In the
+ * Privy configuration `privyUser` keeps carrying the Google account after the
+ * row is removed, so the bridge effect - whose whole job is to make the row
+ * agree with the session - re-creates the row on its very next run. Clearing the
+ * row alone is therefore undone in the same tick, and a reload then shows the
+ * account that the user just removed (F7: "unlink does not unlink").
+ *
+ * So the removal is recorded as a fact that outlives the click, and held until
+ * one of two things ends it:
+ *
+ *   - **the user ends the session or starts a new one** - `handleSignOut` calls
+ *     `releaseUnlinkedIdentity`, and so does every sign-in entry point, both
+ *     before they touch the store. This is the ordinary termination, and it is
+ *     what keeps the hold from becoming a wedge: a user who removed Google and
+ *     then signs in again is let straight back in;
+ *   - **the TTL elapses**, which is a backstop for the case where the tab is
+ *     never used again. It is deliberately long next to any write the bridge
+ *     waits for (React delivers context updates in milliseconds, not minutes),
+ *     and short enough that "I unlinked, reloaded, and it came back" is not the
+ *     ordinary experience.
+ *
+ * Why it can be permitted to expire at all: the browser tab it lives in cannot
+ * outlive a `privyLogout()` that was awaited, because the awaited logout
+ * completes in the same tab - if the hold is still standing when the session
+ * ends, the callback that releases it has already run. The TTL only ever fires
+ * on a tab where the user did nothing else for its whole duration, which is
+ * exactly the case where there is no re-assertion to hold against.
+ *
+ * Deliberately module scope rather than React state: `writeAccountState` is the
+ * one channel every writer goes through and it is not React, so the check lives
+ * where every write is already funnelled (the same move as that function's own
+ * idempotence guard), and it bites writers that know nothing about the navbar.
+ */
+let unlinkedIdentity: string | null = null;
+let unlinkedAtMs = 0;
+
+/** Ten minutes - see the reasoning above. */
+const UNLINK_HOLD_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * The identity automatic writers must not re-create right now, if any.
+ *
+ * `Date.now()` is read here, on every call, rather than captured when the hold
+ * was raised: a TTL evaluated once at raise time is a constant wearing a
+ * deadline's clothes, and would let the hold stand forever.
+ */
+export function heldUnlinkedIdentity(): string | null {
+  if (unlinkedIdentity === null) return null;
+  if (Date.now() - unlinkedAtMs > UNLINK_HOLD_TTL_MS) {
+    unlinkedIdentity = null;
+    return null;
+  }
+  return unlinkedIdentity;
+}
+
+/**
+ * The identity currently stored on a rail, spelled the way that rail's writers
+ * spell it. `null` when the rail holds nothing identifiable.
+ *
+ * Google is read back through `googleRowKey`, so the key is the same one a
+ * writer's value would produce in `writeKey` - which is what lets the hold
+ * recognise the row a writer would put back.
+ */
+function storedIdentityKey(rail: keyof typeof STORAGE_KEYS): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEYS[rail]);
+    if (raw === null) return null;
+    if (rail === "google") return googleRowKey(coerceRecord(raw));
+    // The other two rails store their identity as a bare string, so the stored
+    // value is the key. A row that was written as JSON (an older shape) names the
+    // same identity, and is folded to the bare key here so the hold matches what a
+    // string writer would put back.
+    return writeKey(coerceRecord(raw) ?? raw);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ends the user's own removal. Called by the sign-out and sign-in entry points -
+ * an explicit user action about the session is the one thing that unfreezes the
+ * rows, because it is the one thing that can change what `privyUser` carries.
+ */
+export function releaseUnlinkedIdentity(): void {
+  unlinkedIdentity = null;
+  unlinkedAtMs = 0;
+}
+
+/**
+ * Removes one identity rail as the *user's* decision: the row is deleted and its
+ * identity is held, so the session that still carries it cannot put it back.
+ *
+ * Taking the rail rather than the identity is deliberate - the identity is read
+ * back off the store in `storedIdentityKey`, which is the one place that knows
+ * how each rail spells its own key. A caller passing a key would have to
+ * reproduce that spelling, and a caller that got it wrong would raise a hold on
+ * an identity nobody writes (a hold that never bites, i.e. the silent kind).
+ *
+ * The clear runs even when the rail holds nothing identifiable, because "remove
+ * what is there" is the button's meaning; only the *hold* needs a key.
+ */
+export function unlinkRail(rail: keyof typeof STORAGE_KEYS): void {
+  const identityKey = storedIdentityKey(rail);
+  if (identityKey !== null) {
+    unlinkedIdentity = identityKey;
+    unlinkedAtMs = Date.now();
+  }
+  writeAccountState(rail, null);
+}
+
+/**
  * The whole signed-in state, derived from `localStorage` on every call.
  *
  * Called during render rather than from an effect on purpose: during hydration
@@ -343,6 +475,16 @@ export function writeAccountState<K extends keyof typeof STORAGE_KEYS>(
     } else {
       next = JSON.stringify(value);
     }
+
+    // The user's removal is a hold, not an instant: while it stands, no writer
+    // may re-create that identity. Auto-writers are exactly the ones that cannot
+    // tell "the user signed in again" from "the session I am bridging still
+    // carries the account the user just removed", so the decision is made in the
+    // one channel they all pass through rather than in each of them. The
+    // explicit writers (sign in, sign out) release the hold first - see
+    // `releaseUnlinkedIdentity`.
+    const held = heldUnlinkedIdentity();
+    if (held !== null && next !== null && writeKey(value) === held) return;
 
     // The no-op guard. Read straight off the store rather than off `state`, so
     // it sees what a reload would see.
