@@ -12,7 +12,6 @@ import {
   Sparkles,
   ShieldCheck,
   User,
-  Loader2,
   Edit3,
   Wallet,
   Send,
