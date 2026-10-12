@@ -5,6 +5,9 @@
 > **「先做什么、为什么是这个顺序、做完长什么样」**。
 >
 > **时点**：2026-10-11（UTC）· 分支 `docs/ai-infrastructure-roadmap` @ `98a0ad8`（= `upstream/main`）
+> **增量（2026-10-12，分支 `docs/error-handling-adr` @ `22fa845`）**：§3.3 新增 **A7（GAP-74 统一报错处理体系，issue #33）**，
+> §3.4 的 **W6** 一并纳入。**本轮只加一个阶段项与一条依赖说明**——**未复核、也未改写**上面那个 2026-10-11 时点的
+> 现状判断与预估（它们**仍是当时的事实**）；`ADR-006` 是**设计环**，尚无实现可估。
 > **本文件中的路径与行号均经 `git grep` / `git ls-files` 实测**；
 > **本轮未跑任何构建/测试命令**，故本文件**不给出行情、覆盖率、用例数一类读数**——
 > 它们引用自 `docs/GAP台账.md §7` 或 `docs/changes/021`，并**标明来源与"该读数已落后"**。
@@ -210,6 +213,7 @@
 | **A4** | **GAP-44 ZK Verifier 插槽** | 按 `ADR-004` D1「只留接口」建 `verifier` 包 | 新建 `backend/internal/verifier/`（实测不存在） | **0.5 天** | 接口 + 一个 no-op 实现 + 一处调用点（**避免死代码**：无调用点的接口是叙事道具，不是插槽） | `system-architect` + `backend-dev` |
 | **A5** | **GAP-50 收费侧对拍** | 资金费**为负**时（收费侧）的链上对拍 | `contracts/test/perp/FundingLiquidationParity.ts`（读向量）· `tests/liquidation-funding-parity.test.ts` · 向量 `contracts/test/perp/fixtures/liquidation-funding-vectors.json` · `docs/changes/021`「未做（明确）」 | **0.5 天** | 两腿簿子精确复现 skew；**负向**：丢弃资金费项 → 对拍必须红（**且须连向量一起重生成**，否则合约侧仍绿——`docs/changes/021` 实测） | `qa-validator` + `falsifier` |
 | **A6** | **前端演示打磨** | `/perp` 面板与演示控制台（已可运行）持续对齐 | `src/app/perp/page.tsx` · `src/components/PositionPanel.tsx` · `src/components/DemoControlPanel.tsx` · `src/lib/perp.ts` | 持续 | 强平价两条口径都标清（GAP-37 已关闭，`docs/changes/021`）；**结构上无法漂移** | `pm-spec-driver` + `backend-dev` |
+| **A7** | **GAP-74 统一报错处理体系**（issue #33） | 后端成为报错的**唯一设计者**：raw error **只落日志**、响应体一律**业务语言** | **设计环已交付**：`docs/adr/ADR-006-统一报错处理体系.md`（本分支新增）。**实现起点**：`backend/internal/httpapi/`（中间件 + 分类枚举 + 词表 + 迁 51 处调用点）· `src/lib/marketFeed.ts:255-272`（收缩 `FAILURE_COPY`） | **2 天**（三段：中间件与词表 → 逐端点迁移 → 03 环判据） | 见 `ADR-006 §4`：正向 P1（**闭集**，响应体文案必须能在词表里查到）· P2（中间件确实记了 raw error + request-id）· P4（**中间件不改响应体**，逐字节）；**负向 N1（首选）**：构造内部故障 → 响应体**不含**栈 / env 变量名 / SQL / DSN，**且**日志里**有**完整 error 链 + request-id | **待两条口径定稿**：业务语言 → `pm-spec-driver` · 敏感分级 → `sec-auditor`；**且 ADR-006 尚未成对互审**（`AGENTS.md` §4.0），需补审。实现可派 `backend-dev` + `falsifier`（负向） |
 
 > **A3 / A4 是 `ADR-004` D1 明确留下的两处「可直接用」**——它们是**成本最低、叙事收益最高**的两项
 > （各 0.5 天），却在台账里**一直没有编号**，直到本轮（GAP-43 / GAP-44）。
@@ -236,7 +240,7 @@
 | **W3** | **A0（部署）+ A1（Bot 接链，**与 PR #11 合并**）** | **人工解锁**（`PRIVATE_KEY` + 测试币） | 死保项；不合并 #11 就等着冲突 |
 | **W4** | **A2（GAP-45 大屏）+ A5（GAP-50）** | A2 依赖 W3 | 演示收口 |
 | **W5** | **I1（GAP-24 链下）+ I2 + I3** | **待人工裁决 Go 依赖** | Identity 支柱整体后置——**不是不重要，是被前置决策卡住** |
-| **W6** | I4 · T5 · A6 | — | 打磨与一致性 |
+| **W6** | I4 · T5 · A6 · **A7（GAP-74 报错处理体系）** | A7 的**设计环已交付**（`ADR-006`）；实现待 `pm-spec-driver` / `sec-auditor` 两条口径定稿 | 打磨与一致性。⚠️ **A7 在 W6 不是因为它是打磨项**——它是 **P1**、且是 issue **#33** 的关闭路径；放在这里只是因为它**依赖两条尚未定稿的口径**（与 W5 依赖人工裁决同一性质）。**不要因为它排在 W6 就当作低优先级**。 |
 
 > **W1 的选取逻辑**：**先做「无阻塞且高性价比」的**。
 > A3/A4 各 0.5 天、T3 0.5 天——三者加起来 1.5 天，却能把 `ADR-004` 留下的两处复用**真正落地**。
