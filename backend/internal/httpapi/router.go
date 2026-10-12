@@ -75,12 +75,31 @@ func NewRouter(d Deps) http.Handler {
 	// is the half a reader can check: cmd/api refusing to start is invisible
 	// from inside a test, whereas this predicate can be driven directly.
 	//
+	// Two groups sit behind it, and the distinction decides how to read the 503:
+	//
+	//   store of record  the handler's write or read IS the DB handle and
+	//                    nothing else can stand in for it (game, agentcard,
+	//                    developer/github proof).
+	//   best effort      the handler answers from in-memory state and its DB
+	//                    write is fired in a goroutine whose error is discarded
+	//                    (agentapi's `api_keys` insert). The route would still
+	//                    answer without a pool, so this is a deliberate
+	//                    belt-and-braces refusal, not a capability requirement.
+	//
+	// The second group is why the sentence here used to be wrong. It read
+	// "every route whose handler persists through the DB handle", which claimed
+	// a rule the code does not implement: a best-effort route persists through
+	// the handle just as much as a store-of-record one, and the guard is on some
+	// of them and not others. /api/v1/developer/keys was the one that fell in the
+	// gap - it inserts into api_keys and had no guard (docs/changes/045).
+	//
 	// It deliberately does NOT cover every route. `health`, `stats` and the
 	// Alpaca market reads run off process state or an external API and are
 	// correct without a database, so gating them would report an outage that
-	// is not there. What it does cover is every route whose handler persists
-	// through the DB handle - the ones that used to answer 200 while writing
-	// nothing (GAP-49).
+	// is not there. What it covers is every route that reaches the pool: the
+	// ones that used to answer 200 while writing nothing (GAP-49), and the
+	// best-effort ones, where refusing costs nothing and removes the
+	// silent-degradation shape.
 	withDB := func(fn http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if d.DB == nil {
@@ -745,7 +764,16 @@ func NewRouter(d Deps) http.Handler {
 	}))
 
 	// POST /api/v1/developer/keys - Create API Key
-	h("/api/v1/developer/keys", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	//
+	// withDB, unlike its agentapi siblings above: this is the one handler in the
+	// agentapi group that reaches db.Pool (GenerateAPIKey INSERTs into api_keys).
+	// The insert is best-effort - it runs in a goroutine and its error is
+	// discarded (agentapi/service.go:157-169) - so the route would still answer
+	// without a pool. It is guarded anyway: the process that serves it cannot
+	// start without a database (cmd/api), so the refusal costs nothing, and an
+	// unguarded 200 that issues a key nobody can ever look up again is exactly
+	// the "success that persisted nothing" shape GAP-49 removed.
+	h("/api/v1/developer/keys", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			WalletAddress string `json:"wallet_address"`
 			Tier          string `json:"tier"`
@@ -763,7 +791,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", key)
-	}))
+	})))
 
 	// GET /api/v1/developer/stats - Console stats and usage metrics
 	h("/api/v1/developer/stats", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {

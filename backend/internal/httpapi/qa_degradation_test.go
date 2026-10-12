@@ -83,8 +83,7 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodPost, "/api/v1/market/trade", `{"symbol":"NVDA","side":"hold","notionalUSD":1,"leverage":1}`, "Bearer " + opToken, 400, "unguarded: Alpaca is the book of record; validation precedes the upstream call"},
 	{http.MethodPost, "/api/v1/agent/bind", `{}`, "", 400, "unguarded: wallet_address is required; no bearer token, so no key is deducted"},
 	{http.MethodPost, "/api/v1/agent/pay", `{}`, "", 400, "unguarded: an empty payment request is rejected before any store is touched"},
-	{http.MethodPost, "/api/v1/developer/keys", `{}`, "", 400, "unguarded: agentapi in-memory; an empty wallet_address fails key generation"},
-	{http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{}`, "", 400, "unguarded: wallet_address is required"},
+	{http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{}`, "", 400, "unguarded: wallet_address is required; the whole path is in-memory"},
 
 	// ---- no database needed, but the upstream is the failure mode ----
 	// Driven against the closed local port this harness points Alpaca at, so the
@@ -100,6 +99,12 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodPost, "/api/v1/agentcard/generate", `{"walletAddress":"0x0000000000000000000000000000000000000001","initialDeposit":100}`, "", 503, "guarded (withDB)"},
 	{http.MethodPost, "/api/v1/agentcard/authorize", `{"cardId":"c","amountUSD":1,"mcc":"7999"}`, "", 503, "guarded (withDB)"},
 	{http.MethodPost, "/api/v1/agentcard/batch-settle", `{}`, "Bearer " + opToken, 503, "guarded (withDB), and the gate precedes the operator check"},
+	// Moved here from the unguarded block in docs/changes/045. This was the one
+	// route that persisted through db.Pool and had no guard: GenerateAPIKey
+	// INSERTs into api_keys (agentapi/service.go:157-169). The insert is
+	// best-effort, which is why it answered for so long without a database - and
+	// why the 503 is now explicit rather than incidental.
+	{http.MethodPost, "/api/v1/developer/keys", `{"wallet_address":"0x0000000000000000000000000000000000000001","tier":"STARTER_FREE"}`, "", 503, "guarded (withDB): the only agentapi route that reaches db.Pool"},
 }
 
 // buildNoDBRouter is the router of a process that has a database handle that is
@@ -198,6 +203,12 @@ func TestQADBGatePrecedesValidationAndAuthOnGuardedRoutes(t *testing.T) {
 		// no operator token at all: the DB gate must still be the first answer
 		{http.MethodPost, "/api/v1/agentcard/batch-settle", `{}`, ""},
 		{http.MethodPost, "/api/v1/agentcard/batch-settle", `{}`, "Bearer wrong"},
+		// The gate must precede validation here too. The first body below is
+		// well-formed and is a 200 when a database exists, so a 503 is the only
+		// answer that proves the guard fired before GenerateAPIKey minted a key
+		// nobody could look up (docs/changes/045).
+		{http.MethodPost, "/api/v1/developer/keys", `{"wallet_address":"0x0000000000000000000000000000000000000001"}`, ""},
+		{http.MethodPost, "/api/v1/developer/keys", `not json`, ""},
 	}
 	for _, c := range cases {
 		hdr := map[string]string{}

@@ -300,10 +300,19 @@ func TestAgentCardFlow(t *testing.T) {
 
 // ==================== GAP-49: no silent degradation ====================
 
-// dbGatedRoutes is every route whose handler persists through the DB handle.
-// The list is data, not prose, so a new persisted route that forgets withDB
-// shows up as a test failure rather than as a silent 200 on a deployment with
-// no database.
+// dbGatedRoutes is the list of routes whose handler reaches the DB pool.
+//
+// Read the claim carefully, because the previous version of this comment
+// over-claimed: it said the list was "data, not prose, so a new persisted route
+// that forgets withDB shows up as a test failure". It does not. Adding a route
+// to router.go does not add it to this list, and these two tests only iterate
+// the list, so a new persisted route is silently untested - /api/v1/developer/keys
+// lived in exactly that gap until docs/changes/045.
+//
+// What the list is: a record of the routes somebody thought about. What would
+// make the original claim true is a check in the other direction (walk the
+// registrations in router.go and require each to appear here or be explicitly
+// exempted); there is none, and the absence is registered as GAP-70.
 var dbGatedRoutes = []struct {
 	method string
 	path   string
@@ -315,6 +324,8 @@ var dbGatedRoutes = []struct {
 	{http.MethodPost, "/api/v1/agentcard/generate", `{"walletAddress":"0x0000000000000000000000000000000000000001","initialDeposit":100}`},
 	{http.MethodPost, "/api/v1/agentcard/authorize", `{"cardId":"c","amountUSD":1,"mcc":"7999"}`},
 	{http.MethodPost, "/api/v1/agentcard/batch-settle", `{}`},
+	// The only agentapi route that reaches db.Pool (docs/changes/045).
+	{http.MethodPost, "/api/v1/developer/keys", `{"wallet_address":"0x0000000000000000000000000000000000000001","tier":"STARTER_FREE"}`},
 }
 
 // A router built without a DB handle must refuse the persisted routes. This is
