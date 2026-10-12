@@ -186,3 +186,30 @@ jobs:
       # between the event subscription and the price loop. A race there is
       # silent under normal runs and fatal under load.
       - run: go test -race ./...
+
+      # The coverage run is kept separate from the -race run above, and it is
+      # -count=1 so the profile is written by THIS run: without it a cached
+      # result can leave the gate scoring a file from an earlier step.
+      #
+      # The profile path goes under `coverage/` because the root .gitignore
+      # already ignores that directory at any depth (the same rule the vitest
+      # and playwright output relies on), so the profile cannot be committed by
+      # accident. Go does NOT create the directory for you — hence the mkdir.
+      - name: Test with coverage
+        run: |
+          mkdir -p coverage
+          go test -count=1 -covermode=atomic -coverprofile=coverage/coverage.out ./...
+
+      # Go reports coverage but has no threshold: `go test -cover` prints a
+      # percentage and exits 0 at any value, so without this step a regression
+      # passes CI silently. It reads the profile the step above just wrote and
+      # fails below the floors.
+      #
+      # scripts/coverage-gate/main.go records what is in scope and why. Short
+      # version: 15 of the 23 packages are gated; the eight excluded ones are
+      # generated (chain/bindings), process wiring (cmd/*), or carry no test at
+      # all and are registered as gaps rather than quietly averaged in. Each
+      # floor sits a few points under its measurement, for the reason the
+      # contracts floor records after its own first CI failure.
+      - name: Enforce coverage floors
+        run: go run ./scripts/coverage-gate
