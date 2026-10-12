@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -38,6 +40,17 @@ func main() {
 }
 
 func run(cfg *config.Config) error {
+	// The process-wide structured logger (ADR-006 §3.2). Same idiom as
+	// cmd/liquidator/main.go:29 - JSON to stdout, one object per line.
+	//
+	// SetDefault is not decoration: the router falls back to slog.Default() when
+	// Deps.Logger is nil, and without this line that fallback would be the
+	// stdlib's text handler on stderr - a second, differently-shaped log stream
+	// produced by the same process. Here the fallback and the injected logger are
+	// the same handler, so there is no configuration under which the two drift.
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -89,6 +102,7 @@ func run(cfg *config.Config) error {
 		Verifier:     proofVerifier,
 		Liquidations: liquidation.NewPG(db.Pool),
 		AgentAPI:     agentAPIService,
+		Logger:       logger,
 	})
 
 	port := cfg.Port

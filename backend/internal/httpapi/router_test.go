@@ -116,6 +116,77 @@ func TestCORSAllowList(t *testing.T) {
 	}
 }
 
+// TestCORSExposesTheRequestIDToCrossOriginScripts pins the half of the CORS
+// contract that has nothing to do with Access-Control-Allow-Origin, and which
+// therefore survived the allow-list rewrite untouched.
+//
+// A browser applies two independent rules to a cross-origin response, and a
+// server can satisfy either one while failing the other:
+//
+//	Access-Control-Allow-Headers  — may the script SEND X-Request-Id?
+//	Access-Control-Expose-Headers — may the script READ it back?
+//
+// The middleware in reqlog.go reads the inbound header and sets the outbound
+// one, so with neither list naming it the id existed on the wire and was
+// unreachable from the only caller that has an Origin. Both directions are
+// asserted here, and both are asserted as membership in a comma-separated list
+// rather than as a substring — `X-Requested-With` CONTAINS `X-Requested`,
+// so a substring check would go green against a list that merely looks close.
+func TestCORSExposesTheRequestIDToCrossOriginScripts(t *testing.T) {
+	h := newTestRouter(t, nil)
+
+	// A real preflight carries these two headers; without them the request is
+	// not a preflight and the browser would never send it.
+	rr := do(h, http.MethodOptions, "/api/v1/agentcard/authorize", "", map[string]string{
+		"Origin":                        "https://koliance.oodai.space",
+		"Access-Control-Request-Method": http.MethodPost,
+		"Access-Control-Request-Headers": requestIDHeader,
+	})
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("preflight from an allowed origin: %d, want 204", rr.Code)
+	}
+	if !headerListContains(rr.Header().Get("Access-Control-Allow-Headers"), requestIDHeader) {
+		t.Errorf("Access-Control-Allow-Headers = %q, does not name %s — a browser will refuse to send the id",
+			rr.Header().Get("Access-Control-Allow-Headers"), requestIDHeader)
+	}
+	if !headerListContains(rr.Header().Get("Access-Control-Expose-Headers"), requestIDHeader) {
+		t.Errorf("Access-Control-Expose-Headers = %q, does not name %s — the response header is on the wire and invisible to JS",
+			rr.Header().Get("Access-Control-Expose-Headers"), requestIDHeader)
+	}
+
+	// The expose list is a response-header rule and applies to the actual
+	// request, not only to the preflight. Set on the same branch as ACAO, it
+	// must be there on the 200 too, or a client that skipped the preflight
+	// (same-origin-ish flows, a cached preflight) reads nothing.
+	got := do(h, http.MethodGet, "/api/v1/stats", "", map[string]string{"Origin": "https://koliance.oodai.space"})
+	if !headerListContains(got.Header().Get("Access-Control-Expose-Headers"), requestIDHeader) {
+		t.Errorf("GET response Access-Control-Expose-Headers = %q, does not name %s",
+			got.Header().Get("Access-Control-Expose-Headers"), requestIDHeader)
+	}
+	if v := got.Header().Get(requestIDHeader); v == "" {
+		t.Errorf("the response carries no %s to expose", requestIDHeader)
+	}
+
+	// And the negative side: an origin that is not on the allow-list gets none
+	// of it. Widening the CORS surface to any origin is the failure mode a
+	// "just add the header" change invites.
+	denied := do(h, http.MethodGet, "/api/v1/stats", "", map[string]string{"Origin": "https://evil.vercel.app"})
+	if v := denied.Header().Get("Access-Control-Expose-Headers"); v != "" {
+		t.Errorf("disallowed origin got Access-Control-Expose-Headers %q", v)
+	}
+}
+
+// headerListContains reports whether a comma-separated header list names want,
+// compared case-insensitively because HTTP header names are.
+func headerListContains(list, want string) bool {
+	for _, f := range strings.Split(list, ",") {
+		if strings.EqualFold(strings.TrimSpace(f), want) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestOperatorEndpointsFailClosed(t *testing.T) {
 	noToken := newTestRouter(t, func(d *Deps) { d.Cfg.APIToken = "" })
 	for _, p := range []string{"/api/v1/agentcard/batch-settle", "/api/v1/stripe/customer", "/api/v1/market/trade", "/api/v1/market/close"} {

@@ -14,6 +14,23 @@ import (
 
 const maxBodyBytes = 1 << 20 // 1 MiB
 
+// corsAllowHeaders is the request-header allow-list answered to a preflight.
+//
+// It is a named constant, and X-Request-Id is on it, because of the middleware
+// in reqlog.go: that middleware reads `X-Request-Id` off the request and echoes
+// it back, and a browser will not put a header on a cross-origin request unless
+// the preflight names it. Before this list carried it, a cross-origin caller
+// could not have sent the id at all — so the response header the middleware
+// sets was, for the only caller that has an Origin, unreachable in both
+// directions.
+const corsAllowHeaders = "Content-Type, Authorization, X-Requested-With, " + requestIDHeader
+
+// corsExposeHeaders names the response headers a cross-origin caller is allowed
+// to READ. Without it the browser hands the script a response whose
+// X-Request-Id is present on the wire and invisible in JS — the two halves are
+// separate rules and satisfying one does not satisfy the other.
+const corsExposeHeaders = requestIDHeader
+
 // cors only reflects origins on the configured allow-list. It replaces the
 // previous `Access-Control-Allow-Origin: *`. Requests without an Origin header
 // (curl, server-to-server) are not affected by CORS at all; CORS is a browser
@@ -30,7 +47,8 @@ func cors(allowed []string, next http.HandlerFunc) http.HandlerFunc {
 		if origin != "" && ok {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+			w.Header().Set("Access-Control-Allow-Headers", corsAllowHeaders)
+			w.Header().Set("Access-Control-Expose-Headers", corsExposeHeaders)
 			w.Header().Set("Access-Control-Max-Age", "600")
 		}
 		if r.Method == http.MethodOptions {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -42,6 +43,9 @@ type Deps struct {
 	// cmd/liquidator. Nil (no DATABASE_URL) degrades to an empty list.
 	Liquidations liquidation.Store
 	AgentAPI     *agentapi.Service
+	// Logger records the raw error for every request (ADR-006 §3.2). Nil falls
+	// back to slog.Default(); cmd/api supplies the production logger.
+	Logger *slog.Logger
 }
 
 // Access model (see docs in backend/README.md):
@@ -822,7 +826,14 @@ func NewRouter(d Deps) http.Handler {
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", agents)
 	}))
 
-	return mux
+	// ADR-006 §3.2: wrap the whole mux so every request is logged once. The
+	// middleware writes only a log line -- it does not read or rewrite the
+	// response body, and does not change the status code (P4 pins that).
+	logger := d.Logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return loggingMiddleware(logger, mux)
 }
 
 // decodeHexField accepts an optional "0x" prefix and an empty value. Hex is
