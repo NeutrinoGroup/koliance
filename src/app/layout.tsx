@@ -137,6 +137,7 @@ const jsonLd = {
 
 import { I18nProvider } from "@/lib/i18n";
 import { Providers } from "@/components/Providers";
+import { KolianceAuthProvider } from "@/components/KolianceAuthProvider";
 
 export default function RootLayout({
   children,
@@ -177,7 +178,11 @@ export default function RootLayout({
         </noscript>
         <I18nProvider>
           <Providers>
-            {children}
+            {/* Account state sits above the Privy/Wagmi providers so the navbar
+                and the OAuth walls (both inside `children`) share one writer. */}
+            <KolianceAuthProvider>
+              {children}
+            </KolianceAuthProvider>
           </Providers>
         </I18nProvider>
       </body>

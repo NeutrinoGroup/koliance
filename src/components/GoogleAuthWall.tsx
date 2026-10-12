@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe,
@@ -19,6 +19,7 @@ import {
 import Image from "next/image";
 import { GOOGLE_CLIENT_ID } from "@/lib/authConfig";
 import { EditProfileModal } from "@/components/EditProfileModal";
+import { STORAGE_KEYS, writeAccountState } from "@/lib/authState";
 
 export interface GoogleProfile {
   googleId: string;
@@ -43,19 +44,32 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
 
-  // Read saved profile from localStorage if present
+  // `onProfileSynced` is called from an effect, and the caller passes an inline
+  // arrow whose identity changes on every render (`AgentCardTerminal` credits
+  // `creditLimit` there). Holding it in a ref is what lets the cached-read effect
+  // below depend on nothing: with the prop in the dependency list the effect
+  // re-ran after every render, called `setProfile` with a fresh object, notified
+  // the parent, and did it again - an unbounded render loop for any visitor who
+  // already had a stored row.
+  const onProfileSyncedRef = useRef(onProfileSynced);
+  onProfileSyncedRef.current = onProfileSynced;
+
+  // Read saved profile from localStorage if present. The key comes from
+  // `STORAGE_KEYS` rather than a literal: this is the read half of the channel
+  // `writeAccountState` owns, and a second copy of the string is how the two
+  // halves drift apart.
   useEffect(() => {
     try {
-      const cached = localStorage.getItem("koliance_google_profile");
+      const cached = localStorage.getItem(STORAGE_KEYS.google);
       if (cached) {
         const parsed = JSON.parse(cached);
         setProfile(parsed);
-        if (onProfileSynced) onProfileSynced(parsed);
+        onProfileSyncedRef.current?.(parsed);
       }
     } catch {
       // ignore
     }
-  }, [onProfileSynced]);
+  }, []);
 
   const handleExchangeCode = React.useCallback(async (authCode: string) => {
     setLoading(true);
@@ -77,7 +91,10 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
       }
 
       setProfile(data.profile);
-      localStorage.setItem("koliance_google_profile", JSON.stringify(data.profile));
+      // Through the shared writer, not `localStorage.setItem`: the navbar
+      // subscribes to that channel, and a direct write leaves it rendering
+      // "Sign In" over a signed-in account (issue #34).
+      writeAccountState("google", data.profile);
       setSyncSuccess(true);
       if (onProfileSynced) onProfileSynced(data.profile);
       setTimeout(() => setSyncSuccess(false), 4000);
@@ -148,7 +165,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
       };
 
       setProfile(syncedProfile);
-      localStorage.setItem("koliance_google_profile", JSON.stringify(syncedProfile));
+      writeAccountState("google", syncedProfile);
       setSyncSuccess(true);
       if (onProfileSynced) onProfileSynced(syncedProfile);
       setTimeout(() => setSyncSuccess(false), 4000);
@@ -162,7 +179,7 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
 
   const handleDisconnect = () => {
     setProfile(null);
-    localStorage.removeItem("koliance_google_profile");
+    writeAccountState("google", null);
   };
 
   return (
@@ -366,6 +383,11 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
               walletAddress: updated.walletAddress,
             };
             setProfile(updatedProfile);
+            // Keep the navbar's copy in step with the wall's. `EditProfileModal`
+            // writes its own version of the row first; this write runs after it
+            // and carries the fields the modal does not know about (googleId,
+            // trustTier, creditAllowanceUSD), so the two do not fight.
+            writeAccountState("google", updatedProfile);
             if (onProfileSynced) onProfileSynced(updatedProfile);
           }}
         />
