@@ -19,12 +19,34 @@ backend/
 ## 运行方式
 ```bash
 cd backend
+# DATABASE_URL is mandatory; the process refuses to start without it (see below).
 go run cmd/api/main.go
 ```
 服务将在 `http://localhost:8080` 启动，默认包含：
 - `GET /api/v1/health` - 服务与 Monad 节点健康状态
 - `GET /api/v1/stats` - 链上身份与信任总览统计
 - `GET /api/v1/identities/:address` - 身份详情查询
+- `POST /api/v1/verifier/verify` - 证明校验插槽（GAP-44；当前注入 no-op，恒返回 501）
+
+## 数据库：启动即失败，不再静默降级（GAP-49）
+
+`DATABASE_URL` 是**必需**的。缺失或连接不上时，进程**以非零码退出并打印明确错误**，
+**不会**再回落到内存态。
+
+| 情形 | 行为 |
+| --- | --- |
+| `DATABASE_URL` 未设置 | `database.ErrDatabaseURLRequired` → `log.Fatalf`，exit 1 |
+| `DATABASE_URL` 不可解析 / 连不上 / ping 失败 | `database.ErrDatabaseUnavailable` → `log.Fatalf`，exit 1 |
+| DSN 出现在错误信息里 | 凭据被替换为 `REDACTED`（见 `sanitizeDSNError`） |
+
+理由：此前的实现会 log 一行然后交回 `MemoryStore`，于是**所有业务路由照常 200 而什么都不落盘**——
+从外部看与成功不可分。内存态现只保留**显式**入口 `database.NewMemoryOnly()`（测试与离线工具用）。
+
+在此之上，凡是经 DB 句柄落盘的业务路由都套了 `withDB` 守卫：句柄缺失或未连接时返回 **503**。
+`health` / `stats` / `market/*` **不在**该守卫内——它们的数据源是进程状态或 Alpaca，不是 PostgreSQL，
+把它们一并 503 会把"没有数据库"说成"整个服务挂了"。
+
+<!-- -->
 
 ## 与 Next.js 前端连接
 前端 `src/lib/api.ts` 已内置适配器，只需在前端 `.env.local` 设置：

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/koliance/backend/internal/model"
 	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
+	"github.com/koliance/backend/internal/verifier"
 )
 
 // Deps are the services the router dispatches to.
@@ -31,6 +33,11 @@ type Deps struct {
 	PriceOracle *market.PriceOracle
 	Stripe      *stripeclient.Client
 	Dev         *developer.Service
+	// Verifier is the pluggable proof-verification slot (GAP-44). It is not
+	// optional: the zero value of a struct that embeds this field would panic
+	// on the verify route, so cmd/api always supplies at least the no-op
+	// (verifier.NewNoop), which answers 501.
+	Verifier verifier.Verifier
 	// Liquidations serves the liquidation observation feed written by
 	// cmd/liquidator. Nil (no DATABASE_URL) degrades to an empty list.
 	Liquidations liquidation.Store
@@ -62,6 +69,68 @@ func NewRouter(d Deps) http.Handler {
 		}
 		return operator(fn)
 	}
+	// WithDB marks the routes that cannot answer without a database. It is the
+	// half a reader can check: cmd/api refusing to start is invisible from
+	// inside a test, whereas this predicate can be driven directly.
+	//
+	// This comment used to name a rule. It named two, one after the other, and
+	// both were false, because the guard was never derived from a rule - it is a
+	// set of routes that were picked out by hand. "Whose handler persists through
+	// the DB handle" was refuted by /api/v1/developer/keys, which inserts into
+	// api_keys and had no guard (docs/changes/045). Its replacement, "every route
+	// that reaches the pool", was refuted by /api/v1/liquidations, which is
+	// unguarded and reads through db.Pool (docs/changes/047). A third reading,
+	// "the store of record group", is refuted five times over by the routes below
+	// - four of them persist to db.MemoryStore, which is not the pool, and two do
+	// not touch a database at all.
+	//
+	// So the set is listed. These are all of the routes behind withDB:
+	//
+	//   /api/v1/game/steam/profile     reads Steam, holds no database handle
+	//   /api/v1/game/proof             writes db.MemoryStore, not the pool
+	//   /api/v1/developer/github/proof holds no database handle
+	//   /api/v1/agentcard/generate     writes db.MemoryStore, not the pool
+	//   /api/v1/agentcard/authorize    writes db.MemoryStore, not the pool
+	//   /api/v1/agentcard/batch-settle reads an in-memory slice
+	//   /api/v1/developer/keys         the only one that reaches db.Pool (an
+	//                                  api_keys INSERT in a goroutine, its error
+	//                                  discarded)
+	//
+	// That list is not a derivation and does not pretend to be one. It is a
+	// record of what somebody thought about, which is what makes it drift the
+	// same way dbGatedRoutes does (router_test.go). Six of the seven would answer
+	// correctly without a database - only /api/v1/developer/keys would mint a key
+	// nobody could look up. The refusal is deliberate anyway: failing closed
+	// costs nothing, because the process that serves any of these cannot start
+	// without a database (cmd/api), so there is no reachable deployment in which
+	// the 503 withholds a capability.
+	//
+	// Not gated, including at least: `health`, `healthz`, `stats` and the Alpaca
+	// market reads, which run off process state or an external API and must stay
+	// able to report the truth without a database. And /api/v1/liquidations,
+	// which reads liquidation_events through the pool when the observation store
+	// is wired - the one route here that reaches the pool and is deliberately
+	// unguarded. Its nil-store answer is 200 with an empty list, by design
+	// (docs/changes/025) and judged honest by the independent qa inventory
+	// (qa_degradation_test.go): an empty list is the truth when no bot has
+	// written one, so there is no "success that persisted nothing" to hide. This
+	// paragraph is examples, not an enumeration - do not read "including" as
+	// "only".
+	withDB := func(fn http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			if d.DB == nil {
+				jsonError(w, http.StatusServiceUnavailable, "database is not configured; this endpoint cannot serve requests without it")
+				return
+			}
+			if !d.DB.IsConnected {
+				w.Header().Set("Retry-After", "5")
+				jsonError(w, http.StatusServiceUnavailable, "database is not reachable; this endpoint refuses to serve from a non-durable store")
+				return
+			}
+			fn(w, r)
+		}
+	}
+
 	// marketData fails closed when the market data credentials are missing.
 	//
 	// The alternative — which is what the code did before — is that a deployment
@@ -168,7 +237,7 @@ func NewRouter(d Deps) http.Handler {
 
 	// ==================== GAME ====================
 
-	h("/api/v1/game/steam/profile", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/game/steam/profile", methodOnly(http.MethodGet, withDB(func(w http.ResponseWriter, r *http.Request) {
 		identifier := r.URL.Query().Get("id")
 		if identifier == "" {
 			identifier = "76561198000000000" // Default fallback demo ID
@@ -179,9 +248,9 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, stats)
-	}))
+	})))
 
-	h("/api/v1/game/proof", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/game/proof", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			SteamID       string `json:"steamId"`
 			WalletAddress string `json:"walletAddress"`
@@ -200,7 +269,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)
-	}))
+	})))
 
 	// ==================== DEVELOPER (GITHUB) ====================
 
@@ -221,7 +290,7 @@ func NewRouter(d Deps) http.Handler {
 		jsonResponse(w, http.StatusOK, stats)
 	}))
 
-	h("/api/v1/developer/github/proof", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/developer/github/proof", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Username      string `json:"username"`
 			WalletAddress string `json:"walletAddress"`
@@ -247,11 +316,11 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)
-	}))
+	})))
 
 	// ==================== AGENTCARD ====================
 
-	h("/api/v1/agentcard/generate", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/agentcard/generate", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			WalletAddress  string   `json:"walletAddress"`
 			CardholderName string   `json:"cardholderName"`
@@ -278,7 +347,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonResponse(w, http.StatusOK, card)
-	}))
+	})))
 
 	h("/api/v1/agentcard/cards/", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
 		cardID := strings.TrimPrefix(r.URL.Path, "/api/v1/agentcard/cards/")
@@ -327,7 +396,7 @@ func NewRouter(d Deps) http.Handler {
 		jsonResponse(w, http.StatusOK, sk)
 	}))
 
-	h("/api/v1/agentcard/authorize", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/agentcard/authorize", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req agentcard.AuthorizeRequest
 		if !decodeJSON(w, r, &req) {
 			return
@@ -344,9 +413,9 @@ func NewRouter(d Deps) http.Handler {
 		default:
 			jsonResponse(w, http.StatusOK, resp)
 		}
-	}))
+	})))
 
-	h("/api/v1/agentcard/batch-settle", methodOnly(http.MethodPost, operator(func(w http.ResponseWriter, r *http.Request) {
+	h("/api/v1/agentcard/batch-settle", methodOnly(http.MethodPost, withDB(operator(func(w http.ResponseWriter, r *http.Request) {
 		batchHash, count, volume := d.Cards.BatchSettle()
 		jsonResponse(w, http.StatusOK, map[string]interface{}{
 			"batchHash":    batchHash,
@@ -354,7 +423,7 @@ func NewRouter(d Deps) http.Handler {
 			"totalVolume":  volume,
 			"timestamp":    time.Now().UTC(),
 		})
-	})))
+	}))))
 
 	// ==================== MARKET ====================
 
@@ -538,6 +607,73 @@ func NewRouter(d Deps) http.Handler {
 		jsonResponse(w, http.StatusOK, map[string]interface{}{"customerId": cust.ID, "email": cust.Email})
 	})))
 
+	// ==================== VERIFIER ====================
+
+	// The proof-verification slot (GAP-44 / ADR-004 D1). The route exists so
+	// the slot has a caller: an interface with no call site is a narrative
+	// prop, and the whole point of keeping the interface was to have a seam.
+	//
+	// Status mapping is the load-bearing part:
+	//   nil                         -> 200 (a verifier checked it and approved)
+	//   ErrInvalidProof             -> 400 (checked, and it does not hold)
+	//   anything else (incl. no-op) -> 501 (nothing could check it)
+	// The no-op wired in cmd/api returns ErrNotImplemented, so this endpoint
+	// answers 501 on every request today. It never answers 200 by default.
+	h("/api/v1/verifier/verify", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Scheme       string `json:"scheme"`
+			Subject      string `json:"subject"`
+			Proof        string `json:"proof"`        // hex
+			PublicInputs string `json:"publicInputs"` // hex
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		subject := strings.TrimSpace(req.Subject)
+		if subject == "" {
+			jsonError(w, http.StatusBadRequest, "subject is required")
+			return
+		}
+		proof, err := decodeHexField(req.Proof)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "proof: "+err.Error())
+			return
+		}
+		publicInputs, err := decodeHexField(req.PublicInputs)
+		if err != nil {
+			jsonError(w, http.StatusBadRequest, "publicInputs: "+err.Error())
+			return
+		}
+		if d.Verifier == nil {
+			// A deployment that forgot to wire the slot must say so rather
+			// than panic on a nil interface.
+			jsonError(w, http.StatusServiceUnavailable, "proof verifier is not configured")
+			return
+		}
+
+		vreq := verifier.Request{
+			Scheme:       verifier.Scheme(strings.ToUpper(strings.TrimSpace(req.Scheme))),
+			Subject:      subject,
+			Proof:        proof,
+			PublicInputs: publicInputs,
+		}
+		switch err := d.Verifier.Verify(r.Context(), vreq); {
+		case err == nil:
+			jsonResponse(w, http.StatusOK, map[string]interface{}{
+				"valid":  true,
+				"scheme": d.Verifier.Scheme(),
+			})
+		case errors.Is(err, verifier.ErrInvalidProof):
+			jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
+				"valid":  false,
+				"scheme": d.Verifier.Scheme(),
+				"error":  err.Error(),
+			})
+		default:
+			jsonError(w, http.StatusNotImplemented, err.Error())
+		}
+	}))
+
 	// ==================== AGENT API & DEVELOPER SERVICES ====================
 
 	if d.AgentAPI == nil {
@@ -644,7 +780,16 @@ func NewRouter(d Deps) http.Handler {
 	}))
 
 	// POST /api/v1/developer/keys - Create API Key
-	h("/api/v1/developer/keys", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+	//
+	// withDB, unlike its agentapi siblings above: this is the one handler in the
+	// agentapi group that reaches db.Pool (GenerateAPIKey INSERTs into api_keys).
+	// The insert is best-effort - it runs in a goroutine and its error is
+	// discarded (agentapi/service.go:157-169) - so the route would still answer
+	// without a pool. It is guarded anyway: the process that serves it cannot
+	// start without a database (cmd/api), so the refusal costs nothing, and an
+	// unguarded 200 that issues a key nobody can ever look up again is exactly
+	// the "success that persisted nothing" shape GAP-49 removed.
+	h("/api/v1/developer/keys", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			WalletAddress string `json:"wallet_address"`
 			Tier          string `json:"tier"`
@@ -662,7 +807,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", key)
-	}))
+	})))
 
 	// GET /api/v1/developer/stats - Console stats and usage metrics
 	h("/api/v1/developer/stats", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
@@ -678,4 +823,20 @@ func NewRouter(d Deps) http.Handler {
 	}))
 
 	return mux
+}
+
+// decodeHexField accepts an optional "0x" prefix and an empty value. Hex is
+// the encoding because proof payloads are binary; a body that is not hex is a
+// client error, not a verification failure.
+func decodeHexField(s string) ([]byte, error) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil, nil
+	}
+	s = strings.TrimPrefix(strings.TrimPrefix(s, "0x"), "0X")
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, errors.New("must be hex encoded")
+	}
+	return b, nil
 }

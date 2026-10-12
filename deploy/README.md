@@ -93,6 +93,14 @@ NEXT_PUBLIC_PERP_POSITION_MANAGER=
 `render.yaml` 已定义（`rootDir: backend`，`go build -o api cmd/api/main.go`）。
 推送即 `autoDeploy`。
 
+> ⚠️ **`DATABASE_URL` 现在是硬前置**（`docs/changes/027` / GAP-49）：缺失或连不上时进程
+> **非零退出并打印明确错误**，**不再**回落到内存态。故本次变更后：
+> **`render.yaml` 里 `DATABASE_URL` 若未在面板配好，后端会直接起不来**——这是有意行为
+> （此前它"起来了"，但所有业务路由 200 而什么都不落盘）。
+> 见 `backend/README.md` 的「数据库：启动即失败」一节。
+>
+> 同批：`cmd/migrate` 在**一个 `.sql` 都没读到**时也改为报错退出，不再打印"全部应用成功"。
+
 ## 5. 发布后核验
 
 ```bash

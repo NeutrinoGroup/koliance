@@ -45,6 +45,14 @@ func loadMigrationFiles() ([]string, error) {
 		}
 	}
 
+	// An empty directory is an error, not a no-op. Reporting "all migrations
+	// applied" after applying none is the same class of silent success this
+	// change set removes from the database layer (GAP-49): the operator reads
+	// a green line and believes the schema is current.
+	if len(sqlFiles) == 0 {
+		return nil, fmt.Errorf("no .sql files found in %s; refusing to report success having applied nothing", migrationDir)
+	}
+
 	sort.Strings(sqlFiles)
 	return sqlFiles, nil
 }
