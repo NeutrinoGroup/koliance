@@ -28,6 +28,11 @@ import { monadTestnet, KOL_TOKEN_ADDRESS, KOL_TOKEN_ABI } from "@/lib/contract";
 import { truncateAddress } from "@/lib/utils";
 import { useKolianceAuth } from "@/components/Providers";
 import { useKolianceAccount } from "@/components/KolianceAuthProvider";
+import {
+  resolveWalletRailAction,
+  walletRailLabel,
+  walletSessionLoginOptions,
+} from "@/lib/walletLogin";
 import { useLanguage } from "@/lib/i18n";
 import {
   AccountIdentity,
@@ -103,6 +108,9 @@ export function NavAuthBadges({
 }: NavAuthBadgesProps) {
   const {
     isPrivyEnabled,
+    // Named for the Privy session specifically: the wallet rail below and the
+    // Google/GitHub link paths all ask "is there already a session?", and this
+    // is the provider's own answer to that.
     authenticated: privyAuthenticated,
     user: privyUser,
     login: privyLogin,
@@ -113,6 +121,38 @@ export function NavAuthBadges({
   } = useKolianceAuth();
   const { state, unlink, signOut } = useKolianceAccount();
   const { lang, t } = useLanguage();
+
+  /**
+   * Issue #30. A wallet click has two different meanings and they must not be
+   * conflated: with no session it has to *create* one (the pure-wallet user's
+   * only way in), and only once a session exists may it *attach* a wallet to
+   * it. `linkWallet` is the second meaning - Privy documents it as "For users
+   * who are authenticated" - so offering it first is what left non-Google users
+   * with a wallet button that could not do anything.
+   */
+  const walletRail = resolveWalletRailAction({
+    authenticated: privyAuthenticated,
+    hasLinkWallet: Boolean(linkWallet),
+  });
+
+  const handleWalletRail = () => {
+    setDropdownOpen(false);
+    switch (walletRail) {
+      case "link-to-existing":
+        linkWallet?.();
+        return;
+      case "start-session":
+        // Wallet rail first, and named first: the modal opens on the wallets,
+        // with Google/GitHub still reachable behind it for anyone who wants the
+        // credit boost. `walletSessionLoginOptions` yields `undefined` in the
+        // non-Privy branch, where `login()` is an injected connect and has no
+        // method list to override. This is the change #30 asks for.
+        privyLogin(walletSessionLoginOptions(isPrivyEnabled));
+        return;
+      case "none":
+        return;
+    }
+  };
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -577,16 +617,19 @@ export function NavAuthBadges({
                       </button>
                     </div>
 
-                    {isPrivyEnabled && linkWallet && (
+                    {/* Issue #30: a wallet click means "attach a wallet to the
+                        session I already have" only when there is a session.
+                        With none, `linkWallet` is documented "For users who are
+                        authenticated" and silently does nothing - so the entry
+                        point moves to the unconnected block below, which starts
+                        a session instead. */}
+                    {walletRail === "link-to-existing" && (
                       <button
-                        onClick={() => {
-                          setDropdownOpen(false);
-                          linkWallet();
-                        }}
+                        onClick={handleWalletRail}
                         className="w-full py-1 px-2 rounded-lg bg-[#1a2134] hover:bg-[#25304a] text-slate-300 hover:text-white text-[10px] font-mono transition flex items-center justify-center gap-1 border border-white/10"
                       >
                         <Link2 className="w-3 h-3 text-purple-400" />
-                        <span>关联其他钱包 (Link External Wallet)</span>
+                        <span>{walletRailLabel(true, lang)}</span>
                       </button>
                     )}
                   </div>
@@ -594,19 +637,23 @@ export function NavAuthBadges({
                   <div className="space-y-2">
                     <p className="text-[11px] text-slate-300 font-sans">
                       {lang === "en"
-                        ? "Connect your Monad wallet for on-chain transfers, asset staking, and credit endorsement."
-                        : "连接 Monad 钱包以进行链上转账、资产抵押与信用背书。"}
+                        ? "Connect your Monad wallet for on-chain transfers, asset staking, and credit endorsement. A wallet is enough to sign in - Google and GitHub are optional rails that raise your credit limit."
+                        : "连接 Monad 钱包即可进行链上转账、资产抵押与信用背书。仅凭钱包即可登录——Google / GitHub 是可选的身份增强轨，只影响授信额度。"}
                     </p>
-                    <button
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        onConnectWallet?.();
-                      }}
-                      className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
-                    >
-                      <Wallet className="w-3.5 h-3.5 text-black" />
-                      <span>{lang === "en" ? "Connect Monad Wallet" : "立即连接钱包 (Connect Wallet)"}</span>
-                    </button>
+                    {/* Issue #30: the pure-wallet user's only way in. This used
+                        to be wired to `onConnectWallet` (which on the home page
+                        is the same full `login()`), so the wallet rail named
+                        nothing and nobody without Google could get a session.
+                        `handleWalletRail` starts one, wallet methods first. */}
+                    {walletRail === "start-session" && (
+                      <button
+                        onClick={handleWalletRail}
+                        className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                      >
+                        <Wallet className="w-3.5 h-3.5 text-black" />
+                        <span>{walletRailLabel(false, lang)}</span>
+                      </button>
+                    )}
                   </div>
                 )}
               </div>

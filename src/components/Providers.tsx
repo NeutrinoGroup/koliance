@@ -13,6 +13,7 @@ import { injected } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { privyWagmiConfig, fallbackWagmiConfig } from "@/lib/wagmi";
 import { monadTestnet } from "@/lib/contract";
+import type { WalletOnlyLoginOptions } from "@/lib/walletLogin";
 
 export interface KolianceAuthContextValue {
   isPrivyEnabled: boolean;
@@ -21,8 +22,20 @@ export interface KolianceAuthContextValue {
   user: User | null;
   address: `0x${string}` | null;
   isConnected: boolean;
-  login: () => void;
+  /**
+   * Starts a session. Accepts an optional override of the login modal's
+   * methods, so a caller can open it restricted to the wallet rail
+   * (`WALLET_ONLY_LOGIN_OPTIONS`) instead of the full method list.
+   */
+  login: (options?: WalletOnlyLoginOptions) => void;
   logout: () => Promise<void>;
+  /**
+   * Privy only, and **not a way to start a session**: it opens the
+   * wallet-connect modal *for an already authenticated user*, i.e. it attaches
+   * a wallet to the current account. See `resolveWalletRailAction` in
+   * `@/lib/walletLogin` for the dispatch that keeps that apart from starting a
+   * session - which is what issue #30 was about.
+   */
   linkWallet?: () => void;
   linkGoogle?: () => void;
   linkGithub?: () => void;
