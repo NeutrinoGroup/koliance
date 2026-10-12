@@ -33,7 +33,7 @@ import {
 } from "lucide-react";
 import { TrustRecordData } from "@/lib/contract";
 import { relayTarget } from "@/lib/oauthState";
-import { writeAccountState } from "@/lib/authState";
+import { STORAGE_KEYS, writeAccountState } from "@/lib/authState";
 import {
   fetchGameStats,
   generateGameplayProof,
@@ -181,7 +181,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
     }
 
     // Check cached Steam ID
-    const cached = localStorage.getItem("koliance_steam_id");
+    const cached = localStorage.getItem(STORAGE_KEYS.steam);
     if (cached) {
       loadSteamProfile(cached);
     }

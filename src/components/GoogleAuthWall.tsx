@@ -54,10 +54,13 @@ export function GoogleAuthWall({ walletAddress, onProfileSynced }: GoogleAuthWal
   const onProfileSyncedRef = useRef(onProfileSynced);
   onProfileSyncedRef.current = onProfileSynced;
 
-  // Read saved profile from localStorage if present
+  // Read saved profile from localStorage if present. The key comes from
+  // `STORAGE_KEYS` rather than a literal: this is the read half of the channel
+  // `writeAccountState` owns, and a second copy of the string is how the two
+  // halves drift apart.
   useEffect(() => {
     try {
-      const cached = localStorage.getItem("koliance_google_profile");
+      const cached = localStorage.getItem(STORAGE_KEYS.google);
       if (cached) {
         const parsed = JSON.parse(cached);
         setProfile(parsed);

@@ -25,7 +25,7 @@ import {
   DeveloperProof,
 } from "@/lib/api";
 import { relayTarget } from "@/lib/oauthState";
-import { writeAccountState } from "@/lib/authState";
+import { STORAGE_KEYS, writeAccountState } from "@/lib/authState";
 
 function githubStartUrl(path: string, customClientId?: string | null): string {
   const qs = new URLSearchParams({ path });
@@ -77,7 +77,9 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
       return;
     }
 
-    const cachedUser = localStorage.getItem("koliance_github_user");
+    // Through `STORAGE_KEYS`: this reads the row `writeAccountState` owns, and a
+    // second copy of the literal is how a read and its write drift apart.
+    const cachedUser = localStorage.getItem(STORAGE_KEYS.github);
     if (cachedUser) {
       loadProfile(cachedUser);
     }
