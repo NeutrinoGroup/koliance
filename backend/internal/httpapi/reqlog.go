@@ -279,21 +279,66 @@ func sanitizeLogErr(err error) string {
 // residue (GAP-61). This function runs BEFORE that one in the log path; it does
 // not replace it.
 //
+// # What the first version missed, and why it is written down here
+//
+// The residual was described as "file paths and hostnames are open-ended", which
+// was true and also not the whole story. An independent review read the patterns
+// against the classes they claim to cover and found whole FORMS falling through
+// — not exotic ones, the ordinary spellings:
+//
+//	class          shape that went through untouched
+//	#1 stack       database.(*DB).Connect: connection refused   (in-package name)
+//	#2 SQL         relation "api_keys" · SQLSTATE: 23505        (quoted relation, colon)
+//	#3 DSN         host=… user=… dbname=…                       (keyword form, no ://)
+//	#5 value       token sk-live-do-not-log                     (no `=`)
+//	#6 body        a body cut off at 256/512 chars              (truncation)
+//	#7 path        open/var/lib/koliance/keys.pem               (no leading space)
+//	#7 host        db_internal · [fd00::1] · localhost:5432     (underscore, IPv6, port)
+//
+// The #6 case is the one worth reading twice: the comment argued from "clients
+// truncate these bodies to 256/512 chars", and truncation is exactly what breaks
+// the closing `}` the pattern required — the justification and the blind spot
+// were the same fact. It is not fixable by shape (an unterminated body has no
+// shape to match); see the note on reThirdPartyBody.
+//
+// The patterns below close every form in that table except #6's, which is
+// documented rather than papered over. Each closed form has a row in
+// TestSanitizeLogValue asserting the secret is gone.
+//
 // Every marker uses angle brackets, never square ones: the third-party-body
 // rule matches `[...]` and `{...}`, so a marker in those shapes would be
 // rewritten by a later pass and the label would stop naming the class it
 // removed.
 var (
 	// §3.4 #1 — Go stack frame signatures.
-	reGoStack = regexp.MustCompile(`(?m)goroutine\s+\d+\s*\[[^\]]*\]|[\w./\\-]+\.go:\d+|^\s+[\w./\\-]+\([^)]*\)$`)
+	//
+	// The `(*T).Method` alternative is the in-package function name the ADR
+	// names explicitly, and it is a shape rather than a name list: a pointer
+	// receiver is how the runtime prints a method, and it does not appear in
+	// prose. It is matched with or without a package prefix, so both
+	// `(*DB).Connect` and `database.(*DB).Connect` lose the part that matters.
+	reGoStack = regexp.MustCompile(`(?m)goroutine\s+\d+\s*\[[^\]]*\]|[\w./\\-]+\.go:\d+|^\s+[\w./\\-]+\([^)]*\)$|\(\*[\w.]+\)\.[\w]+`)
 
-	// §3.4 #2 — SQL text, constraint names, driver names.
-	reSQL = regexp.MustCompile(`(?i)\bINSERT\s+INTO\b|\bUPDATE\s+\w+\s+SET\b|\bDELETE\s+FROM\b|\bSELECT\b[\w*,\s()]*\bFROM\b|\bpgx\b|\blibpq\b|\bSQLSTATE\s*[0-9A-Z]{5}\b|\bconstraint\s+"[^"]*"`)
+	// §3.4 #2 — SQL text, constraint names, driver names, SQLSTATE.
+	//
+	// Three additions. `relation "x"` is how PostgreSQL reports a missing table
+	// and the original only knew `constraint "x"`. The SQLSTATE separator is
+	// optional because `SQLSTATE: 23505` and `SQLSTATE 23505` are both real
+	// renderings — requiring the space missed the one with the colon. And the
+	// driver-name rule is a dotted identifier (`pgx.ErrNoRows`) rather than the
+	// bare word, which is the form that actually reaches an error string.
+	reSQL = regexp.MustCompile(`(?i)\bINSERT\s+INTO\b|\bUPDATE\s+\w+\s+SET\b|\bDELETE\s+FROM\b|\bSELECT\b[\w*,\s()]*\bFROM\b|\bpgx\b|\blibpq\b|\bSQLSTATE\s*:?\s*[0-9A-Z]{5}\b|\b(?:constraint|relation)\s+"[^"]*"`)
 
-	// §3.4 #3 — DSNs and connection strings. The whole URI is consumed, host
-	// and path included, so the credential cannot survive as a tail that no
-	// other rule was written to catch.
-	reDSN = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://\S*|\bpassword\s*=\s*\S+`)
+	// §3.4 #3 — DSNs and connection strings.
+	//
+	// The URI form and the `password=` form were here from the start. The third
+	// alternative is the keyword DSN (`host=… user=… dbname=…`), which is what
+	// libpq and every Go driver accept and which contains neither `://` nor
+	// necessarily a `password=`. It requires TWO OR MORE assignments in a row,
+	// because a lone `a=b` is a sentence and a run of them is a connection
+	// string. The `password|passwd|pwd` alternative keeps the credential covered
+	// even when it is the only keyword present.
+	reDSN = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://\S*|\b(?:password|passwd|pwd)\s*=\s*\S+|(?:^|\s)[a-z_]{2,20}=[^\s]+(?:\s+[a-z_]{2,20}=[^\s]+)+`)
 
 	// §3.4 #4/#5 — environment variable names, and `NAME=value` pairs where
 	// the value must never be written out. The name pattern requires at least
@@ -302,26 +347,91 @@ var (
 	reEnvAssign = regexp.MustCompile(`\b[A-Z][A-Z0-9_]{2,}\s*=\s*\S+`)
 	reEnvName   = regexp.MustCompile(`\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b`)
 
+	// §3.4 #5 — the VALUE of a credential, with no `NAME=` in front of it.
+	//
+	// The original had no rule for this class at all: reEnvAssign needs the
+	// `=`, and reEnvName needs an uppercase name, so `token sk-live-do-not-log`
+	// — a value with its label in lowercase prose — went through whole. Two
+	// alternatives: a keyword immediately followed by a single long token, and
+	// the provider prefixes that identify a key on sight. The keyword form
+	// requires the value to be one 8+ character token, so `secret was rotated`
+	// is not a match and a real key is.
+	reSecretValue = regexp.MustCompile(`(?i)\b(?:token|secret|password|passwd|api[_-]?key|apikey|bearer)\b\s*[:=]?\s*[A-Za-z0-9_./+=-]{8,}|\bsk-[A-Za-z0-9_-]{8,}|\b(?:gh[pousr]|xox[baprs])[-_][A-Za-z0-9_-]{8,}`)
+
 	// §3.4 #6 — third-party response bodies embedded in an error. Clients
 	// truncate them to 256/512 chars (market/alpaca_client.go:192,
 	// market/price_oracle.go:209); truncation bounds the size, not the
 	// sensitivity. JSON is the shape those bodies arrive in.
+	//
+	// KNOWN RESIDUAL, and it is the majority case rather than the edge. The
+	// pattern needs a closing `}` or `]`, and truncation is what removes it: a
+	// body cut at 256 chars usually has no closing brace, so the truncated body
+	// passes through whole — and the truncation is the same fact the comment
+	// above cites as the bound. A string value containing `}` also ends the
+	// match early and leaves a tail.
+	//
+	// There is no shape that identifies an unterminated JSON body, so this is
+	// NOT closed here; it is named in docs/changes/055 §6 as a residual of the
+	// same size as the class itself, and it is the reason the §3.4 #6 row in
+	// TestSanitizeLogValue carries a well-formed body only. Closing it means
+	// not putting the body in the error string at all, which is the handler's
+	// call (ADR-006 §3.5), not a regex.
 	reThirdPartyBody = regexp.MustCompile(`\{[^{}]*\}|\[[^\[\]]*\]`)
 
-	// §3.4 #7 — file paths, hostnames, internal addresses.
+	// §3.4 #7 — file paths. Three forms, deliberately split so each can be read
+	// (and tested) on its own:
 	//
-	// The path pattern requires either an explicit file:// / drive form or a
-	// leading space, which is how a path appears inside prose
-	// (fmt.Errorf("open %s: ...")). It deliberately does NOT match a bare
-	// "/a/b/c": r.URL.Path is the single most useful field in this log line,
-	// and a pattern loose enough to swallow it would redact the diagnostic
-	// value along with the leak.
+	//   reFilePathAbs  a path introduced by a space — how a path appears inside
+	//                  prose (fmt.Errorf("open %s: ...")). The leading space is
+	//                  captured and re-emitted, so the message stays readable.
+	//   reFilePathURI  file:// and Windows drive forms.
+	//   reFilePathRel  a path with NO leading space (open/var/lib/keys.pem).
+	//                  This is the form the first version missed entirely.
 	//
-	// The host pattern requires either a dotted quad or at least three labels,
-	// which keeps `db.go` and `errors.Unwrap` out of it — a single-dot rule
-	// would redact every file name and package qualifier in the message.
-	reFilePath = regexp.MustCompile(`(?i)\bfile://\S+|\b[A-Za-z]:\\[^\s]*|\s/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+`)
-	reHost     = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b|\b(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.){2,}[a-z]{2,}(?::\d+)?\b`)
+	// The delimiter alternatives are what keep a bare URL path out of the net,
+	// and the reasoning is worth spelling out because it is one character wide.
+	// reFilePathAbs requires a space, so it cannot see the start of the string.
+	// reFilePathRel accepts the start of the string OR a single non-word,
+	// non-slash character — and every character between the segments of
+	// /api/v1/market/prices is a word character or a slash, so no position in
+	// that string can serve as a delimiter. It is matched by neither rule.
+	// r.URL.Path is the single most useful field in this log line, and the
+	// "bare url path is left alone" row in TestSanitizeLogValue is the control
+	// that holds both rules to it.
+	reFilePathAbs = regexp.MustCompile(`(\s)/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)+`)
+	reFilePathURI = regexp.MustCompile(`(?i)\bfile://\S+|\b[A-Za-z]:[\\/][^\s]*`)
+	reFilePathRel = regexp.MustCompile(`(^|[^\w/])([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+){2,})`)
+
+	// §3.4 #7 — hostnames, internal addresses.
+	//
+	// Four forms. The original had two: a dotted quad and a three-label dotted
+	// name, which between them missed every host a container platform actually
+	// hands out. Added: a bracketed IPv6 literal (how Go renders one in an
+	// address), a single-label host WITH A PORT (localhost:5432, db_internal:5432),
+	// and underscores in the dotted form (db_internal.example.com), which the
+	// DNS-strict `[a-z0-9-]` character class rejected even though Docker and
+	// Kubernetes both mint such names.
+	//
+	// Two constraints are load-bearing and are the reason this is not simply a
+	// case-insensitive version of the old rule:
+	//
+	//   - There is no global `(?i)`. A case-insensitive TLD class matches
+	//     `errors.Unwrap` (Unwrap reads as a TLD), and redacting a package
+	//     qualifier is the over-redaction the original comment promised not to
+	//     do. Only the IPv6 alternative is case-insensitive, via `(?i:…)`.
+	//   - The dotted form still requires TWO OR MORE dots. A one-dot form would
+	//     match `db.go` and `main.go`, which is the other half of that same
+	//     promise, and no case in the ADR's list needs it.
+	//
+	// The bracket form requires at least two colons, so a JSON array of hex-ish
+	// scalars (`[2026]`) is left for the third-party-body rule rather than
+	// labelled a host.
+	//
+	// The port is what carries the single-label form: a bare `db_internal` in
+	// prose is indistinguishable from an identifier, so the rule fires only on
+	// `name:port`. A bare underscore hostname with no port therefore remains a
+	// residual — named in docs/changes/055 §6 rather than half-matched here.
+	reHost = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?\b|(?i:\[[0-9a-f]{0,4}(?::[0-9a-f]{0,4}){2,}\])|\b(?:[a-z0-9](?:[a-z0-9_-]*[a-z0-9])?\.){2,}[a-z]{2,}(?::\d+)?\b|\b[a-z0-9][a-z0-9_-]*:\d{2,5}\b`)
 )
 
 // The markers. Each names the class it removed.
@@ -331,6 +441,7 @@ const (
 	markDSN      = "<REDACTED:dsn>"
 	markEnv      = "<REDACTED:env>"
 	markEnvName  = "<REDACTED:env-name>"
+	markSecret   = "<REDACTED:value>"
 	markUpstream = "<REDACTED:upstream-body>"
 	markPath     = "<REDACTED:path>"
 	markHost     = "<REDACTED:host>"
@@ -338,9 +449,32 @@ const (
 
 // sanitizeLogValue redacts every §3.4 class from a string bound for the log.
 //
-// Order matters and is not arbitrary: the credential-bearing URI form is
-// removed before the generic `NAME=value` rule, so a password cannot survive
-// as the tail of a rule that only meant to drop an env assignment.
+// Order matters and is not arbitrary:
+//
+//   - the credential-bearing URI is removed before the generic `NAME=value`
+//     rule, so a password cannot survive as the tail of a rule that only meant
+//     to drop an env assignment;
+//   - the bare-value rule runs after the two env rules, so `TOKEN=x` is reported
+//     as an env assignment rather than as a value with no name;
+//   - the path and host rules run before the third-party-body rule. Both the
+//     bracketed IPv6 literal `[fd00::1]` and a Windows path `C:\…` are also
+//     matched by the body rule's `[...]` / `{...}` alternatives, and whichever
+//     runs first decides the label. `host` and `path` name what was removed
+//     precisely; `upstream-body` would be a wrong answer to the right question;
+//   - the path rules run before the host rule, because a path that contains a
+//     dotted directory name would otherwise be read as a hostname and lose the
+//     `path` label that tells a reader what was removed.
+//
+// The path rules carry a capture group and re-emit it, so the delimiter a path
+// was found behind (a space, or the character that made it a relative path)
+// stays in the message. Dropping it would glue the marker to the word in front
+// and make the line harder to read than the one with no sanitizer at all.
+//
+// For reFilePathRel that capture group is the DELIMITER, not the path: the
+// pattern is `(^|[^\w/])(path)`, and the replacement re-emits group 1 and drops
+// group 2. Writing `${1}${2}` there re-emits the path it just removed — a
+// sanitizer that redacts and then restores, which looks exactly like a working
+// one until you read the output.
 func sanitizeLogValue(s string) string {
 	if s == "" {
 		return s
@@ -354,9 +488,12 @@ func sanitizeLogValue(s string) string {
 		{reSQL, markSQL},
 		{reEnvAssign, markEnv},
 		{reEnvName, markEnvName},
-		{reThirdPartyBody, markUpstream},
-		{reFilePath, markPath},
+		{reSecretValue, markSecret},
+		{reFilePathURI, markPath},
+		{reFilePathAbs, "${1}" + markPath},
+		{reFilePathRel, "${1}" + markPath},
 		{reHost, markHost},
+		{reThirdPartyBody, markUpstream},
 	} {
 		s = r.re.ReplaceAllString(s, r.to)
 	}

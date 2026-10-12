@@ -901,13 +901,34 @@ func TestRecordRequestWithNilLoggerDoesNotPanic(t *testing.T) {
 // sanitization (ADR-006 §3.4)
 // ---------------------------------------------------------------------------
 
-// TestSanitizeLogValue walks the seven §3.4 classes plus two controls.
+// TestSanitizeLogValue walks the seven §3.4 classes plus the controls.
 //
 // The controls matter more than the hits. A sanitizer that redacted everything
 // would pass every "the secret is gone" assertion in this file while destroying
-// the diagnostic value the log exists for — and the last two rows are the
-// specific things reqlog.go:298-311 claims to leave alone (a bare URL path, and
+// the diagnostic value the log exists for — and the controls below are the
+// specific things the patterns claim to leave alone (a bare URL path, and
 // ordinary prose with no secret in it).
+//
+// # The second half of the table
+//
+// An independent review read the patterns against the classes they claim to
+// cover and found whole FORMS passing through — not exotic spellings, the
+// ordinary ones: a quoted `relation "x"`, a `SQLSTATE:` with a colon, the
+// keyword DSN (`host=… user=…`), an in-package function name, a credential
+// value with no `=`, a path with no leading space, an IPv6 literal, a host with
+// an underscore or a port. Every one of those has a row below and every row
+// asserts the secret itself is absent, so the row is a negative control for the
+// fix rather than a demonstration of it: remove the corresponding pattern and
+// the row goes red.
+//
+// The rows marked "was missed" are the ones that were green-by-absence before —
+// they were not in the table, because the pattern they need did not exist.
+//
+// What is NOT here is as deliberate. The §3.4 #6 truncated body has no row,
+// because no shape identifies an unterminated JSON body and pretending otherwise
+// would be a rule that passes its own test and catches nothing in production.
+// TestSanitizeLogValueKnownResiduals pins that gap instead, so the boundary
+// stated in docs/changes/055 §6 cannot rot into a claim that the class is closed.
 func TestSanitizeLogValue(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -938,6 +959,22 @@ func TestSanitizeLogValue(t *testing.T) {
 			absent:     []string{"hunter2", "db.internal.example"},
 		},
 		{
+			// was missed: the keyword DSN has neither `://` nor a `password=`,
+			// and is what libpq and every Go driver accept.
+			name:       "keyword DSN (host/user/dbname, no ://)",
+			in:         "host=db.internal.example user=koliance dbname=koliance sslmode=disable",
+			wantExact:  markDSN,
+			wantMarker: markDSN,
+			absent:     []string{"db.internal.example", "koliance"},
+		},
+		{
+			name:       "keyword DSN with only a password",
+			in:         "password=hunter2",
+			wantExact:  markDSN,
+			wantMarker: markDSN,
+			absent:     []string{"hunter2"},
+		},
+		{
 			name:       "go stack frame",
 			in:         "goroutine 1 [running]:",
 			wantMarker: markStack,
@@ -950,10 +987,48 @@ func TestSanitizeLogValue(t *testing.T) {
 			absent:     []string{"panic.go:770"},
 		},
 		{
+			// was missed: ADR-006 §3.4 #1 names "包内函数名" explicitly, and a
+			// pointer receiver is how the runtime renders one.
+			name:       "in-package function name",
+			in:         "database.(*DB).Connect: connection refused",
+			wantMarker: markStack,
+			absent:     []string{"(*DB).Connect"},
+		},
+		{
+			name:       "qualified function name",
+			in:         "internal/platform/database.(*DB).Ping: timeout",
+			wantMarker: markStack,
+			absent:     []string{"(*DB).Ping"},
+		},
+		{
 			name:       "sql text and constraint name",
 			in:         `duplicate key value violates unique constraint "cards_pkey" (SQLSTATE 23505)`,
 			wantMarker: markSQL,
 			absent:     []string{"cards_pkey", "23505"},
+		},
+		{
+			// was missed: PostgreSQL's missing-table message says `relation`,
+			// and the original rule only knew `constraint`.
+			name:       "sql quoted relation name",
+			in:         `pq: relation "api_keys" does not exist`,
+			wantMarker: markSQL,
+			absent:     []string{"api_keys"},
+		},
+		{
+			// was missed: the separator is a colon here, and the original rule
+			// required whitespace.
+			name:       "sqlstate with a colon",
+			in:         "duplicate key (SQLSTATE: 23505)",
+			wantMarker: markSQL,
+			absent:     []string{"23505"},
+		},
+		{
+			// was missed: #5 is "the VALUE of an env var", and a value with its
+			// label in lowercase prose matched none of the env rules.
+			name:       "credential value with no NAME=",
+			in:         "upstream rejected the request: token sk-live-do-not-log",
+			wantMarker: markSecret,
+			absent:     []string{"sk-live-do-not-log"},
 		},
 		{
 			name:       "third-party response body",
@@ -969,6 +1044,20 @@ func TestSanitizeLogValue(t *testing.T) {
 			absent:     []string{"/var/lib/koliance/keys.pem"},
 		},
 		{
+			// was missed: the original rule required a leading space, and this
+			// is the form an error string actually carries.
+			name:       "file path with no leading space",
+			in:         "open/var/lib/koliance/keys.pem: permission denied",
+			wantMarker: markPath,
+			absent:     []string{"/var/lib/koliance/keys.pem"},
+		},
+		{
+			name:       "windows file path",
+			in:         `open C:\koliance\keys.pem: permission denied`,
+			wantMarker: markPath,
+			absent:     []string{`C:\koliance\keys.pem`},
+		},
+		{
 			name:       "internal address",
 			in:         "dial tcp 10.0.3.7:5432: connect: connection refused",
 			wantMarker: markHost,
@@ -979,6 +1068,37 @@ func TestSanitizeLogValue(t *testing.T) {
 			in:         "lookup db.internal.example: no such host",
 			wantMarker: markHost,
 			absent:     []string{"db.internal.example"},
+		},
+		{
+			// was missed: an IPv6 literal is bracketed, and the original rule
+			// only knew dotted quads.
+			name:       "ipv6 internal address",
+			in:         "dial tcp [fd00::1]:5432: connect: connection refused",
+			wantMarker: markHost,
+			absent:     []string{"fd00::1"},
+		},
+		{
+			// was missed: a single-label host carries no dot, so the three-label
+			// rule could not see it. The port is what makes it a host rather
+			// than an identifier.
+			name:       "single-label host with a port",
+			in:         "dial tcp db_internal:5432: connect: connection refused",
+			wantMarker: markHost,
+			absent:     []string{"db_internal:5432"},
+		},
+		{
+			name:       "localhost with a port",
+			in:         "dial tcp localhost:5432: connect: connection refused",
+			wantMarker: markHost,
+			absent:     []string{"localhost:5432"},
+		},
+		{
+			// was missed: Docker and Kubernetes both mint underscored names, and
+			// the DNS-strict character class rejected them.
+			name:       "hostname with an underscore",
+			in:         "lookup db_internal.example.com: no such host",
+			wantMarker: markHost,
+			absent:     []string{"db_internal.example.com"},
 		},
 		{
 			// Control 1: the diagnostic value the middleware keeps. If a future
@@ -994,6 +1114,15 @@ func TestSanitizeLogValue(t *testing.T) {
 			name:      "control: ordinary prose is left alone",
 			in:        "market data unavailable: upstream did not answer",
 			wantExact: "market data unavailable: upstream did not answer",
+		},
+		{
+			// Control 3: the bare-value rule is keyword-anchored for a reason.
+			// `errors.Unwrap` is the identifier the host rule's comment promises
+			// to keep out, and a bare-value rule loose enough to eat any short
+			// token would have taken it.
+			name:      "control: a package qualifier is left alone",
+			in:        "errors.Unwrap returned a nil cause",
+			wantExact: "errors.Unwrap returned a nil cause",
 		},
 		{
 			name:      "empty string",
@@ -1017,6 +1146,67 @@ func TestSanitizeLogValue(t *testing.T) {
 				if strings.Contains(got, secret) {
 					t.Errorf("sanitizeLogValue(%q) = %q still carries %q", tc.in, got, secret)
 				}
+			}
+		})
+	}
+}
+
+// TestSanitizeLogValueKnownResiduals asserts the residuals are STILL there.
+//
+// This looks backwards and is not. docs/changes/055 §6 declares the boundary of
+// the sanitizer in prose, and prose does not fail a build: the day someone
+// closes one of these gaps, the declaration goes stale and nothing says so —
+// the exact failure mode AGENTS.md §8 records for self-referential statements
+// ("错了不会响，只会静默地错").
+//
+// So each declared residual is pinned as a measurement, in the same style as
+// TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement. When a residual
+// closes, THIS test goes red, and the red is the prompt to move the row out of
+// the declaration and into the table above.
+//
+// The first two are the §3.4 #6 gap, and it is the largest one: the pattern
+// needs a closing brace, and the client truncates at 256/512 characters, so the
+// truncated body — the case the code comment cites as the reason truncation is
+// safe — is the case that goes through whole.
+func TestSanitizeLogValueKnownResiduals(t *testing.T) {
+	cases := []struct {
+		name    string
+		in      string
+		present string
+		why     string
+	}{
+		{
+			name:    "truncated third-party body",
+			in:      `alpaca API error [422]: {"message":"invalid symbol","code":401100`,
+			present: "invalid symbol",
+			why:     "no closing brace survives truncation, so no shape identifies the body",
+		},
+		{
+			name:    "third-party body with a brace inside a string value",
+			in:      `{"message":"bad } symbol","code":1}`,
+			present: `symbol","code":1`,
+			why:     "the first `}` ends the match, and the tail is left behind",
+		},
+		{
+			name:    "bare single-label hostname with no port",
+			in:      "lookup db_internal: no such host",
+			present: "db_internal",
+			why:     "a bare identifier and a bare hostname are the same shape; the port is what separates them",
+		},
+		{
+			name:    "bare credential value with no label and no known prefix",
+			in:      "the credential is hunter2",
+			present: "hunter2",
+			why:     "a value rule that fires on any short token would eat ordinary prose",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sanitizeLogValue(tc.in); !strings.Contains(got, tc.present) {
+				t.Errorf("this residual is now REDACTED, so the declaration in docs/changes/055 §6 is stale:\n"+
+					" in   %q\n got  %q\n want %q still present (%s)\n"+
+					"move this row into TestSanitizeLogValue and update the §6 boundary",
+					tc.in, got, tc.present, tc.why)
 			}
 		})
 	}

@@ -171,8 +171,30 @@ git log --all --diff-filter=A --name-only --pretty=format: | Select-String "docs
 ## 6. 未竟 / 已知代价（不在本页解决）
 
 - **§3.3 词表 · §3.6 信封 · 51 处调用点迁移**：**本轮不做**，仍是 GAP-74 的未竟部分。
-- **§3.4 第 7 项只做了形态级脱敏**：路径/主机名是**开放形态**，正则永远漏一项。
+- **§3.4 的脱敏**：初版的自陈是"路径/主机名是**开放形态**，正则永远漏一项"。
+  **实测表明这句话把残余说小了**（**A4，本轮修**）。逐条读正则对每一类做形态枚举，
+  当时**整类漏网**的有：#1 包内函数名 · #2 `relation "x"` 与 `SQLSTATE:`（冒号）·
+  #3 keyword 形 DSN · #5 无 `=` 的裸值 · #6 被截断的第三方 body · #7 无前导空格的路径 ·
+  #7 IPv6 / 下划线主机 / `localhost:5432`。
+  **本轮能补的正则形态全部补上**（逐条对应 `reqlog.go` 的 `reGoStack` / `reSQL` / `reDSN` /
+  `reSecretValue` / `reFilePathRel` / `reHost`），每条配一个**断言密钥缺席**的用例
+  （`TestSanitizeLogValue` 的 "was missed" 行）。
+  **补不干净的如实列出，并固化为判据**——见下一条。
   残余风险**不新开号**，并入 **GAP-74**（它是同一条解除条件的组成部分）。
+- **§3.4 的残余边界（修正后的自陈，逐条可复核）**：
+
+  | 残余 | 为何补不掉 | 钉住它的判据 |
+  | --- | --- | --- |
+  | **#6 被截断的第三方 body**（**整类**，且是多数情形） | 客户端在 256/512 字符处截断（`alpaca_client.go:192`、`price_oracle.go:209`），**截断恰好破坏闭合 `}`/`]`**——而初版注释正是拿"截断有界"论证这一条安全的。**截断本身就是失配原因**，且无任何形态能识别一个未闭合的 JSON body | `TestSanitizeLogValueKnownResiduals/truncated_third-party_body` |
+  | **#6 字符串值里含 `}`** | 第一个 `}` 提前收尾，尾部残留 | `.../third-party_body_with_a_brace_inside_a_string_value` |
+  | **#7 无端口的裸单标签主机**（`db_internal`） | 与普通标识符**同形**；`errors.Unwrap` 必须留在网外，故只在 `name:port` 上触发 | `.../bare_single-label_hostname_with_no_port` |
+  | **#5 无标签、无已知前缀的裸值**（`the credential is hunter2`） | 一条对任意短 token 生效的值规则会吃掉普通散文 | `.../bare_credential_value_with_no_label_and_no_known_prefix` |
+
+  **这张表本身是判据，不是说明**：`TestSanitizeLogValueKnownResiduals` 断言这些残余
+  **仍然存在**。哪天有人补上了其中一条，那条会**变红**，红就是"把这一行从边界表挪进上表"的提示。
+  理由与 `AGENTS.md` §8 对自指陈述的判断同源：**散文不参与构建，错了不会响**。
+  **未闭合的 #6 不是正则问题**——收口它意味着**根本不把 body 放进错误串**，
+  那是 handler 的职责（ADR-006 §3.5），不是一条正则能做的。
 - **脱敏的判据受 GAP-61 限制**：`db.go:141` 的 `sanitizeDSNError` 已有同类残余
   （锚点之外的口令回显不脱敏）。本中间件在写日志**前**调用它，**不是替代它**。
 - **本判据须独立审**：按 D3「自己写的判据不得自己审」，§4.2 是我自己的负向用例，
@@ -262,6 +284,10 @@ first example: 28bf4eff3907e1e32e64e2d9c282ae09 -> 3907
 
 ## 7. 附：真跑 stdout 原文（回灌，未编辑）
 
+> **§7.1 是本轮（A1/A4/A5/A7）修完之后的复跑读数**，不是初版那次。
+> §7.2 起的标题保留初版编号，新加的段落以 `.1` 后缀插入，**不改旧段的编号**——
+> 旧读数仍然对应它当时的那份代码，改写它等于篡改证据链（`AGENTS.md` §5）。
+
 ### 7.1 全量（`go build` / `go vet` / `go test -race -count=1 ./...`）
 
 ```
@@ -271,34 +297,35 @@ $ go test -race -count=1 ./...
 ?   	github.com/koliance/backend/cmd/api	[no test files]
 ?   	github.com/koliance/backend/cmd/liquidator	[no test files]
 ?   	github.com/koliance/backend/cmd/migrate	[no test files]
-ok  	github.com/koliance/backend/internal/agentapi	2.632s
-ok  	github.com/koliance/backend/internal/agentcard	1.955s
-ok  	github.com/koliance/backend/internal/chain	2.891s
+ok  	github.com/koliance/backend/internal/agentapi	2.660s
+ok  	github.com/koliance/backend/internal/agentcard	1.658s
+ok  	github.com/koliance/backend/internal/chain	2.814s
 ?   	github.com/koliance/backend/internal/chain/bindings	[no test files]
-ok  	github.com/koliance/backend/internal/config	1.553s
+ok  	github.com/koliance/backend/internal/config	1.501s
 ?   	github.com/koliance/backend/internal/developer	[no test files]
-ok  	github.com/koliance/backend/internal/game	2.283s
-ok  	github.com/koliance/backend/internal/httpapi	4.903s
-ok  	github.com/koliance/backend/internal/liquidation	1.524s
-ok  	github.com/koliance/backend/internal/liquidator	1.962s
-ok  	github.com/koliance/backend/internal/market	2.054s
+ok  	github.com/koliance/backend/internal/game	3.258s
+ok  	github.com/koliance/backend/internal/httpapi	6.499s
+ok  	github.com/koliance/backend/internal/liquidation	1.704s
+ok  	github.com/koliance/backend/internal/liquidator	2.533s
+ok  	github.com/koliance/backend/internal/market	2.781s
 ?   	github.com/koliance/backend/internal/model	[no test files]
-ok  	github.com/koliance/backend/internal/oracle	1.990s
-> **§7.1 是本轮（A1/A4/A5/A7）修完之后的复跑读数**，不是初版那次。
-> §7.2 起的标题保留初版编号，新加的段落以 `.1` 后缀插入，**不改旧段的编号**——
-> 旧读数仍然对应它当时的那份代码，改写它等于篡改证据链（`AGENTS.md` §5）。
-
-ok  	github.com/koliance/backend/internal/perp/nonce	1.462s
-ok  	github.com/koliance/backend/internal/perp/position	1.479s
-ok  	github.com/koliance/backend/internal/platform/database	2.429s
+ok  	github.com/koliance/backend/internal/oracle	2.225s
+ok  	github.com/koliance/backend/internal/perp/nonce	1.548s
+ok  	github.com/koliance/backend/internal/perp/position	1.630s
+ok  	github.com/koliance/backend/internal/platform/database	2.935s
 ?   	github.com/koliance/backend/internal/platform/stripeclient	[no test files]
-ok  	github.com/koliance/backend/internal/settlement	1.455s
-ok  	github.com/koliance/backend/internal/verifier	1.392s
-ok  	github.com/koliance/backend/scripts/coverage-gate	1.732s
+ok  	github.com/koliance/backend/internal/settlement	1.815s
+ok  	github.com/koliance/backend/internal/verifier	1.587s
+ok  	github.com/koliance/backend/scripts/coverage-gate	1.578s
                                                      -> exit 0
 ```
 
 ### 7.2 P4 正向 + N5 负向（`-race -v`，节选原文）
+
+> ⚠️ **本段是初版的读数，保留原样。** 它记录的是**GET-only** 的那一版——
+> 也就是 §4.3 所说的"两半一起瞎"的那一版。**保留它的理由正是这个**：
+> 它下面 `=== RUN` 的行里**没有一行 POST**，而这在当时**看起来是全绿的**。
+> 修完之后的读数见 §7.2.1。
 
 ```
 $ go test -race -count=1 -v -run "TestLoggingMiddlewareDoesNotAlterBody|TestStatusWriterKeepsResponseControllerWorking|TestN5InjectedBodyWriteTurnsP4Red|TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement" ./internal/httpapi/
@@ -322,11 +349,6 @@ $ go test -race -count=1 -v -run "TestLoggingMiddlewareDoesNotAlterBody|TestStat
     reqlog_test.go:498: 997/1000 generated ids match priceShapedInText (example: f5844bded57a6ded89b60e30bf85a3ae -> "5844") — see the doc comment above
 --- PASS: TestGeneratedRequestIDWouldBreakTheRefusalShapeJudgement (0.02s)
 PASS
-> ⚠️ **本段是初版的读数，保留原样。** 它记录的是**GET-only** 的那一版——
-> 也就是 §4.3 所说的"两半一起瞎"的那一版。**保留它的理由正是这个**：
-> 它下面 `=== RUN` 的行里**没有一行 POST**，而这在当时**看起来是全绿的**。
-> 修完之后的读数见 §7.2.1。
-
 ok  	github.com/koliance/backend/internal/httpapi	2.363s
                                                      -> exit 0
 ```
@@ -336,28 +358,6 @@ ok  	github.com/koliance/backend/internal/httpapi	2.363s
 变成 `!{"status":"healthy"}\n`——**P4 的比对必须能看见这个差别，而它确实看见了**
 （若看不见，`TestN5InjectedBodyWriteTurnsP4Red` 会在 `t.Fatal` 处失败）。
 
-### 7.3 覆盖率门禁（`go run ./scripts/coverage-gate`，节选原文）
-
-```
-$ go test -count=1 -covermode=atomic -coverprofile=coverage/coverage.out ./...
-ok  	github.com/koliance/backend/internal/httpapi	4.353s	coverage: 81.7% of statements
-
-$ go run ./scripts/coverage-gate
-   81.72  76.00    541/662    internal/httpapi               router, middleware, handlers (604 stmts)
-────────────────────────────────────────────────────────────────────────────────────────
-   72.60  69.00   1810/2493   TOTAL (gated)                  excludes generated + untested-by-design
-[OK] Coverage above every floor
-                                                     -> exit 0
-```
-
-> ⚠️ **两处需总控复验的读数**（都是"数字变了"，不是"门禁绿了"）：
-> ① `httpapi` 的 `measured` 仍是 `80.13 / 604 stmts`，而本轮实测是 **`81.72 / 662 stmts`**；
-> ② `TOTAL (gated)` 的 `measured` 仍是 `71.99`，实测 **`72.60`**。
-> 二者都是**向上**漂移，不影响判绿（`scripts/coverage-gate/main.go:196-201` 的
-> `measured` 只是**取地板时的历史读数**，供人看，不参与判定）。**但 `main.go:196` 的
-> 注释说"每个地板取自本表读数"**——注释与表已经不一致。**改门禁表的注释属 03/10 环**，
-> 本轮**不动**（硬边界），**在此点名**。
-> ③ 逐函数实测：`reqlog.go` 12 个函数中 11 个 **100%**，唯一例外是
 ### 7.2.1 P4 / N5 / N5(POST)（修后复跑，`-race -v` 原文）
 
 ```
@@ -523,35 +523,105 @@ ok  	github.com/koliance/backend/internal/httpapi	1.002s
                                                      -> exit 0
 ```
 
+### 7.3 覆盖率门禁（`go run ./scripts/coverage-gate`，节选原文）
+
+```
+$ go test -count=1 -covermode=atomic -coverprofile=coverage/coverage.out ./...
+ok  	github.com/koliance/backend/internal/httpapi	4.353s	coverage: 81.7% of statements
+
+$ go run ./scripts/coverage-gate
+   81.72  76.00    541/662    internal/httpapi               router, middleware, handlers (604 stmts)
+────────────────────────────────────────────────────────────────────────────────────────
+   72.60  69.00   1810/2493   TOTAL (gated)                  excludes generated + untested-by-design
+[OK] Coverage above every floor
+                                                     -> exit 0
+```
+
+> ⚠️ **两处需总控复验的读数**（都是"数字变了"，不是"门禁绿了"）：
+> ① `httpapi` 的 `measured` 仍是 `80.13 / 604 stmts`，而本轮实测是 **`81.72 / 662 stmts`**；
+> ② `TOTAL (gated)` 的 `measured` 仍是 `71.99`，实测 **`72.60`**。
+> 二者都是**向上**漂移，不影响判绿（`scripts/coverage-gate/main.go:196-201` 的
+> `measured` 只是**取地板时的历史读数**，供人看，不参与判定）。**但 `main.go:196` 的
+> 注释说"每个地板取自本表读数"**——注释与表已经不一致。**改门禁表的注释属 03/10 环**，
+> 本轮**不动**（硬边界），**在此点名**。
+> ③ 逐函数实测：`reqlog.go` 12 个函数中 11 个 **100%**，唯一例外是
 > `newRequestID` **75%** —— 未覆盖的是 `rand.Read` 失败分支。该分支在 Go 1.24+
 > **不可达**（`crypto/rand.Read` 失败时 panic），`reqlog.go:68-71` 已写明。
 > 这是**接受的残余**，不是遗漏。
+
+#### 7.3.1 A4/A7 修后的复跑读数（**本轮**，取代上一节的现值口径）
+
+```
+$ go test -count=1 -covermode=atomic "-coverprofile=coverage/coverage.out" "./..."
+ok  	github.com/koliance/backend/internal/httpapi	3.477s	coverage: 81.7% of statements
+                                                     -> exit 0
+
+$ go run ./scripts/coverage-gate
+   81.75  76.00    542/663    internal/httpapi               router, middleware, handlers (604 stmts)
+────────────────────────────────────────────────────────────────────────────────────────
+   72.61  69.00   1811/2494   TOTAL (gated)                  excludes generated + untested-by-design
+[OK] Coverage above every floor
+                                                     -> exit 0
+```
+
+- **`httpapi` 从 `541/662` 变成 `542/663`：+1 条语句，来源是 `middleware.go` 新增的
+  `w.Header().Set("Access-Control-Expose-Headers", …)`（A7）**，且它被新判据覆盖，
+  故命中数与总数同步 +1。`TOTAL` 同理 `1810/2493 → 1811/2494`。
+- ⚠️ **上一节 `541/662` 那行取自一份过期 profile，必须说明**：本机 PowerShell 5.1 下
+  `go test -coverprofile=coverage/coverage.out ./...` **不加引号会被拆坏**——
+  它凭空多出一个名为 `.out` 的包并 `FAIL [setup failed]`，`go test` 以非零退出、
+  **profile 未刷新**，于是门禁读到的是**上一轮的旧文件**，却打印得像一次新鲜读数。
+  把整个参数写成 `"-coverprofile=coverage/coverage.out"` 即正常。
+  **这不是覆盖率问题，是"读数可能来自旧文件"的问题**——与 `AGENTS.md` §7
+  "超过一次提交必须重新实测"同源：**一条读数要能说清它取自哪次运行**。
 
 ---
 
 ## 8. 改动清单与提交
 
+### 8.1 初版
+
 | 提交 | 内容 |
 | --- | --- |
 | `2d1f169` | `cmd/api/main.go`：建 logger（`cmd/liquidator/main.go:29` 同款 idiom）+ `slog.SetDefault` + 经 `Deps.Logger` 注入 |
 | `e36d5bb` | `internal/httpapi/reqlog_test.go`：P4 / N5 / request-id / 脱敏 / 错误链判据（840 行，新增文件） |
-| （上一轮，未提交） | `internal/httpapi/reqlog.go`（新增）· `internal/httpapi/router.go`（`Deps.Logger` + 末尾包一层） |
+| `8ac17c2` / `0240d2e` | 本文件：回填实测 + 补一条可复跑命令 |
+| `18e8dfe` | `internal/httpapi/reqlog.go`（新增）· `internal/httpapi/router.go`（`Deps.Logger` + 末尾包一层） |
 
 `SetDefault` **不是装饰**：`NewRouter` 在 `Deps.Logger` 为 nil 时回落到 `slog.Default()`，
 没有这一行，回落目标就是 stdlib 的**文本 handler + stderr**——同一个进程产出**两种形状**的日志流。
-`cmd/api` 的启动横幅仍是 `fmt.Printf`（**本轮未动**，硬边界），故**同一进程的 stdout 上
+`cmd/api` 的启动横幅仍是 `fmt.Printf`（**未动**，硬边界），故**同一进程的 stdout 上
 文本横幅与 JSON 日志并存**；横幅只出现在启动瞬间、服务器开始服务之前，故当前无消费方受影响。
 若将来有采集器按行解析 stdout，这是要先处理的一处——**登记在此，不另开号**。
 
+### 8.2 四处独立证伪的修复（A1 / A4 / A5 / A7，**本轮**）
+
+按 `AGENTS.md` §5「小步提交」，四处**各自一个提交**，每个都带自己的负向对照：
+
+| # | 提交 | 改了什么 | 负向对照 |
+| --- | --- | --- | --- |
+| **A7** | 见 §8.2 表下注 | `middleware.go`：`corsAllowHeaders` 加 `X-Request-Id` + 新增 `Access-Control-Expose-Headers`；`router_test.go` 加 `TestCORSExposesTheRequestIDToCrossOriginScripts`；本文件 §2.1② 更正失实断言 | 去掉 Expose 头 → 判据红（§7.4） |
+| **A1** | 同上 | `reqlog_test.go`：P4 用例表**加方法维**（GET/POST×3/DELETE）；`n5WriteBodyOn` 方法开关；新增 `TestN5PostOnlyInjectedBodyWriteTurnsP4Red`；抽出 `responseDiff` | 真中间件注入 POST-only 一字节 → 4 个 POST 行红、N5 仍绿（§7.2.2） |
+| **A5** | 同上 | `reqlog_test.go`：地板改区间 `[0.97,1.0]`；doc 更正为 `:182-184`；`reqlog.go` 注释改写为"照录错误理由 + 更正"；本文件 §6.1 更正归因 | 判据的分辨力用区间表达，不再需要单独注入（§6.1.2） |
+| **A4** | 同上 | `reqlog.go`：补 #1 包内函数名 / #2 `relation "x"` 与 `SQLSTATE:` / #3 keyword DSN / #5 裸值 / #7 无前导空格路径 · IPv6 · 下划线主机 · `name:port`；新增 `reSecretValue` / `reFilePathRel` / `reFilePathURI`；`reqlog_test.go` 每形态一行 + `TestSanitizeLogValueKnownResiduals`；本文件 §6 边界表重写 | 每行断言密钥缺席（正向）+ 残余表断言**仍然漏**（反向） |
+
+> **提交哈希以 `git log` 为准**（本表在提交后回填时可能滞后于 rebase）。
+> 四处**只碰** `backend/internal/httpapi/{middleware.go,reqlog.go,reqlog_test.go,router_test.go}`
+> 与本文件，**未碰** `market_test.go`（`priceShapedInText` 只被**读取**）。
+
 ---
 
-## 9. 硬边界声明（本轮）
+## 9. 硬边界声明
 
 **未碰**：`ADR-006 §3.3` 词表 · `§3.6` 响应体信封 · `router.go` 的 **51 处** `jsonError` 调用点 ·
-前端（`src/`）· `contracts/` · `memory.md`。
-本轮**只**新建 `internal/httpapi/reqlog_test.go`、改 `cmd/api/main.go`，并回填本文件。
-`middleware.go` / `health.go` / `validate.go` / `market_test.go` **一行未动**
-（`reqlog_test.go` 只**读取** `market_test.go` 的 `priceShapedInText`，不改它）。
+前端（`src/`）· `contracts/` · `memory.md` · `health.go` · `validate.go` · `market_test.go` ·
+`cmd/liquidator`。
 
-**§3.6 落地者必读**：见 §6.1 —— `market_test.go:182-184` 会红，且**成因之一是 id 自身的形态**，
-不只是"多了一个键"。
+**A7 之后 `middleware.go` 不再"一行未动"**——这是初版 §9 的陈述，本轮被自己的改动推翻。
+改的只有 CORS 头这一处（`cors` 函数），`decodeJSON` / `jsonResponse` / `jsonError` /
+`methodOnly` / `requireOperator` 一行未动。
+
+**§3.6 落地者必读**：见 §6.1.1 —— 会红的是 `market_test.go:182-184`（**顶层键集**），
+**不是** `:199-201`（JSON 数字）。**成因就是"多了一个键"，不是 id 的形态**；
+初版那句"成因之一是 id 自身的形态"是错的（A5）。照错的那句去改 id 形态，改完**照旧红**——
+要改的是**键的允许集**，且属 03 环、须带负向对照。
