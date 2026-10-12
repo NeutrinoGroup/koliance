@@ -51,10 +51,29 @@
 会让那条判据在**看不见的地方**变红。16 字节 = 32 位 hex，不透明且无数字串。
 
 **② 响应头在 `next.ServeHTTP` **之前**设置，不是之后。**
-若在 `next` 返回后设置，`Access-Control-Allow-Origin` 里就没有 `X-Request-Id`
-（`middleware.go:33` 的 `Access-Control-Allow-Headers` 列了它，但**响应侧**的
-`Access-Control-Expose-Headers` 没列）——浏览器里的前端将**读不到**这个头。
-这正是 §3.6「`requestId` 要显示在 UI 上」的前置条件。
+若在 `next` 返回后设置，响应上就不会有 `X-Request-Id`——`WriteHeader` 之后的头被
+net/http 丢弃，结果是 recorder 里有、线上没有，最坏的一种。
+
+> ⚠️ **本节此处原文有一条失实断言，本轮（A7）已更正——原文照录，不删**：
+>
+> > `middleware.go:33` 的 `Access-Control-Allow-Headers` 列了它，但**响应侧**的
+> > `Access-Control-Expose-Headers` 没列……这正是 §3.6「`requestId` 要显示在 UI 上」的前置条件。
+>
+> **前半句是假的。** 实测（本轮）：`middleware.go:33` 当时的值是
+> `"Content-Type, Authorization, X-Requested-With"`，**不含** `X-Request-Id`；
+> 且**全仓无 `Access-Control-Expose-Headers`**（`git grep` 只命中本文件这一行）。
+> 也就是说，对**唯一有 `Origin` 的调用方（浏览器）**而言，这个头**既发不出去也读不回来**——
+> §3.6 的前置条件当时**并不具备**，而原文说它具备。
+> **后果不是"少配一个头"**：§3.6 的落地者会照这句话以为前置已满足，
+> 于是把 `requestId` 放进信封、在 UI 上渲染，然后在真实跨源环境里拿到 `undefined`，
+> 而单元测试**全绿**（`httptest` 不施加 CORS）。
+>
+> **本轮修法（两件事必须一起做，只做一件等于没做）**：
+> ① `middleware.go` 的 `corsAllowHeaders` 加入 `X-Request-Id`（前端才**发得出**）；
+> ② 新增 `Access-Control-Expose-Headers: X-Request-Id`（前端才**读得到**）。
+> 判据：`TestCORSExposesTheRequestIDToCrossOriginScripts`（`router_test.go`），
+> 覆盖 preflight 与实请求两侧，并对**非白名单 origin** 断言两个头都缺席。
+> 该判据做过负向对照：去掉 ② 后它变红（实测 stdout 见 §7.4）。
 
 **③ 路径脱敏刻意**不**吞掉 `/api/v1/...` 本身。**
 §3.4 第 7 项要的是**文件路径 / 主机名 / 内网地址**，不是 URL 路径——URL 路径是本中间件的
@@ -73,10 +92,12 @@
 
 | 文件 | 改动 |
 | --- | --- |
-| `backend/internal/httpapi/reqlog.go` | **新增** —— 中间件 + request-id + 脱敏（新文件，`middleware.go` 一行未动） |
+| `backend/internal/httpapi/reqlog.go` | **新增** —— 中间件 + request-id + 脱敏 |
 | `backend/internal/httpapi/reqlog_test.go` | **新增** —— 正向用例 + **P4/N5 正反两端** |
 | `backend/internal/httpapi/router.go` | `Deps` 加 `Logger *slog.Logger`（**留注入缝**）；`NewRouter` 末尾包一层 |
 | `backend/cmd/api/main.go` | 装配 logger（`cmd/liquidator/main.go:29` 同一套 idiom），经 `Deps.Logger` 注入 |
+| `backend/internal/httpapi/middleware.go` | **A7 追加** —— `corsAllowHeaders` 加入 `X-Request-Id`，并新增 `Access-Control-Expose-Headers` |
+| `backend/internal/httpapi/router_test.go` | **A7 追加** —— `TestCORSExposesTheRequestIDToCrossOriginScripts` |
 
 ---
 
