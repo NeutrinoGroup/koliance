@@ -99,7 +99,7 @@ $ git grep -n "Pool\." -- backend/ --and -e "db\.Pool"
 | 使用点 | 谁调的 | 有请求路由吗 | 结论 |
 | --- | --- | --- | --- |
 | `agentapi/service.go:161` | `GenerateAPIKey` | **`POST /api/v1/developer/keys`** | **本轮修** |
-| `liquidation/store.go:124` | `liquidation.Store.Record` | **没有**——只有 `cmd/liquidator` 调；HTTP 侧只有 `Latest`（读） | 不在「落盘路由」内。`/api/v1/liquidations` 是**读**路由，且 nil store → 空列表是**如实**的（没有 Bot 写过就是没有）。**已另行登记为 GAP-71 的相邻观察**（见 `docs/changes/046`） |
+| `liquidation/store.go:124` | `liquidation.Store.Record`（写） | **没有**——只有 `cmd/liquidator` 调；HTTP 侧只有 `Latest`（读） | 不在「落盘路由」内。`/api/v1/liquidations` 是**读**路由，nil store → 空列表，而该口径**已由 qa 清单判为如实**（"an empty list is the truth when no bot has written one"），**故不新开号**——它与既有判断撞车，而 D4 里撞车比漏登记更糟 |
 | `database/db.go:186/210` | `DB.GetConfig` / `DB.SetConfig` | **没有**调用方（`git grep` 零命中） | 死代码，不是路由 |
 | `db.MemoryStore.*` | `game/service.go:306`、`agentcard/service.go:134/266` | 是 | **不碰 pool**（内存），属 **GAP-47**（证明不落库），**不在本审计范围** |
 | `market.Service.db` | `market/service.go:22` 赋值 | — | **全包仅赋值、从未读取**（实测；与 `docs/changes/040 §5` 的读数一致） |

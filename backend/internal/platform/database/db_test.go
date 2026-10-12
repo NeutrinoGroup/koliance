@@ -103,10 +103,12 @@ func TestNewConnectionFailureIsAnExplicitError(t *testing.T) {
 // sanitizing, the host must survive unchanged, and the secret must be gone
 // afterwards.
 //
-// Residual exposure (NOT covered here, registered as GAP-51): a pgx error that
+// Residual exposure (NOT covered here, registered as GAP-61): a pgx error that
 // echoes the password with neither a URL userinfo nor a password= keyword
 // anchor is not redacted. That case is deliberately not papered over with a
 // length heuristic, which is what caused the "db.eREDACTEDample" corruption.
+// (The number read GAP-51 when this test was written; it has been re-allocated
+// twice since, 51 -> 57 -> 61 - see docs/changes/042.)
 func TestSanitizeDSNErrorRemovesPassword(t *testing.T) {
 	cases := []struct {
 		name string

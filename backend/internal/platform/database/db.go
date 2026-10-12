@@ -132,8 +132,12 @@ var dsnPasswordRe = regexp.MustCompile(`(?i)\bpassword\s*=\s*\S+`)
 // real password survived the check that claimed to remove it.
 //
 // No bare-substring pass is kept. That leaves one residual exposure - an error
-// that echoes the password with neither anchor - which is registered as GAP-51
-// rather than papered over with a heuristic length threshold.
+// that echoes the password with neither anchor - which is registered as GAP-61
+// rather than papered over with a heuristic length threshold. (It was GAP-51
+// when this comment was written; the number has been re-allocated twice since,
+// 51 -> 57 -> 61, on cross-branch collisions - see docs/changes/042. GAP-51 in
+// the merged tree is an unrelated front-end item, so the old pointer here was
+// sending readers to someone else's gap.)
 func sanitizeDSNError(err error, databaseURL string) string {
 	msg := dsnUserinfoRe.ReplaceAllString(err.Error(), "${1}REDACTED@")
 	msg = dsnPasswordRe.ReplaceAllString(msg, "password=REDACTED")
