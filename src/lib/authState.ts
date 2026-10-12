@@ -147,13 +147,22 @@ function coerceRecord(raw: unknown): Record<string, unknown> | null {
  * `creditAllowanceUSD` / `synthetic`) or from the synthetic demo row written by
  * the navbar's own demo button.
  *
- * The DB-shaped aliases (`trust_tier`, `wallet_address`, `id` in place of
- * `googleId`) are accepted because more than one writer has produced rows in
- * that shape - `EditProfileModal` rewrites the cached row on every save, and
- * the navbar's synthetic demo row spells the fields the database way. Reading
- * only the exchange route's spelling would silently un-link a returning user
- * whose stored profile predates this fix, i.e. reproduce issue #34 by another
- * route.
+ * The DB-shaped aliases (`trust_tier`, `wallet_address`, `credit_allowance_usd`,
+ * `id` in place of `googleId`) are accepted because more than one writer has
+ * produced rows in that shape - `EditProfileModal` rewrites the cached row on
+ * every save, and the navbar's synthetic demo row spells the fields the database
+ * way. Reading only the exchange route's spelling would silently un-link a
+ * returning user whose stored profile predates this fix, i.e. reproduce issue
+ * #34 by another route.
+ *
+ * `credit_allowance_usd` was the one column with no alias while its neighbours
+ * had one (`001_init_and_composite_indexes.sql:92`, and `DbUserRecord` in
+ * `src/lib/db.ts` uses that spelling). A row read straight out of the database -
+ * `GET /api/user/profile` selects `*` - therefore arrived with a `$600` default
+ * in place of the real allowance, and the number is not cosmetic: the navbar
+ * renders it and `AgentCardTerminal` adds it to the card's credit limit.
+ * `synthetic` is folded in for the same reason the others were: `select("*")`
+ * hands back column names, not JSON keys.
  */
 export function googleAccountFromProfile(raw: unknown): GoogleAccount | null {
   const g = coerceRecord(raw);
@@ -186,10 +195,15 @@ export function googleAccountFromProfile(raw: unknown): GoogleAccount | null {
     walletAddress: asString(g.walletAddress) ?? asString(g.wallet_address),
     tier: asString(g.trustTier) ?? asString(g.trust_tier) ?? "GOOGLE VERIFIED CITIZEN",
     // `0` is a real value here (the synthetic demo is granted exactly 0), so the
-    // default must not swallow it.
+    // default must not swallow it. Both spellings are read for the same reason
+    // as `wallet_address` above and in the same order.
     creditAllowanceUSD:
-      typeof g.creditAllowanceUSD === "number" ? g.creditAllowanceUSD : 600,
-    synthetic: g.synthetic === true,
+      typeof g.creditAllowanceUSD === "number"
+        ? g.creditAllowanceUSD
+        : typeof g.credit_allowance_usd === "number"
+          ? g.credit_allowance_usd
+          : 600,
+    synthetic: g.synthetic === true || g.synthetic === 1,
   };
 }
 
@@ -220,6 +234,50 @@ export function steamAccountFromStorage(raw: string | null): SteamAccount | null
 }
 
 /**
+ * The Google row exactly as it sits in the store, un-normalised.
+ *
+ * `readAccountState().google` has already been through
+ * `googleAccountFromProfile`, so it carries `id` and `tier` - field names the
+ * store may never have contained (a row written by the exchange route has
+ * `googleId` and `trustTier`). A bridge that has to decide "is the stored row
+ * already the one I would write?" therefore cannot compare against it: it would
+ * be comparing a derived row with a differently-spelled one, and the two are
+ * never equal.
+ *
+ * Structurally: comparing two differently-spelled derived rows cannot terminate
+ * the loop it is meant to guard, because the inequality it produces is caused by
+ * the comparison itself rather than by the store having changed.
+ */
+export function storedGoogleRow(): Record<string, unknown> | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return coerceRecord(localStorage.getItem(STORAGE_KEYS.google));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The identity a stored row is recognised by, in the same spelling as `GoogleAccount.id`.
+ *
+ * `googleId` is read before `id`, and here that order IS load-bearing (unlike in
+ * `googleAccountFromProfile`, where the two agree for every row a writer
+ * produces). A row can carry both and have them disagree - `EditProfileModal`
+ * spreads a `UserProfileData` (which carries a derived `id`) next to a
+ * recomputed `googleId`. Reading `id` first would make the bridge treat such a
+ * row as a *different* account, overwrite it, and discard the user's edit.
+ */
+export function googleRowKey(row: Record<string, unknown> | null): string | null {
+  if (!row) return null;
+  const googleId = asString(row.googleId);
+  if (googleId !== null) return `did:koliance:google:${googleId}`;
+  const id = asString(row.id);
+  if (id !== null) return id;
+  const email = asString(row.email);
+  return email !== null ? `did:koliance:google:${email}` : null;
+}
+
+/**
  * The whole signed-in state, derived from `localStorage` on every call.
  *
  * Called during render rather than from an effect on purpose: during hydration
@@ -242,7 +300,29 @@ export function readAccountState(): AccountState {
   }
 }
 
-/** The single write channel. `null` removes the key; an object is stored as JSON. */
+/**
+ * The single write channel. `null` removes the key; an object is stored as JSON.
+ *
+ * A write whose stored bytes would not change is not an event, and this is
+ * load-bearing rather than an optimisation. Several effects both depend on the
+ * account state and write it (the Privy bridge in `NavAuthBadges` is the live
+ * one). For such an effect the notification it causes is the one it waits for,
+ * so "notify on every call" makes the effect re-arm itself; termination then
+ * rests entirely on the effect's own equality test, which is exactly the kind
+ * of guard that looks like it works and silently does not (D3).
+ *
+ * Comparing the bytes that would be stored settles it one layer down, where it
+ * cannot be defeated by the write it is meant to stop:
+ *  - it does not depend on the previous row having come from the same writer,
+ *    which is the hole in an equality test on the derived object (a stored `id`
+ *    written by `EditProfileModal` never equals the one the bridge derives);
+ *  - it does not depend on field order or on absent fields, because both sides
+ *    are produced by the same `JSON.stringify` of the value's own shape;
+ *  - it holds even if a caller's guard is rewritten or deleted later.
+ *
+ * Equality is deliberately byte equality of the stored form: if the bytes
+ * differ, the store really did change, and a subscriber is owed the news.
+ */
 export function writeAccountState<K extends keyof typeof STORAGE_KEYS>(
   rail: K,
   value: unknown
@@ -250,18 +330,27 @@ export function writeAccountState<K extends keyof typeof STORAGE_KEYS>(
   if (typeof window === "undefined") return;
   try {
     const key = STORAGE_KEYS[rail];
+
+    // What this call would leave in the store; `null` means "no key at all".
+    let next: string | null;
     if (value === null || value === undefined) {
-      localStorage.removeItem(key);
-    } else if (rail === "github" && typeof value === "string") {
+      next = null;
+    } else if ((rail === "github" || rail === "steam") && typeof value === "string") {
       // Kept as a bare string: `GitHubDevWall` reads this key with
       // `loadProfile(cachedUser)`, which takes the raw username, and a stored
       // JSON object would be handed to the GitHub API as a username.
-      localStorage.setItem(key, value);
-    } else if (rail === "steam" && typeof value === "string") {
-      localStorage.setItem(key, value);
+      next = value;
     } else {
-      localStorage.setItem(key, JSON.stringify(value));
+      next = JSON.stringify(value);
     }
+
+    // The no-op guard. Read straight off the store rather than off `state`, so
+    // it sees what a reload would see.
+    if (localStorage.getItem(key) === next) return;
+
+    if (next === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, next);
+
     // Same-tab notification. Does not throw when SSR-guarded above.
     window.dispatchEvent(new Event(ACCOUNT_STATE_EVENT));
   } catch {

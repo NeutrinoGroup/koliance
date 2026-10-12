@@ -32,7 +32,9 @@ import { useLanguage } from "@/lib/i18n";
 import {
   AccountIdentity,
   effectiveWalletAddress,
+  googleRowKey,
   mergeIdentity,
+  storedGoogleRow,
   writeAccountState,
 } from "@/lib/authState";
 
@@ -157,25 +159,48 @@ export function NavAuthBadges({
   }, [walletAddress]);
 
   // Bridge the Privy user into the shared store so every consumer of
-  // `useKolianceAccount` sees it, not just this component. Written once per
-  // identity: `writeAccountState` notifies subscribers on every call, so an
-  // unconditional effect body would re-render the tree endlessly.
+  // `useKolianceAccount` sees it, not just this component.
+  //
+  // Termination, and why it no longer rests on a string comparison. This effect
+  // both reads `state.google` and writes it, so React re-runs it once the write
+  // notifies its own subscriber. The comparison below is made against the row
+  // **as stored**, so the same identity short-circuits whatever spelling the
+  // writer used: the exchange route stores `googleId` / `trustTier`, while
+  // `EditProfileModal` and this component store differently-spelled rows, and
+  // comparing the *derived* objects would have found them unequal and looped
+  // forever (the parent adds a credit allowance on every one of those renders).
+  // `writeAccountState` additionally refuses to write when the stored bytes are
+  // unchanged, so the effect's own write is the last one it hears about.
+  //
+  // The `signingOut` gate is what makes Sign Out stick: `handleSignOut` raises it
+  // **before** it clears the rows and only lowers it once `privyLogout()` has
+  // resolved. Without it, clearing `state.google` re-ran this effect while
+  // `privyUser` was still populated - the effect would then write the profile
+  // straight back, and the next reload showed a signed-in navbar over a signed
+  // out Privy session (the half-signed-in state this change exists to remove).
+  const [signingOut, setSigningOut] = useState(false);
+
   useEffect(() => {
     if (!privyUser?.google && !privyUser?.github) return;
+    if (signingOut) return;
     const stored = state.google;
-    if (stored && stored.id === `did:koliance:google:${privyUser.google?.subject}`) return;
-    const profile = privyUser.google
-      ? {
-          googleId: privyUser.google.subject,
-          name: privyUser.google.name || privyUser.google.email,
-          email: privyUser.google.email,
-          // Unknown without the exchange route; `undefined` leaves the
-          // allowance at its default rather than inventing a number.
-          trustTier: "GOOGLE VERIFIED (PRIVY)",
-        }
-      : null;
-    if (profile) writeAccountState("google", profile);
-  }, [privyUser, state.google]);
+    if (
+      googleRowKey(storedGoogleRow()) ===
+      (stored ? `did:koliance:google:${privyUser.google?.subject}` : null)
+    ) {
+      return;
+    }
+    if (privyUser.google) {
+      writeAccountState("google", {
+        googleId: privyUser.google.subject,
+        name: privyUser.google.name || privyUser.google.email,
+        email: privyUser.google.email,
+        // Unknown without the exchange route; `undefined` leaves the
+        // allowance at its default rather than inventing a number.
+        trustTier: "GOOGLE VERIFIED (PRIVY)",
+      });
+    }
+  }, [privyUser, state.google, signingOut]);
 
   // 1. Google 1-Click Login Trigger (Privy-aware with OAuth fallback)
   const handleGoogleLogin = () => {
@@ -248,11 +273,30 @@ export function NavAuthBadges({
   // Sign Out: one intent, so the navbar cannot end up half signed in (a cleared
   // Privy session over a Google row still rendering an avatar). Unlinking a
   // single rail stays on its own button below.
+  //
+  // Order is load-bearing. Clearing the rows first fired the bridge effect while
+  // `privyUser` was still populated, and the effect wrote the profile back - the
+  // sign-out was undone in the same tick and survived the next reload. So:
+  //
+  //   1. `signingOut` is raised first, which closes the bridge for the duration;
+  //   2. the Privy session is ended and **awaited**;
+  //   3. only then are the rows cleared, with the gate still up.
+  //
+  // The gate is lowered in `finally`, not on the success path: a rejected
+  // `privyLogout()` must not leave the navbar permanently unable to reflect a
+  // fresh sign-in.
   const handleSignOut = async () => {
     setDropdownOpen(false);
-    signOut();
-    if (isPrivyEnabled) {
-      await privyLogout();
+    setSigningOut(true);
+    try {
+      if (isPrivyEnabled) {
+        await privyLogout();
+      }
+      // Last, and only after the session is really gone - a local-only failure
+      // here would otherwise leave the user cleared out but still signed in.
+      signOut();
+    } finally {
+      setSigningOut(false);
     }
   };
 
