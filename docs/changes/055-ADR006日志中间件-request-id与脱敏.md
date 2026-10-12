@@ -111,8 +111,10 @@ net/http 丢弃，结果是 recorder 里有、线上没有，最坏的一种。
 
 | # | 注入 | 判据 | 实测 |
 | --- | --- | --- | --- |
-| **N5** | 在中间件里 `w.Write` 一个字节 | **P4 必须红** | ✅ 见 §7.2 |
-| **P4** | 包装前后 body 逐字节相同（200 / 204 / 错误路径） | pass | ✅ 见 §7.1 |
+| **N5** | 在中间件里 `w.Write` 一个字节（每个方法） | **P4 必须红** | ✅ 见 §7.2 |
+| **N5(POST)** | 只在 `r.Method == POST` 时写一个字节 | **P4 的 POST 行必须红**；且 GET-only 比对**必须干净** | ✅ 见 §7.2.1 |
+| **P4** | 包装前后 body 逐字节相同（GET/POST/DELETE × 200 / 204 / 400 / 405） | pass | ✅ 见 §7.1 |
+| **A7-CORS** | 去掉 `Access-Control-Expose-Headers` | CORS 判据必须红 | ✅ 见 §7.4 |
 
 > **为什么 P4 与 N5 必须成对**：一个"从不写 body"的实现与一个"死掉的实现"
 > 在 P4 上**观测等价**（都绿）。只有 N5 仍有牙，才能反推 P4 的绿是**确无改写**，
@@ -123,6 +125,29 @@ net/http 丢弃，结果是 recorder 里有、线上没有，最坏的一种。
 能由漂移解释，**证不出真中间件有任何性质**。故第一阶段先关掉注入、要求二者**逐字节相同**；
 只有它绿，第二阶段的红才归因于那一字节的注入（`reqlog_test.go` 的
 `TestN5InjectedBodyWriteTurnsP4Red`，含内联说明）。
+
+### 4.3 ⚠️ 初版的 P4/N5 **只跑 GET**——两半一起瞎（**A1，本轮修**）
+
+**实测**：在真中间件里注入 `if r.Method == http.MethodPost { sw.Write([]byte("!")) }`，
+`TestLoggingMiddlewareDoesNotAlterBody` 与 `TestN5InjectedBodyWriteTurnsP4Red`
+**双双全绿（exit 0）**。
+
+**为什么这是最重的一处**：`router.go` 有 **15 个 POST 路由**（`grep -c 'methodOnly(http.MethodPost'`），
+且**所有写端点都是 POST**。所以这条判据在**它专门要保护的流量**上**恰好是瞎的**——
+而它自己的注释写着"P4 钉死了中间件不改 body"。
+更糟的是**负向对照与它一起瞎**：N5 也 GET-only，于是"注入没触发"与"判据没牙"
+在观测上不可分（`AGENTS.md` §5 对进度页 hook 的同一句推理）。
+
+**修法（两件一起）**：
+① P4 的用例表**加方法维**：GET / POST(带 body) / POST(400 拒绝) / POST(204) / DELETE(405)；
+② 新增 `TestN5PostOnlyInjectedBodyWriteTurnsP4Red`，断言三件事——
+GET 不变（证明确实是**方法**开关而非空操作）· POST 变红 · **GET-only 比对在该变异体上干净**
+（把那个盲点本身写成断言）。
+
+**负向实测（正反两端）**：
+- 正端（无变异）：8 行全绿，见 §7.1。
+- 反端（在**真中间件**注入 POST-only 一字节）：**4 行转红**，且 `N5InjectedBodyWriteTurnsP4Red`
+  仍绿——**这正说明旧判据抓不住它**。原文见 §7.2.1。注入已还原。
 
 ---
 

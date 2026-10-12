@@ -94,6 +94,38 @@ func headerKeysOnlyIn(a, b http.Header) []string {
 	return only
 }
 
+// responseDiff is the P4 comparison, in one place so that the positive and the
+// negative half of the judgement cannot drift apart: if the mutant's write stops
+// being visible here, the negative control below fails and says so.
+//
+// It returns the differences between a response served bare and the same
+// response served through a wrapper, as text, so a caller can both assert
+// "none" and print what it saw.
+func responseDiff(bare, wrapped *httptest.ResponseRecorder) []string {
+	var diffs []string
+	if bare.Code != wrapped.Code {
+		diffs = append(diffs, fmt.Sprintf("status: wrapped %d, bare %d", wrapped.Code, bare.Code))
+	}
+	if !bytes.Equal(bare.Body.Bytes(), wrapped.Body.Bytes()) {
+		diffs = append(diffs, fmt.Sprintf("body: wrapped %q, bare %q", wrapped.Body.Bytes(), bare.Body.Bytes()))
+	}
+	for k, want := range bare.Header() {
+		if got := wrapped.Header().Values(k); !slices.Equal(got, want) {
+			diffs = append(diffs, fmt.Sprintf("header %s: wrapped %v, bare %v", k, got, want))
+		}
+	}
+	// The wrapper may add the request id and nothing else. A wrapper that also
+	// set Content-Type or Content-Length would be deciding what the handler
+	// meant, which is the class of change P4 exists to catch.
+	if only := headerKeysOnlyIn(wrapped.Header(), bare.Header()); !slices.Equal(only, []string{requestIDHeader}) {
+		diffs = append(diffs, fmt.Sprintf("wrapped response adds headers %v, want exactly [%s]", only, requestIDHeader))
+	}
+	if only := headerKeysOnlyIn(bare.Header(), wrapped.Header()); len(only) != 0 {
+		diffs = append(diffs, fmt.Sprintf("wrapped response is missing headers %v the bare one had", only))
+	}
+	return diffs
+}
+
 // ---------------------------------------------------------------------------
 // P4 — the middleware does not alter the response body (ADR-006 §4.1)
 // ---------------------------------------------------------------------------
@@ -102,10 +134,19 @@ func headerKeysOnlyIn(a, b http.Header) []string {
 //
 // The claim under test is a property of the middleware, so the control is the
 // same handler served without it: same request, same handler, one response
-// through loggingMiddleware and one without, compared byte-for-byte. Four
-// handler shapes rather than one, because the shapes that break a body-rewriting
-// middleware are exactly the ones a single JSON endpoint does not exercise — a
-// bodiless 204, and a body written in more than one Write call.
+// through loggingMiddleware and one without, compared byte-for-byte.
+//
+// The table crosses the handler shapes with the REQUEST METHODS, and the second
+// axis is the load-bearing one. This judgement used to run GET-only, and a
+// mutation that wrote one byte into the body only when `r.Method == POST`
+// passed it — and passed N5 too, which was GET-only for the same reason.
+// Measured, not argued: the mutation left `TestLoggingMiddlewareDoesNotAlterBody`
+// and `TestN5InjectedBodyWriteTurnsP4Red` both green. That is not a hypothetical
+// gap — the router has 15 POST routes (router.go: `methodOnly(http.MethodPost`,
+// counted by grep) and every write endpoint in the API is one of them, so the
+// judgement was blind on exactly the traffic it was written to protect.
+// TestN5PostOnlyInjectedBodyWriteTurnsP4Red is the negative control that keeps
+// the POST rows honest.
 //
 // Status and headers are compared as well as the body. The ADR's "不改状态码"
 // is a separate sentence from "不改响应体", and a middleware that answered 200
@@ -115,35 +156,97 @@ func TestLoggingMiddlewareDoesNotAlterBody(t *testing.T) {
 	cases := []struct {
 		name   string
 		handle http.HandlerFunc
+		req    func() *http.Request
 	}{
 		{
-			name: "200 via jsonResponse",
+			name: "GET 200 via jsonResponse",
 			handle: func(w http.ResponseWriter, r *http.Request) {
 				jsonResponse(w, http.StatusOK, map[string]string{"status": "healthy"})
 			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/api/v1/market/prices?symbol=BTCUSD", nil)
+			},
 		},
 		{
-			name: "503 refusal via jsonError",
+			name: "GET 503 refusal via jsonError",
 			handle: func(w http.ResponseWriter, r *http.Request) {
 				jsonError(w, http.StatusServiceUnavailable, "market data unavailable")
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/api/v1/market/prices", nil)
 			},
 		},
 		{
 			// The shape a buffering middleware breaks first: there is no body to
 			// buffer, and net/http treats a 204 as "no content" on the wire.
-			name: "204 with no body",
+			name: "GET 204 with no body",
 			handle: func(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusNoContent)
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
 			},
 		},
 		{
 			// Two Write calls with no explicit WriteHeader: the implicit 200 is
 			// net/http's, and statusWriter.observeStatus has to report that same
 			// 200 rather than a zero.
-			name: "body written in two calls, implicit 200",
+			name: "GET body written in two calls, implicit 200",
 			handle: func(w http.ResponseWriter, r *http.Request) {
 				_, _ = w.Write([]byte(`{"part":`))
 				_, _ = w.Write([]byte(`1}`))
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+			},
+		},
+		{
+			// The write path, with a request body — the shape the GET-only
+			// judgement could not see.
+			name: "POST with a request body, 200",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				jsonResponse(w, http.StatusOK, map[string]any{"success": true, "orderId": "ord-1"})
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "/api/v1/market/trade",
+					strings.NewReader(`{"symbol":"NVDA","side":"buy","notionalUSD":100,"leverage":1}`))
+			},
+		},
+		{
+			// A refused write: the 400 body is where a caller reads why, and it
+			// is also the path a body-rewriting middleware corrupts invisibly.
+			name: "POST with a request body, 400 refusal",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				jsonError(w, http.StatusBadRequest, "notionalUSD: must be positive")
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "/api/v1/market/trade",
+					strings.NewReader(`{"symbol":"NVDA","notionalUSD":-1}`))
+			},
+		},
+		{
+			// A bodiless POST, where the body comparison is vacuous and only the
+			// status/header half of the judgement can speak.
+			name: "POST 204 with no body",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodPost, "/api/v1/agentcard/authorize", strings.NewReader(`{}`))
+			},
+		},
+		{
+			// POST is not the only other method the mux serves: a wrong-method
+			// request is answered by methodOnly with a 405 and an Allow header,
+			// and that path must survive the wrapper too.
+			name: "DELETE 405 from methodOnly",
+			handle: func(w http.ResponseWriter, r *http.Request) {
+				methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+					jsonResponse(w, http.StatusOK, map[string]string{"ok": "yes"})
+				})(w, r)
+			},
+			req: func() *http.Request {
+				return httptest.NewRequest(http.MethodDelete, "/api/v1/liquidations", nil)
 			},
 		},
 	}
@@ -151,42 +254,22 @@ func TestLoggingMiddlewareDoesNotAlterBody(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			buf, logger := logSink()
-			req := func() *http.Request {
-				return httptest.NewRequest(http.MethodGet, "/api/v1/market/prices?symbol=BTCUSD", nil)
-			}
 
 			bare := httptest.NewRecorder()
-			tc.handle(bare, req())
+			tc.handle(bare, tc.req())
 
 			wrapped := httptest.NewRecorder()
-			loggingMiddleware(logger, tc.handle).ServeHTTP(wrapped, req())
+			loggingMiddleware(logger, tc.handle).ServeHTTP(wrapped, tc.req())
 
-			if bare.Code != wrapped.Code {
-				t.Errorf("status: wrapped %d, bare %d — the middleware changed the status code", wrapped.Code, bare.Code)
-			}
-			if !bytes.Equal(bare.Body.Bytes(), wrapped.Body.Bytes()) {
-				t.Errorf("body is not byte-identical:\n bare    %q\n wrapped %q", bare.Body.Bytes(), wrapped.Body.Bytes())
-			}
-			for k, want := range bare.Header() {
-				if got := wrapped.Header().Values(k); !slices.Equal(got, want) {
-					t.Errorf("header %s: wrapped %v, bare %v", k, got, want)
-				}
-			}
-			// The middleware may add the request id and nothing else. A middleware
-			// that also set Content-Type or Content-Length would be deciding what
-			// the handler meant, which is the class of change P4 exists to catch.
-			if only := headerKeysOnlyIn(wrapped.Header(), bare.Header()); !slices.Equal(only, []string{requestIDHeader}) {
-				t.Errorf("wrapped response adds headers %v, want exactly [%s]", only, requestIDHeader)
-			}
-			if only := headerKeysOnlyIn(bare.Header(), wrapped.Header()); len(only) != 0 {
-				t.Errorf("wrapped response is missing headers %v the bare one had", only)
+			for _, d := range responseDiff(bare, wrapped) {
+				t.Errorf("%s", d)
 			}
 
 			// And the line was actually written. A middleware that silently skipped
 			// logging would satisfy every assertion above.
 			line := logLine(t, buf)
-			if got := strField(t, line, "path"); got != "/api/v1/market/prices" {
-				t.Errorf("logged path = %q, want /api/v1/market/prices", got)
+			if got := strField(t, line, "path"); got != tc.req().URL.Path {
+				t.Errorf("logged path = %q, want %q", got, tc.req().URL.Path)
 			}
 		})
 	}
@@ -234,15 +317,30 @@ func TestStatusWriterKeepsResponseControllerWorking(t *testing.T) {
 // the mutant a faithful copy; true adds the single byte.
 var n5WriteBody bool
 
+// n5WriteBodyOn is the METHOD switch, and it is the second axis for a reason
+// that was measured rather than imagined.
+//
+// The first version of this file injected unconditionally, and its two halves
+// ran GET only. A mutation of the shape `if r.Method == http.MethodPost {
+// w.Write(one byte) }` therefore passed both: the injection never fired on the
+// requests the judgement sent, so P4 stayed green AND N5 stayed green — the
+// negative control was as blind as the thing it was guarding. Since every write
+// endpoint in this router is a POST, that is the whole class of traffic a
+// body-rewriting middleware would damage.
+//
+// nil means "every request". Setting it to a method makes the mutant write only
+// on that method, which is what turns a POST-only injection into a red.
+var n5WriteBodyOn *string
+
 // mutatedLoggingMiddleware is a copy of loggingMiddleware (reqlog.go:151-172)
-// with exactly one statement added, guarded by n5WriteBody: a one-byte Write
-// into the response body, from inside the middleware.
+// with exactly one statement added, guarded by n5WriteBody/n5WriteBodyOn: a
+// one-byte Write into the response body, from inside the middleware.
 //
 // It is a copy rather than a wrapper around the real middleware, and the reason
 // is not pedantry. A wrapper that wrote after next.ServeHTTP returned would be
 // an injection from outside — "the middleware wrote the body" is the claim
 // under test, so the write has to happen on the same path the handler's output
-// takes. The cost of copying is drift, and phase 1 of the test below pays it
+// takes. The cost of copying is drift, and phase 1 of the tests below pays it
 // down: with the switch off the copy must produce byte-identical responses to
 // the real middleware. If this copy stops resembling the one in reqlog.go, that
 // comparison goes red and says so, instead of quietly making the red in phase 2
@@ -260,13 +358,25 @@ func mutatedLoggingMiddleware(logger *slog.Logger, next http.Handler) http.Handl
 		r = r.WithContext(context.WithValue(r.Context(), ctxKeyRequestID{}, id))
 
 		sw := &statusWriter{ResponseWriter: w}
-		if n5WriteBody {
+		if n5WriteBody && (n5WriteBodyOn == nil || *n5WriteBodyOn == r.Method) {
 			// The injection. One byte, and the handler is untouched.
 			_, _ = sw.Write([]byte("!"))
 		}
 		next.ServeHTTP(sw, r)
 
 		recordRequest(logger, r, id, sw.observeStatus(), time.Since(start))
+	})
+}
+
+// n5Reset puts both injection switches back to "off, on every method" so one
+// test's mutation cannot leak into another's reading.
+func n5Reset(t *testing.T) {
+	t.Helper()
+	n5WriteBody = false
+	n5WriteBodyOn = nil
+	t.Cleanup(func() {
+		n5WriteBody = false
+		n5WriteBodyOn = nil
 	})
 }
 
@@ -288,25 +398,10 @@ func TestN5InjectedBodyWriteTurnsP4Red(t *testing.T) {
 		return httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
 	}
 
-	// The comparison P4 makes, factored out so both phases run the same one.
-	altered := func(t *testing.T, wrapped http.Handler) bool {
-		t.Helper()
-		bare := httptest.NewRecorder()
-		handle(bare, req())
-
-		got := httptest.NewRecorder()
-		wrapped.ServeHTTP(got, req())
-
-		return bare.Code != got.Code ||
-			!bytes.Equal(bare.Body.Bytes(), got.Body.Bytes()) ||
-			len(headerKeysOnlyIn(got.Header(), bare.Header())) != 1
-	}
-
 	_, logger := logSink()
 
 	// Phase 1 — the mutant is a faithful copy of the real middleware.
-	n5WriteBody = false
-	t.Cleanup(func() { n5WriteBody = false })
+	n5Reset(t)
 
 	real := httptest.NewRecorder()
 	loggingMiddleware(logger, handle).ServeHTTP(real, req())
@@ -318,13 +413,13 @@ func TestN5InjectedBodyWriteTurnsP4Red(t *testing.T) {
 			"fix the copy before reading anything into phase 2",
 			real.Code, real.Body.Bytes(), copied.Code, copied.Body.Bytes())
 	}
-	if altered(t, mutatedLoggingMiddleware(logger, handle)) {
-		t.Fatal("control failed: with the injection off the copy already reads as altered — the comparison is not measuring the injection")
+	if diffs := responseDiff(bareFor(handle, req), wrappedFor(mutatedLoggingMiddleware(logger, handle), req)); len(diffs) != 0 {
+		t.Fatalf("control failed: with the injection off the copy already reads as altered — the comparison is not measuring the injection: %v", diffs)
 	}
 
 	// Phase 2 — inject one byte and require the comparison to notice.
 	n5WriteBody = true
-	if !altered(t, mutatedLoggingMiddleware(logger, handle)) {
+	if diffs := responseDiff(bareFor(handle, req), wrappedFor(mutatedLoggingMiddleware(logger, handle), req)); len(diffs) == 0 {
 		t.Fatal("N5 FAILED: a middleware that writes one byte into the response body still passes the byte-for-byte comparison, " +
 			"so P4 (TestLoggingMiddlewareDoesNotAlterBody) has no teeth and its green proves nothing")
 	}
@@ -333,12 +428,95 @@ func TestN5InjectedBodyWriteTurnsP4Red(t *testing.T) {
 	// one byte, and the body is no longer the handler's. Logged rather than
 	// only asserted, so the difference is readable in the stdout of any run.
 	handlerBody := `{"status":"healthy"}` + "\n"
-	got := httptest.NewRecorder()
-	mutatedLoggingMiddleware(logger, handle).ServeHTTP(got, req())
+	got := wrappedFor(mutatedLoggingMiddleware(logger, handle), req)
 	t.Logf("N5 injection: handler produced %q, the mutated middleware produced %q", handlerBody, got.Body.String())
 	if got.Body.String() != "!"+handlerBody {
 		t.Errorf("the injected write did not land where expected: %q", got.Body.String())
 	}
+}
+
+// TestN5PostOnlyInjectedBodyWriteTurnsP4Red is the control that gives P4's POST
+// rows their teeth, and it exists because the first version of this file had a
+// hole that nothing could see.
+//
+// The mutation is the one that got away: write a single byte into the body ONLY
+// when the request is a POST. Run against the GET-only P4 and GET-only N5 that
+// this file used to carry, that mutation left BOTH green — the injection never
+// fired on the requests they sent, and a judgement that is never given the
+// chance to fail is indistinguishable from one that cannot fail (AGENTS.md §5,
+// the same reading as the progress hook).
+//
+// So the assertions here are the mirror image of the first control's:
+//
+//	GET  — the mutant must NOT alter a GET response (it does not write on GET)
+//	POST — the mutant MUST alter a POST response, and P4's POST rows are the
+//	       rows that catch it
+//
+// The first assertion is what stops this test from passing for the wrong
+// reason: if the method switch were ignored and the byte were written on every
+// request, "POST went red" would prove nothing about POST coverage in
+// particular. The second is the point. And the third states the hole directly:
+// a GET-only comparison over the same mutant must come out CLEAN, which is
+// exactly the blind spot the method-crossed table closes.
+func TestN5PostOnlyInjectedBodyWriteTurnsP4Red(t *testing.T) {
+	post := http.MethodPost
+	handle := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		jsonResponse(w, http.StatusOK, map[string]any{"success": true, "orderId": "ord-1"})
+	})
+	getReq := func() *http.Request {
+		return httptest.NewRequest(http.MethodGet, "/api/v1/stats", nil)
+	}
+	postReq := func() *http.Request {
+		return httptest.NewRequest(http.MethodPost, "/api/v1/market/trade",
+			strings.NewReader(`{"symbol":"NVDA","side":"buy","notionalUSD":100,"leverage":1}`))
+	}
+
+	_, logger := logSink()
+	n5Reset(t)
+	n5WriteBody = true
+	n5WriteBodyOn = &post
+	mutant := mutatedLoggingMiddleware(logger, handle)
+
+	// 1. GET is untouched: the switch is a method switch, not a no-op.
+	if diffs := responseDiff(bareFor(handle, getReq), wrappedFor(mutant, getReq)); len(diffs) != 0 {
+		t.Fatalf("the POST-only mutant altered a GET response, so this is not a POST-only injection: %v", diffs)
+	}
+
+	// 2. POST is altered, and the difference is the one byte — the same
+	//    comparison P4 makes on its POST rows.
+	diffs := responseDiff(bareFor(handle, postReq), wrappedFor(mutant, postReq))
+	if len(diffs) == 0 {
+		t.Fatal("N5(POST) FAILED: a middleware that writes one byte into a POST response passes the byte-for-byte comparison, " +
+			"so P4 is still blind on the method every write endpoint in this router uses")
+	}
+	got := wrappedFor(mutant, postReq)
+	t.Logf("N5(POST) injection: handler produced %q, the mutated middleware produced %q", bareFor(handle, postReq).Body.String(), got.Body.String())
+	if !strings.HasPrefix(got.Body.String(), "!") {
+		t.Errorf("the injected byte did not land at the head of the body: %q", got.Body.String())
+	}
+
+	// 3. The hole, stated as an assertion. A GET-only comparison over this same
+	//    mutant is clean — which is precisely why the table above had to grow a
+	//    method axis rather than a fifth handler shape.
+	if diffs := responseDiff(bareFor(handle, getReq), wrappedFor(mutant, getReq)); len(diffs) != 0 {
+		t.Fatalf("a GET-only comparison caught the POST-only mutant: %v — then this test is not demonstrating the gap it claims", diffs)
+	}
+	t.Log("a GET-only comparison over the POST-only mutant is CLEAN — that is the blind spot the method-crossed P4 table closes")
+}
+
+// bareFor serves a request through the handler with no middleware, and
+// wrappedFor serves the same request through a wrapper. Factored out because
+// every control above has to run the identical comparison.
+func bareFor(h http.Handler, req func() *http.Request) *httptest.ResponseRecorder {
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req())
+	return rr
+}
+
+func wrappedFor(w http.Handler, req func() *http.Request) *httptest.ResponseRecorder {
+	rr := httptest.NewRecorder()
+	w.ServeHTTP(rr, req())
+	return rr
 }
 
 // ---------------------------------------------------------------------------
