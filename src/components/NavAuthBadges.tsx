@@ -33,7 +33,9 @@ import {
   AccountIdentity,
   effectiveWalletAddress,
   googleRowKey,
+  heldUnlinkedIdentity,
   mergeIdentity,
+  releaseUnlinkedIdentity,
   storedGoogleRow,
   writeAccountState,
 } from "@/lib/authState";
@@ -172,24 +174,39 @@ export function NavAuthBadges({
   // `writeAccountState` additionally refuses to write when the stored bytes are
   // unchanged, so the effect's own write is the last one it hears about.
   //
-  // The `signingOut` gate is what makes Sign Out stick: `handleSignOut` raises it
-  // **before** it clears the rows and only lowers it once `privyLogout()` has
-  // resolved. Without it, clearing `state.google` re-ran this effect while
-  // `privyUser` was still populated - the effect would then write the profile
-  // straight back, and the next reload showed a signed-in navbar over a signed
-  // out Privy session (the half-signed-in state this change exists to remove).
+  // The guard is bound to the stored row on purpose, and so is the row this
+  // effect writes: both name the identity the same way (`googleId` = the Privy
+  // `subject`). A guard that keys one identity while the write stores another
+  // cannot terminate - that is the §4.3 loop seen from the other side, and it is
+  // why the two spellings are asserted together in `tests/auth-state.test.ts`.
+  //
+  // Two things stop the bridge from re-creating a row the user removed:
+  //  - `signingOut`, raised by `handleSignOut` before it clears the rows and
+  //    lowered only once `privyLogout()` has resolved. Without it the clear
+  //    re-ran this effect while `privyUser` was still populated, the effect
+  //    wrote the profile straight back, and the next reload showed a signed-in
+  //    navbar over a signed-out Privy session;
+  //  - `heldUnlinkedIdentity()`, the hold the unlink button raises. Clearing the
+  //    row is not enough on its own on the Google rail, because nothing here
+  //    ends the session: `privyUser` still carries the account, so this effect
+  //    would put the row back and the user's own removal would be undone in the
+  //    same tick (see `src/lib/authState.ts` for the hold's termination).
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     if (!privyUser?.google && !privyUser?.github) return;
     if (signingOut) return;
-    const stored = state.google;
-    if (
-      googleRowKey(storedGoogleRow()) ===
-      (stored ? `did:koliance:google:${privyUser.google?.subject}` : null)
-    ) {
-      return;
-    }
+    if (heldUnlinkedIdentity() !== null) return;
+    // The subject is the identity, on either rail, and the write below is
+    // guarded on it. The stored row alone used to decide this: the guard read
+    // `stored ? … : null` off `state.google`, which is null in exactly the case
+    // the effect exists to fix, so "the account is there" and "the store already
+    // has it" were the same test.
+    const subject = privyUser.google?.subject ?? privyUser.github?.subject;
+    const alreadyStored =
+      subject !== undefined &&
+      googleRowKey(storedGoogleRow()) === `did:koliance:google:${subject}`;
+    if (alreadyStored) return;
     if (privyUser.google) {
       writeAccountState("google", {
         googleId: privyUser.google.subject,
@@ -202,8 +219,41 @@ export function NavAuthBadges({
     }
   }, [privyUser, state.google, signingOut]);
 
+  /**
+   * Unlinking one rail, as the user's decision. Every caller below goes through
+   * this, and this goes through the provider's `unlink` - which calls
+   * `unlinkRail`, removing the row **and holding its identity** until the session
+   * ends (see `src/lib/authState.ts` for the hold's own termination).
+   *
+   * Without the hold the removal is a no-op in the Privy configuration, which is
+   * the bug this closes (F7): `unlink()` cleared `koliance_google_profile` while
+   * `privyUser` still carried the Google account, the bridge effect above re-ran
+   * on the changed `state.google` and wrote the row straight back - so the user
+   * clicked "解除", watched the row disappear, and found it back on the next
+   * render or reload.
+   *
+   * Note where the fix is **not**: not in this component. The writer that has to
+   * be stopped is the bridge effect, and a fix that only told *that* effect to
+   * behave would leave the next writer - a re-mount, a second tab, a future
+   * component - free to put the row back. So the hold bites in
+   * `writeAccountState`, the one channel every writer already passes through.
+   *
+   * Unlike Sign Out this deliberately does **not** end the Privy session: the
+   * button says "unlink Google", not "log out", and ending the session would take
+   * the wallet and every other rail with it. That is also why the hold needs its
+   * own termination rather than reusing `signingOut` - see `heldUnlinkedIdentity`.
+   */
+  const handleUnlink = (rail: "google" | "github" | "steam") => unlink(rail);
+
   // 1. Google 1-Click Login Trigger (Privy-aware with OAuth fallback)
+  //
+  // Each sign-in entry point releases the unlink hold before it hands over to the
+  // provider: the user is asking for this identity back, and that is the first of
+  // the hold's two termination conditions (`src/lib/authState.ts`). Doing it here
+  // rather than inside `writeAccountState` is what keeps the hold from being a
+  // wedge the user cannot undo.
   const handleGoogleLogin = () => {
+    releaseUnlinkedIdentity();
     if (isPrivyEnabled) {
       // `linkGoogle` attaches a Google account to the CURRENT Privy user. With
       // nobody signed in there is nothing to attach to, and it does not create
@@ -234,6 +284,7 @@ export function NavAuthBadges({
 
   // 2. GitHub 1-Click Login Trigger (Privy-aware with OAuth fallback)
   const handleGithubLogin = () => {
+    releaseUnlinkedIdentity();
     if (isPrivyEnabled) {
       if (privyAuthenticated && privyUser && linkGithub) {
         linkGithub();
@@ -249,6 +300,7 @@ export function NavAuthBadges({
 
   // 3. Steam OpenID 2.0 1-Click Redirect
   const handleSteamLogin = () => {
+    releaseUnlinkedIdentity();
     const returnUrl = encodeURIComponent(`${window.location.origin}/agentcard`);
     const realm = encodeURIComponent(window.location.origin);
     window.location.href = `https://steamcommunity.com/openid/login?openid.ns=http://specs.openid.net/auth/2.0&openid.mode=checkid_setup&openid.return_to=${returnUrl}&openid.realm=${realm}&openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select`;
@@ -285,9 +337,16 @@ export function NavAuthBadges({
   // The gate is lowered in `finally`, not on the success path: a rejected
   // `privyLogout()` must not leave the navbar permanently unable to reflect a
   // fresh sign-in.
+  //
+  // `releaseUnlinkedIdentity()` is called first for the same reason the gate is:
+  // Sign Out ends the session, and a hold raised by an earlier unlink only exists
+  // to outlast the session (`src/lib/authState.ts`). Left standing, it would
+  // refuse the rows of the *next* sign-in, which is the wedge that makes a hold
+  // worse than the defect it fixes.
   const handleSignOut = async () => {
     setDropdownOpen(false);
     setSigningOut(true);
+    releaseUnlinkedIdentity();
     try {
       if (isPrivyEnabled) {
         await privyLogout();
@@ -589,7 +648,7 @@ export function NavAuthBadges({
                   </div>
                   {googleUser ? (
                     <button
-                      onClick={() => unlink("google")}
+                      onClick={() => handleUnlink("google")}
                       className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                     >
                       {lang === "en" ? "Unlink" : "解除"}
@@ -629,7 +688,7 @@ export function NavAuthBadges({
                   </div>
                   {githubUser ? (
                     <button
-                      onClick={() => unlink("github")}
+                      onClick={() => handleUnlink("github")}
                       className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                     >
                       {lang === "en" ? "Unlink" : "解除"}
@@ -660,7 +719,7 @@ export function NavAuthBadges({
                   </div>
                   {steamUser ? (
                     <button
-                      onClick={() => unlink("steam")}
+                      onClick={() => handleUnlink("steam")}
                       className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                     >
                       {lang === "en" ? "Unlink" : "解除"}
