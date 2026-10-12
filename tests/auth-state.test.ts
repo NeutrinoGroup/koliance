@@ -9,10 +9,13 @@ import {
   githubAccountFromStorage,
   googleAccountFromProfile,
   googleRowKey,
+  heldUnlinkedIdentity,
   mergeIdentity,
   readAccountState,
+  releaseUnlinkedIdentity,
   steamAccountFromStorage,
   storedGoogleRow,
+  unlinkRail,
   writeAccountState,
 } from "../src/lib/authState";
 
@@ -111,11 +114,17 @@ beforeEach(() => {
   windowStub = new FakeEventTarget();
   (globalThis as unknown as { window: unknown }).window = windowStub;
   (globalThis as unknown as { localStorage: unknown }).localStorage = storage;
+  // The unlink hold is module state that outlives a test (and a click), which is
+  // the whole point of it. Dropping it between tests is what keeps one test's
+  // hold from swallowing the next test's writes - and it is the same release the
+  // sign-in/sign-out entry points perform in the app.
+  releaseUnlinkedIdentity();
 });
 
 afterEach(() => {
   delete (globalThis as unknown as { window?: unknown }).window;
   delete (globalThis as unknown as { localStorage?: unknown }).localStorage;
+  releaseUnlinkedIdentity();
   vi.restoreAllMocks();
 });
 
@@ -475,6 +484,64 @@ describe("the identity rows have exactly one writer", () => {
 
 const NAV = join(SRC_ROOT, "components", "NavAuthBadges.tsx");
 
+/**
+ * A window of source with its comments removed, for the structural assertions
+ * below.
+ *
+ * They need it because reading raw text cannot tell a statement from a sentence
+ * *about* that statement: adding a line of prose is free, and a guard that a
+ * comment can satisfy is a guard that is already broken. The two directional
+ * assertions below assert presence and absence, and only the absence half is
+ * forgeable by commentary - but they share the helper so they cannot drift apart.
+ *
+ * String and template literals are skipped rather than stripped, so a `//` inside
+ * a URL is not mistaken for a comment and does not swallow the rest of its line
+ * (the negative control at the bottom of this file pins that). Bound: a regex
+ * literal containing `//` would still confuse it - there is none in the sources
+ * these assertions read.
+ */
+function codeWindow(source: string): string {
+  let out = "";
+  let i = 0;
+  while (i < source.length) {
+    const c = source[i];
+    const next = source[i + 1];
+    if (c === "/" && next === "/") {
+      while (i < source.length && source[i] !== "\n") i++;
+      continue;
+    }
+    if (c === "/" && next === "*") {
+      i += 2;
+      while (i < source.length && !(source[i] === "*" && source[i + 1] === "/")) i++;
+      i += 2;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === "`") {
+      const quote = c;
+      out += c;
+      i++;
+      while (i < source.length) {
+        if (source[i] === "\\") {
+          out += source[i] + (source[i + 1] ?? "");
+          i += 2;
+          continue;
+        }
+        if (source[i] === quote) {
+          out += quote;
+          i++;
+          break;
+        }
+        out += source[i];
+        i++;
+      }
+      continue;
+    }
+    out += c;
+    i++;
+  }
+  return out;
+}
+
 describe("the Sign In entry point opens a session", () => {
   it("calls the session login before it offers to link an account", () => {
     // STRUCTURAL, and labelled as such. `handleGoogleLogin` is a closure inside
@@ -487,7 +554,7 @@ describe("the Sign In entry point opens a session", () => {
     // Bound: this reads lines, so it cannot see control flow. A refactor that
     // kept both calls but reordered the branches at runtime would not be
     // caught. Behavioural coverage of the login entries is registered as a gap.
-    const lines = readFileSync(NAV, "utf8").split(/\r?\n/);
+    const lines = codeWindow(readFileSync(NAV, "utf8")).split(/\r?\n/);
     const start = lines.findIndex((line) => line.includes("const handleGoogleLogin"));
     expect(start, "handleGoogleLogin was not found by name").toBeGreaterThan(-1);
     const body = lines.slice(start, start + 25).join("\n");
@@ -503,7 +570,7 @@ describe("the Sign In entry point opens a session", () => {
   it("clears every rail on Sign Out", () => {
     // The counterpart the issue asks for. Source-level for the same reason as
     // above; `signOut` itself is exercised behaviourally in this file.
-    const source = readFileSync(NAV, "utf8");
+    const source = codeWindow(readFileSync(NAV, "utf8"));
     expect(source).toMatch(/signOut\(\)/);
     expect(source).toContain('t("auth.logout")');
   });
@@ -650,7 +717,7 @@ describe("Sign Out sticks", () => {
     // prove `privyLogout()` resolves before `signOut()` runs - only that the
     // `await` is written before it. Fail-to-pass in the other direction is
     // covered by the negative mutation recorded in `docs/changes/050`.
-    const lines = readFileSync(NAV, "utf8").split(/\r?\n/);
+    const lines = codeWindow(readFileSync(NAV, "utf8")).split(/\r?\n/);
     const start = lines.findIndex((line) => line.includes("const handleSignOut"));
     expect(start, "handleSignOut was not found by name").toBeGreaterThan(-1);
     const body = lines.slice(start, start + 40).join("\n");
@@ -673,11 +740,314 @@ describe("Sign Out sticks", () => {
     // on the cleared state while `privyUser` is still populated, writes the
     // profile straight back, and the next reload shows a signed-in navbar over a
     // signed-out Privy session - the half-signed-in state issue #34 named.
-    const source = readFileSync(NAV, "utf8");
-    expect(source).toMatch(/Bridge the Privy user/);
+    const source = codeWindow(readFileSync(NAV, "utf8"));
+    // The marker this one looks for *is* a comment, and that is deliberate: it
+    // asserts the effect which this gate guards is still the one being read, so
+    // the marker is the plain text before comment removal, and the body regex
+    // finds its `if` in the same window.
+    expect(readFileSync(NAV, "utf8")).toMatch(/Bridge the Privy user/);
     expect(
       source,
       "the bridge must return early while signing out, and depend on the gate"
     ).toMatch(/if\s*\(signingOut\)\s*return;[\s\S]{0,1600}?\},\s*\[privyUser,\s*state\.google,\s*signingOut\]\);/);
+  });
+});
+
+// ==================== F7: UNLINK STICKS (behavioural, no renderer needed) ====================
+
+describe("removing one rail sticks against the session that re-asserts it", () => {
+  /**
+   * The defect, in the order F7 recorded it:
+   *
+   *   1. the user presses "Unlink" on the Google rail (`NavAuthBadges.tsx:592`
+   *      before this change), which called `unlink("google")` - a bare
+   *      `writeAccountState("google", null)` with no hold attached;
+   *   2. `privyUser` still carries the Google account, because the local row is
+   *      not the Privy session;
+   *   3. the bridge effect depends on `state.google`, so the clear re-runs it, it
+   *      sees the stored key `null` against the subject, and writes the profile
+   *      straight back;
+   *   4. the row is on screen again, and survives a reload.
+   *
+   * Step 3 is the whole of the write the bridge performs, so it can be replayed
+   * here exactly - without React - by performing the same write on the same value
+   * the effect passes to `writeAccountState`.
+   *
+   * Bound, stated rather than left to be discovered: this replays the bridge's
+   * *write*, not React's scheduling of the effect. What it proves is that **no
+   * ordering of React's re-runs can put the row back**, because the write is
+   * refused independently of who calls it and when - which is a stronger claim
+   * than "the effect happened to be gated". What it cannot prove is that the
+   * bridge effect *does* re-run; that half stays in GAP-73.
+   */
+  it("refuses every write that would re-create the unlinked identity", () => {
+    writeAccountState("google", EXCHANGE_PROFILE);
+    const rowWrite = (privyName: string) => ({
+      id: `did:koliance:google:${EXCHANGE_PROFILE.googleId}`,
+      googleId: EXCHANGE_PROFILE.googleId,
+      name: privyName,
+      email: EXCHANGE_PROFILE.email,
+      picture: null,
+      creditAllowanceUSD: 600,
+      trustTier: null,
+    });
+
+    unlinkRail("google");
+    expect(readAccountState().google, "the row the user removed is still there").toBeNull();
+    expect(heldUnlinkedIdentity()).toBe(`did:koliance:google:${EXCHANGE_PROFILE.googleId}`);
+
+    // The bridge's write, in the two spellings its guard admits.
+    writeAccountState("google", rowWrite("Ada Lovelace"));
+    expect(
+      storage.raw(STORAGE_KEYS.google),
+      "the bridge put the unlinked row straight back"
+    ).toBeNull();
+    // Different field values (the exchange route's spelling) are the same
+    // identity, and are refused for the same reason: the key, not the bytes.
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(storage.raw(STORAGE_KEYS.google)).toBeNull();
+    // A third site writing the row, not just the bridge.
+    writeAccountState("google", { googleId: EXCHANGE_PROFILE.googleId });
+    expect(storage.raw(STORAGE_KEYS.google)).toBeNull();
+  });
+
+  it("holds the key the writers spell, not the one the navbar derives", () => {
+    // A row whose `id` disagrees with its `googleId` - the shape
+    // `EditProfileModal` produces. Keying the hold off the derived `state.google.id`
+    // would hold `stale-from-the-modal` while the bridge writes
+    // `did:koliance:google:<subject>`, i.e. a hold that never bites.
+    writeAccountState("google", {
+      id: "did:koliance:google:stale-from-the-modal",
+      googleId: EXCHANGE_PROFILE.googleId,
+      email: EXCHANGE_PROFILE.email,
+    });
+    unlinkRail("google");
+    expect(heldUnlinkedIdentity()).toBe(`did:koliance:google:${EXCHANGE_PROFILE.googleId}`);
+    // The Github rail has no row to key off - it stores a bare username.
+    writeAccountState("github", "ada-lovelace");
+    unlinkRail("github");
+    expect(heldUnlinkedIdentity()).toBe("ada-lovelace");
+    writeAccountState("github", "ada-lovelace");
+    expect(storage.raw(STORAGE_KEYS.github)).toBeNull();
+  });
+
+  it("lets the user sign back in, and lets Sign Out stand down", () => {
+    // The termination conditions. Without them the hold is not a fix but a
+    // wedge: a user who removed Google could never sign in again.
+    writeAccountState("google", EXCHANGE_PROFILE);
+    unlinkRail("google");
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(storage.raw(STORAGE_KEYS.google), "the hold did not bite").toBeNull();
+
+    // (a) signing in again - what the navbar's three sign-in entry points call.
+    releaseUnlinkedIdentity();
+    expect(heldUnlinkedIdentity()).toBeNull();
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(storage.raw(STORAGE_KEYS.google)).not.toBeNull();
+
+    // (b) Sign Out - a hold raised before it must not refuse a later sign-in.
+    unlinkRail("google");
+    releaseUnlinkedIdentity();
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(storage.raw(STORAGE_KEYS.google)).not.toBeNull();
+  });
+
+  it("holds now, and is gone once its TTL has passed", () => {
+    // The backstop. A hold that never expired would be a permanent refusal to
+    // restore an identity the user removed once and never thought about again,
+    // and the TTL is only permitted because the tab it lives in cannot outlive an
+    // awaited `privyLogout()` in that same tab (`src/lib/authState.ts`).
+    // `Date.now` is derived here rather than faked, for the reason the repo
+    // already records about value-lists: a test that names the mechanism proves
+    // nothing about it.
+    const realNow = Date.now;
+    writeAccountState("google", EXCHANGE_PROFILE);
+    unlinkRail("google");
+    expect(heldUnlinkedIdentity()).not.toBeNull();
+
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(storage.raw(STORAGE_KEYS.google), "the hold did not bite").toBeNull();
+
+    try {
+      Date.now = () => realNow() + 11 * 60 * 1000;
+      expect(heldUnlinkedIdentity(), "the hold outlived its TTL").toBeNull();
+      writeAccountState("google", EXCHANGE_PROFILE);
+      expect(storage.raw(STORAGE_KEYS.google)).not.toBeNull();
+    } finally {
+      Date.now = realNow;
+    }
+  });
+
+  it("does nothing to a rail that holds nothing, and holds nothing either", () => {
+    // The buttons that call this only render when a rail is linked, but a hold
+    // raised off an empty store would refuse the *first* write of a genuinely new
+    // sign-in - the same wedge by another route.
+    expect(storedGoogleRow()).toBeNull();
+    unlinkRail("google");
+    expect(heldUnlinkedIdentity()).toBeNull();
+    writeAccountState("google", EXCHANGE_PROFILE);
+    expect(storage.raw(STORAGE_KEYS.google)).not.toBeNull();
+  });
+});
+
+// ==================== THE BRIDGE'S TERMINATION CONDITION, BOUND TO THE COMPONENT ====================
+
+describe("the bridge recognises the stored row the way the store spells it", () => {
+  /**
+   * Why this guard reads the component at all.
+   *
+   * The §4.3 fix put the comparison in `authState.ts` (`googleRowKey` /
+   * `storedGoogleRow`) and covered it with three behavioural tests here. Those
+   * tests pass whether or not the component *calls* those functions - reverting
+   * `NavAuthBadges.tsx` to `stored.id === \`did:koliance:google:${subject}\``
+   * left the whole suite green, because the functions still existed and were
+   * still correct. A fix that no judgement is bound to is not a fix (D3), and the
+   * regression it would let through is the unbounded write-dependency loop the
+   * §4.3 change exists to stop.
+   *
+   * The property asserted is the one that made §4.3 a defect: the comparison must
+   * be against the row **as stored**, keyed the way every writer's row is keyed -
+   * not against a value re-spelled by the comparison itself. Stated as
+   * behaviour: "the bridge compares a key derived from the stored row against the
+   * subject", plus its negation "and not the derived account's id".
+   *
+   * Bound: this is a source-level assertion. It reads the comparison, so it can
+   * see *which expression* is compared, but not whether React re-runs the effect
+   * or how many times - that stays in GAP-73. What it does prove is the narrower
+   * claim the previous round needed and did not have: the comparison cannot be
+   * reverted to the old form without this suite going red.
+   */
+  const BRIDGE_SOURCE = codeWindow(readFileSync(NAV, "utf8"));
+
+  /**
+   * The bridge effect, extracted from the source. Delimited by the line that
+   * opens its gate and the dependency list that closes it, so the assertions
+   * below cannot silently start reading some other effect's guard - the "empty
+   * denominator" shape the repo has already been bitten by once.
+   */
+  function bridgeEffectWindow(): string {
+    const from = BRIDGE_SOURCE.indexOf("const [signingOut, setSigningOut]");
+    const to = BRIDGE_SOURCE.indexOf("[privyUser, state.google, signingOut]");
+    expect(from, "the bridge effect was not found").toBeGreaterThan(-1);
+    expect(to, "the bridge effect's dependency list was not found").toBeGreaterThan(from);
+    const effect = BRIDGE_SOURCE.slice(from, to);
+    // Self-check: a wrong window would let the assertions below pass over
+    // something else entirely.
+    expect(effect, "the window is not the bridge effect").toContain("privyUser?.google");
+    return effect;
+  }
+
+  it("compares a key taken off the stored row, not the account it is about to write", () => {
+    const effect = bridgeEffectWindow();
+    // The single statement that decides whether the effect returns, found by the
+    // comparison it performs rather than by the name it binds - a rename must not
+    // disarm this guard.
+    const comparison = effect.split(";").find((statement) => statement.includes("googleRowKey("));
+    expect(comparison, "the bridge no longer keys anything with googleRowKey").toBeDefined();
+
+    expect(comparison, "the key is no longer taken off the stored row").toMatch(/storedGoogleRow\s*\(/);
+    expect(comparison, "the key is no longer compared against the Privy subject").toMatch(/subject/);
+    // The negation is the F5 regression itself: the pre-fix guard compared the
+    // *derived* row's id, which is what made the comparison unable to terminate.
+    expect(
+      comparison,
+      "the guard is back to comparing the derived account's id - the §4.3 regression"
+    ).not.toMatch(/\.\s*id\b/);
+    expect(effect, "the pre-fix 'stored && stored.id === ...' shape is back").not.toMatch(
+      /stored\s*(&&|\?)[\s\S]{0,40}\.\s*id\b/
+    );
+
+    // And the early return must still be decided by that comparison, or the key
+    // is computed and then ignored.
+    const flag = comparison?.match(/(\w+)\s*=/)?.[1];
+    expect(flag, "the comparison is no longer bound to a name").toBeDefined();
+    expect(effect, "the early return no longer uses the stored-row key").toMatch(
+      new RegExp(`if\\s*\\(\\s*${flag}\\s*\\)\\s*\\{?\\s*return;`)
+    );
+  });
+
+  it("writes a row that already agrees with the key it was recognised by", () => {
+    // The other half of the same invariant: the row the effect stores must carry
+    // the **subject** as its `googleId`, because that is what `googleRowKey` reads
+    // first on the next pass. A row written with a different identity (the
+    // pre-fix shape borrowed `state.google.id`) makes the guard's own key and the
+    // stored row disagree, and the effect re-arms on its own output - the §4.3
+    // loop from the other side.
+    const effect = bridgeEffectWindow();
+    const write = effect.slice(effect.indexOf('writeAccountState("google"'));
+    expect(write, "the bridge no longer writes a google row at all").not.toBe("");
+    expect(write, "the row no longer carries the subject as googleId").toMatch(
+      /googleId:\s*privyUser\.google\.subject/
+    );
+    // And no second, differently-derived identity alongside it: `EditProfileModal`
+    // may write `id` next to `googleId` on purpose (its own save), but the bridge
+    // has no reason to and the two can disagree.
+    expect(write, "the row carries a second identity the guard does not key on").not.toMatch(
+      /^\s*id\s*:/m
+    );
+  });
+
+  it("has teeth on a commented-out guard", () => {
+    // Negative control for the helper, not for the component. A guard that reads
+    // raw text is satisfied by a line of prose, and the falsifier's note about
+    // "one comment exempts the whole file" is exactly this hole. `codeWindow`
+    // removes comments, so a commented-out comparison is not mistaken for a live
+    // one - and the same helper is what the Sign Out and Sign In assertions read.
+    const live = `if (googleRowKey(storedGoogleRow()) === key) { return; }`;
+    const commentedOut = `// if (googleRowKey(storedGoogleRow()) === key) { return; }\n`;
+    expect(codeWindow(live)).toContain("googleRowKey(storedGoogleRow())");
+    expect(codeWindow(commentedOut)).not.toContain("googleRowKey(storedGoogleRow())");
+    // And a block comment is not a hiding place either.
+    expect(
+      codeWindow(`/* stored.id === \`did:koliance:google:\${subject}\` */\nconst x = 1;`)
+    ).not.toContain("stored.id");
+    // A URL in a string is not a comment: the remover must not eat the rest of a
+    // real line, or the guards above would start passing over code that is there.
+    expect(codeWindow(`const u = "https://example.com/x"; const y = 1;`)).toContain("const y = 1;");
+  });
+});
+
+// ==================== THE UNLINK BUTTON IS WIRED TO THE HOLD ====================
+
+describe("the user's unlink button reaches the hold", () => {
+  /**
+   * The same gap as F5, on the other fix, so it is closed the same way.
+   *
+   * `unlinkRail` holds the identity (`tests` above pin that), but a hold that the
+   * button does not reach is a hold that never stands: if the provider's `unlink`
+   * went back to a bare `writeAccountState(rail, null)`, or the navbar went back
+   * to calling that clear itself, unlink would silently stop sticking exactly as
+   * it did before - with every test in this file still green.
+   *
+   * Read from source because both call sites are inside React components and this
+   * suite has no renderer (GAP-73). Bound: this proves the call is written, not
+   * that the click reaches it.
+   */
+  const PROVIDER = codeWindow(
+    readFileSync(join(SRC_ROOT, "components", "KolianceAuthProvider.tsx"), "utf8")
+  );
+
+  it("routes the provider's unlink through the holding removal", () => {
+    const unlink = PROVIDER.slice(PROVIDER.indexOf("const unlink = useCallback"));
+    const body = unlink.slice(0, unlink.indexOf("}, []);"));
+    expect(body, "the provider's unlink was not found").not.toBe("");
+    expect(body, "unlink no longer raises the hold, so the row comes straight back").toMatch(
+      /unlinkRail\s*\(\s*rail\s*\)/
+    );
+    // The bare clear is the regression, in the exact shape the pre-fix code had.
+    expect(body, "unlink is back to a bare clear").not.toMatch(/writeAccountState\s*\(\s*rail\s*,\s*null\s*\)/);
+  });
+
+  it("does not let the navbar clear a rail behind the provider", () => {
+    // A second, direct clear in the component would bypass the hold even with the
+    // provider correct - which is how this defect would come back unnoticed.
+    const source = codeWindow(readFileSync(NAV, "utf8"));
+    expect(source, "the navbar no longer unlinks through the provider").toMatch(/unlink\(\s*rail\s*\)/);
+    for (const rail of ["google", "github", "steam"]) {
+      expect(
+        source,
+        `the navbar clears the ${rail} rail directly, behind the hold`
+      ).not.toMatch(new RegExp(`writeAccountState\\(\\s*"${rail}"\\s*,\\s*null\\s*\\)`));
+    }
   });
 });
