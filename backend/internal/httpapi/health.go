@@ -69,7 +69,27 @@ func sanitizeProbeError(err error) string {
 		return ""
 	}
 	s := reURLWithQuery.ReplaceAllString(err.Error(), "${1}")
-	return sanitizeLogValue(s)
+	for _, r := range []struct {
+		re *regexp.Regexp
+		to string
+	}{
+		{reGoStack, markStack},
+		{reTruncatedAlpacaBody, "${1}" + markUpstream},
+		{reDSN, "${1}" + markDSN},
+		{reSQL, markSQL},
+		{reEnvAssign, markEnv},
+		// ADR-006 §3.5: Operator view (/healthz, /health) explicitly allows
+		// environment variable names (e.g. ALPACA_API_KEY) so operators know what is missing.
+		{reSecretValue, markSecret},
+		{reFilePathURI, markPath},
+		{reFilePathAbs, "${1}" + markPath},
+		{reFilePathRel, "${1}" + markPath},
+		{reHost, markHost},
+		{reThirdPartyBody, markUpstream},
+	} {
+		s = r.re.ReplaceAllString(s, r.to)
+	}
+	return s
 }
 
 // runProbe executes fn under its own timeout and converts panic/error into a

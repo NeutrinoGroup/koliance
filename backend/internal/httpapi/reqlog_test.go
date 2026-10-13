@@ -246,7 +246,10 @@ func TestLoggingMiddlewareDoesNotAlterBody(t *testing.T) {
 				})(w, r)
 			},
 			req: func() *http.Request {
-				return httptest.NewRequest(http.MethodDelete, "/api/v1/liquidations", nil)
+				req := httptest.NewRequest(http.MethodDelete, "/api/v1/liquidations", nil)
+				req.Header.Set(requestIDHeader, "dummy-req-id")
+				ctx := context.WithValue(req.Context(), ctxKeyRequestID{}, "dummy-req-id")
+				return req.WithContext(ctx)
 			},
 		},
 	}

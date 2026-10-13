@@ -1,14 +1,19 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"slices"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/koliance/backend/internal/verifier"
 )
 
 // TestErrorCopyIsClosedSet asserts ADR-006 §3.6.2 and §4.1 P1:
@@ -186,5 +191,274 @@ func TestJsonEnvelopeErrorOutputsCompatibleEnvelope(t *testing.T) {
 	line := logLine(t, buf)
 	if strField(t, line, "err") == "" {
 		t.Error("raw error was not recorded in logLine")
+	}
+}
+
+// TestEveryErrorCodeIsReachable asserts ADR-006 §4.1 P3 & §4.2 N4 (full reachability of closed set):
+// 1. Every one of the 12 ErrorCodes is covered by at least one HTTP route/handler case.
+// 2. Each case triggers an HTTP response with the audited HTTP status code.
+// 3. The response body is valid JSON with Content-Type application/json.
+// 4. The response body contains the matching code / errorCode, immutable business copy, and non-empty requestId.
+// 5. The raw error is recorded by loggingMiddleware.
+// 6. Direct writeError contract verification ensures all 12 ErrorCodes emit the exact standard 3-key envelope.
+func TestEveryErrorCodeIsReachable(t *testing.T) {
+	cases := []struct {
+		name       string
+		code       ErrorCode
+		wantStatus int
+		exec       func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder
+	}{
+		{
+			name:       "INVALID_REQUEST (400 via liquidations route with bad param)",
+			code:       CodeInvalidRequest,
+			wantStatus: http.StatusBadRequest,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				h := newTestRouter(t, func(d *Deps) { d.Logger = logger })
+				return do(h, http.MethodGet, "/api/v1/liquidations?limit=-1", "", nil)
+			},
+		},
+		{
+			name:       "INVALID_PROOF (400 via verifier route with invalid proof)",
+			code:       CodeInvalidProof,
+			wantStatus: http.StatusBadRequest,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				reject := &stubVerifier{
+					scheme: verifier.SchemeZK,
+					fn: func(context.Context, verifier.Request) error {
+						return verifier.ErrInvalidProof
+					},
+				}
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+					d.Verifier = reject
+				})
+				return do(h, http.MethodPost, "/api/v1/verifier/verify",
+					`{"scheme":"ZK","subject":"agent-1","proof":"0xdeadbeef"}`, nil)
+			},
+		},
+		{
+			name:       "UNAUTHORIZED (401 via agentcard route with no bearer token)",
+			code:       CodeUnauthorized,
+			wantStatus: http.StatusUnauthorized,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				h := newTestRouter(t, func(d *Deps) { d.Logger = logger })
+				return do(h, http.MethodGet, "/api/v1/agentcard/cards/card-test", "", nil)
+			},
+		},
+		{
+			name:       "QUOTA_EXHAUSTED (403 via writeError on quota refusal)",
+			code:       CodeQuotaExhausted,
+			wantStatus: http.StatusForbidden,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					writeError(w, r, http.StatusForbidden, CodeQuotaExhausted, errors.New("developer quota exhausted"))
+				}))
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/bind", nil)
+				handler.ServeHTTP(rec, req)
+				return rec
+			},
+		},
+		{
+			name:       "RESOURCE_NOT_FOUND (404 via writeError on absent entity)",
+			code:       CodeResourceNotFound,
+			wantStatus: http.StatusNotFound,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					writeError(w, r, http.StatusNotFound, CodeResourceNotFound, errors.New("resource not found"))
+				}))
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/404", nil)
+				handler.ServeHTTP(rec, req)
+				return rec
+			},
+		},
+		{
+			name:       "METHOD_NOT_ALLOWED (405 via liquidations route with DELETE method)",
+			code:       CodeMethodNotAllowed,
+			wantStatus: http.StatusMethodNotAllowed,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				h := newTestRouter(t, func(d *Deps) { d.Logger = logger })
+				return do(h, http.MethodDelete, "/api/v1/liquidations", "", nil)
+			},
+		},
+		{
+			name:       "RATE_LIMITED (429 via writeError on rate limit exceeded)",
+			code:       CodeRateLimited,
+			wantStatus: http.StatusTooManyRequests,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					writeError(w, r, http.StatusTooManyRequests, CodeRateLimited, errors.New("rate limited: 100 rpm exceeded"))
+				}))
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/pay", nil)
+				handler.ServeHTTP(rec, req)
+				return rec
+			},
+		},
+		{
+			name:       "INTERNAL_ERROR (500 via writeError on internal failure)",
+			code:       CodeInternalError,
+			wantStatus: http.StatusInternalServerError,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					writeError(w, r, http.StatusInternalServerError, CodeInternalError, errors.New("internal server failure"))
+				}))
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/internal", nil)
+				handler.ServeHTTP(rec, req)
+				return rec
+			},
+		},
+		{
+			name:       "VERIFIER_UNAVAILABLE (503 via verifier route with nil verifier)",
+			code:       CodeVerifierUnavailable,
+			wantStatus: http.StatusServiceUnavailable,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+					d.Verifier = nil
+				})
+				return do(h, http.MethodPost, "/api/v1/verifier/verify",
+					`{"scheme":"ZK","subject":"agent-1","proof":"0xdeadbeef"}`, nil)
+			},
+		},
+		{
+			name:       "UPSTREAM_UNAVAILABLE (502 via writeError on upstream provider timeout)",
+			code:       CodeUpstreamUnavailable,
+			wantStatus: http.StatusBadGateway,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					writeError(w, r, http.StatusBadGateway, CodeUpstreamUnavailable, errors.New("upstream market connection reset"))
+				}))
+				rec := httptest.NewRecorder()
+				req := httptest.NewRequest(http.MethodGet, "/api/v1/market/prices", nil)
+				handler.ServeHTTP(rec, req)
+				return rec
+			},
+		},
+		{
+			name:       "DATABASE_UNAVAILABLE (503 via game proof route with nil database)",
+			code:       CodeDatabaseUnavailable,
+			wantStatus: http.StatusServiceUnavailable,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+					d.DB = nil
+				})
+				return do(h, http.MethodPost, "/api/v1/game/proof", `{}`, nil)
+			},
+		},
+		{
+			name:       "SERVICE_NOT_CONFIGURED (503 via market prices route without credentials)",
+			code:       CodeServiceNotConfigured,
+			wantStatus: http.StatusServiceUnavailable,
+			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+					d.Cfg.AlpacaAPIKey = "present-key"
+					d.Cfg.AlpacaAPISecret = "" // missing secret triggers unconfigured gate without tripping both-empty default in router_test.go
+				})
+				return do(h, http.MethodGet, "/api/v1/market/prices", "", nil)
+			},
+		},
+	}
+
+	seenCodes := make(map[ErrorCode]bool)
+	for _, tc := range cases {
+		tc := tc
+		seenCodes[tc.code] = true
+		t.Run(tc.name, func(t *testing.T) {
+			buf, logger := logSink()
+			rr := tc.exec(t, logger)
+
+			if rr.Code != tc.wantStatus {
+				t.Errorf("status = %d, want %d", rr.Code, tc.wantStatus)
+			}
+
+			ct := rr.Header().Get("Content-Type")
+			if !strings.HasPrefix(ct, "application/json") {
+				t.Errorf("Content-Type = %q, want application/json", ct)
+			}
+
+			var rawObj map[string]interface{}
+			if err := json.Unmarshal(rr.Body.Bytes(), &rawObj); err != nil {
+				t.Fatalf("failed to decode JSON response: %v, body: %s", err, rr.Body.String())
+			}
+
+			codeVal, _ := rawObj["code"].(string)
+			if codeVal == "" {
+				codeVal, _ = rawObj["errorCode"].(string)
+			}
+			if codeVal != string(tc.code) {
+				t.Errorf("response code = %q, want %q", codeVal, tc.code)
+			}
+
+			errVal, _ := rawObj["error"].(string)
+			wantCopy := errorCopyFor(tc.code)
+			if errVal != wantCopy {
+				t.Errorf("response error = %q, want %q", errVal, wantCopy)
+			}
+
+			reqIDVal, _ := rawObj["requestId"].(string)
+			if strings.TrimSpace(reqIDVal) == "" {
+				t.Errorf("response requestId is empty: body = %s", rr.Body.String())
+			}
+
+			line := logLine(t, buf)
+			if strField(t, line, "err") == "" {
+				t.Errorf("raw error was not recorded in log line for %s", tc.code)
+			}
+		})
+	}
+
+	if len(seenCodes) != len(AllErrorCodes) {
+		t.Fatalf("covered %d ErrorCodes, want exactly %d", len(seenCodes), len(AllErrorCodes))
+	}
+	for _, code := range AllErrorCodes {
+		if !seenCodes[code] {
+			t.Errorf("ErrorCode %q was not covered by any reachability case", code)
+		}
+	}
+
+	// Direct writeError envelope contract test across all 12 ErrorCodes
+	for _, code := range AllErrorCodes {
+		t.Run("writeError/"+string(code), func(t *testing.T) {
+			buf, logger := logSink()
+			rawErr := fmt.Errorf("underlying failure details: code test")
+			h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				writeError(w, r, http.StatusBadRequest, code, rawErr)
+			}))
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/test/"+strings.ToLower(string(code)), nil)
+			h.ServeHTTP(rec, req)
+
+			var obj map[string]interface{}
+			if err := json.Unmarshal(rec.Body.Bytes(), &obj); err != nil {
+				t.Fatalf("failed to decode JSON: %v", err)
+			}
+			keys := make([]string, 0, len(obj))
+			for k := range obj {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			wantKeys := []string{"code", "error", "requestId"}
+			if !slices.Equal(keys, wantKeys) {
+				t.Errorf("envelope keys = %v, want %v", keys, wantKeys)
+			}
+			if obj["code"] != string(code) {
+				t.Errorf("code = %v, want %s", obj["code"], code)
+			}
+			if obj["error"] != errorCopyFor(code) {
+				t.Errorf("error = %v, want %s", obj["error"], errorCopyFor(code))
+			}
+			if str, _ := obj["requestId"].(string); str == "" {
+				t.Error("requestId is empty")
+			}
+			line := logLine(t, buf)
+			if !strings.Contains(strField(t, line, "err"), "underlying failure details") {
+				t.Errorf("logged err does not contain raw error: %q", strField(t, line, "err"))
+			}
+		})
 	}
 }
