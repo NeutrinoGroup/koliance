@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   FAILURE_COPY,
   buildSymbolPayload,
@@ -13,7 +13,13 @@ import {
   signClass,
   type MarketFetchReason,
 } from "@/lib/marketFeed";
-import type { MarketPriceRow } from "@/lib/api";
+import {
+  GO_BACKEND_URL,
+  isGoBackendConfigured,
+  isLocalEnvironment,
+  fetchMarketPrices,
+  type MarketPriceRow,
+} from "@/lib/api";
 
 /**
  * The helpers in `marketFeed.ts` exist so that "the upstream did not publish
@@ -193,7 +199,13 @@ describe("buildSymbolPayload", () => {
 
 describe("failure copy", () => {
   it("has a distinct entry for every reason the client can produce", () => {
-    const reasons: MarketFetchReason[] = ["not-configured", "upstream-error", "unreachable", "invalid-symbol"];
+    const reasons: MarketFetchReason[] = [
+      "not-configured",
+      "gateway-unconfigured",
+      "upstream-error",
+      "unreachable",
+      "invalid-symbol",
+    ];
 
     for (const reason of reasons) {
       expect(FAILURE_COPY[reason]).toBeDefined();
@@ -202,15 +214,19 @@ describe("failure copy", () => {
     }
   });
 
-  it("gives four different explanations, not one shared message", () => {
-    // The old adapters returned `null` for all four and the page had one
-    // generic empty state. Only one of these is fixed by retrying.
+  it("gives five different explanations, not one shared message", () => {
+    // Five distinct failure states with different root causes and remediation paths.
     const headlines = new Set(Object.values(FAILURE_COPY).map((c) => c.headline));
-    expect(headlines.size).toBe(4);
+    expect(headlines.size).toBe(5);
   });
 
-  it("names the missing environment variables for the unconfigured case", () => {
+  it("dynamically includes GO_BACKEND_URL in unreachable action copy", () => {
+    expect(FAILURE_COPY.unreachable.action).toContain(GO_BACKEND_URL);
+  });
+
+  it("names the missing environment variables for both unconfigured cases", () => {
     expect(FAILURE_COPY["not-configured"].action).toContain("ALPACA_API_KEY");
+    expect(FAILURE_COPY["gateway-unconfigured"].action).toContain("NEXT_PUBLIC_GO_BACKEND_URL");
   });
 
   it("falls back to a defined message for an unrecognised reason", () => {
@@ -221,6 +237,69 @@ describe("failure copy", () => {
     expect(copy.headline.length).toBeGreaterThan(0);
   });
 });
+
+describe("gateway configuration and catch classification", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  });
+
+  it("correctly identifies local test environment", () => {
+    expect(isLocalEnvironment()).toBe(true);
+  });
+
+  it("identifies non-local environments in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    expect(isLocalEnvironment()).toBe(false);
+  });
+
+  it("detects local browser hostname via window", () => {
+    vi.stubGlobal("window", { location: { hostname: "localhost" } });
+    expect(isLocalEnvironment()).toBe(true);
+
+    vi.stubGlobal("window", { location: { hostname: "koliance.app" } });
+    expect(isLocalEnvironment()).toBe(false);
+  });
+
+  it("considers local default backend configured unless explicitly cleared", () => {
+    expect(isGoBackendConfigured()).toBe(true);
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "");
+    expect(isGoBackendConfigured()).toBe(false);
+  });
+
+  it("flags unconfigured or localhost backend in production", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "");
+    expect(isGoBackendConfigured()).toBe(false);
+
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://localhost:8080");
+    expect(isGoBackendConfigured()).toBe(false);
+
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "https://api.koliance.xyz");
+    expect(isGoBackendConfigured()).toBe(true);
+  });
+
+  it("marketGet catch distinguishes unreachable vs gateway-unconfigured", async () => {
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
+
+    // 1. In local environment, connection failure -> unreachable
+    const localRes = await fetchMarketPrices("NVDA");
+    expect(localRes.ok).toBe(false);
+    if (!localRes.ok) {
+      expect(localRes.reason).toBe("unreachable");
+    }
+
+    // 2. In production without remote URL, connection failure -> gateway-unconfigured
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "");
+    const prodRes = await fetchMarketPrices("NVDA");
+    expect(prodRes.ok).toBe(false);
+    if (!prodRes.ok) {
+      expect(prodRes.reason).toBe("gateway-unconfigured");
+    }
+  });
+});
+
 
 describe("movers", () => {
   const change = (symbol: string) => ({

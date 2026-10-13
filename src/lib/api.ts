@@ -11,6 +11,58 @@ import type { Movers } from "@/lib/marketFeed";
  */
 export const GO_BACKEND_URL = process.env.NEXT_PUBLIC_GO_BACKEND_URL || "http://localhost:8080";
 
+/**
+ * Detects whether the current runtime is a local development/test environment.
+ * In a browser, checks whether window.location.hostname is localhost or loopback.
+ * On a server/runtime, checks whether NODE_ENV !== "production".
+ */
+export function isLocalEnvironment(): boolean {
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "0.0.0.0" ||
+      hostname === "::1" ||
+      hostname.endsWith(".local")
+    );
+  }
+  return process.env.NODE_ENV !== "production";
+}
+
+/**
+ * Checks whether the Go backend gateway is configured for the current environment.
+ *
+ * - In local development / test: default "http://localhost:8080" is valid unless explicitly empty.
+ * - In production: NEXT_PUBLIC_GO_BACKEND_URL must be explicitly configured with a non-empty
+ *   URL that does not point to localhost or loopback addresses.
+ */
+export function isGoBackendConfigured(): boolean {
+  const envUrl = process.env.NEXT_PUBLIC_GO_BACKEND_URL;
+  if (!isLocalEnvironment()) {
+    if (!envUrl || envUrl.trim() === "") {
+      return false;
+    }
+    const lower = envUrl.trim().toLowerCase();
+    if (
+      lower.includes("localhost") ||
+      lower.includes("127.0.0.1") ||
+      lower.includes("0.0.0.0") ||
+      lower.includes("::1")
+    ) {
+      return false;
+    }
+    return true;
+  }
+
+  // Local / test environment
+  if (envUrl !== undefined && envUrl.trim() === "") {
+    return false;
+  }
+  const effectiveUrl = envUrl || GO_BACKEND_URL;
+  return Boolean(effectiveUrl && effectiveUrl.trim() !== "");
+}
+
 export interface StatsResponse {
   chainId: number;
   networkName: string;
@@ -107,9 +159,10 @@ export interface MarketPriceRow {
   synthetic: boolean;
 }
 
-/** Why a market fetch produced nothing. Four situations, four different fixes. */
+/** Why a market fetch produced nothing. Five situations, five different fixes. */
 export type MarketFetchReason =
   | "not-configured"
+  | "gateway-unconfigured"
   | "upstream-error"
   | "unreachable"
   | "invalid-symbol";
@@ -325,9 +378,10 @@ async function marketGet<T>(path: string): Promise<MarketFetch<T>> {
   try {
     res = await fetch(`${GO_BACKEND_URL}${path}`, { cache: "no-store" });
   } catch (err) {
+    const reason: MarketFetchReason = isGoBackendConfigured() ? "unreachable" : "gateway-unconfigured";
     return {
       ok: false,
-      reason: "unreachable",
+      reason,
       detail: err instanceof Error ? err.message : String(err),
     };
   }

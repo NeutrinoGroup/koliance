@@ -24,6 +24,7 @@ import {
   fetchMarketHealth,
   executeMarketTrade,
   closeMarketPosition,
+  isGoBackendConfigured,
   MarketPosition,
   MarketPriceRow,
   MarketDataHealth,
@@ -246,7 +247,8 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       setMarketData(json as MarketResponse);
     } catch (err: unknown) {
       setMarketData(null);
-      setQuoteFailure(FAILURE_COPY.unreachable);
+      const reasonKey = isGoBackendConfigured() ? "unreachable" : "gateway-unconfigured";
+      setQuoteFailure(FAILURE_COPY[reasonKey]);
       setSearchError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
@@ -380,7 +382,9 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
    */
   const badge = (() => {
     if (healthFailure) {
-      return { label: "GATEWAY UNREACHABLE", tone: "bg-red-500/20 text-red-300 border-red-500/40" };
+      return !isGoBackendConfigured()
+        ? { label: "GATEWAY UNCONFIGURED", tone: "bg-amber-500/20 text-amber-300 border-amber-500/40" }
+        : { label: "GATEWAY UNREACHABLE", tone: "bg-red-500/20 text-red-300 border-red-500/40" };
     }
     if (!health) {
       return { label: "CHECKING", tone: "bg-white/10 text-slate-300 border-white/20" };

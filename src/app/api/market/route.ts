@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildSymbolPayload, type SymbolPayload } from "@/lib/marketFeed";
-import { GO_BACKEND_URL } from "@/lib/api";
+import { GO_BACKEND_URL, isGoBackendConfigured } from "@/lib/api";
 
 /**
  * GET /api/market?symbol=…&range=…&interval=…
@@ -38,7 +38,7 @@ const ALLOWED_INTERVALS = new Set(["5m", "15m", "1d", "1wk"]);
 const SYMBOL_PATTERN = /^[A-Z0-9.\-]{1,10}$/;
 
 /** Same vocabulary the client adapter uses, so both halves read alike. */
-type RouteReason = "not-configured" | "upstream-error" | "unreachable" | "invalid-symbol";
+type RouteReason = "not-configured" | "gateway-unconfigured" | "upstream-error" | "unreachable" | "invalid-symbol";
 
 /**
  * Answers a refusal without a price in it.
@@ -89,6 +89,15 @@ export async function GET(request: NextRequest) {
       { cache: "no-store" }
     );
   } catch (err) {
+    if (!isGoBackendConfigured()) {
+      return refuse(
+        503,
+        "gateway-unconfigured",
+        `Market gateway is not configured for this environment: ${GO_BACKEND_URL}. ` +
+          "No synthetic series is generated in its place.",
+        { symbol }
+      );
+    }
     return refuse(
       502,
       "unreachable",

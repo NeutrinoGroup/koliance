@@ -18,7 +18,7 @@
  * change to one silently stops constraining the others (D4).
  */
 
-import type { MarketFetchReason, MarketPriceRow } from "@/lib/api";
+import { GO_BACKEND_URL, type MarketFetchReason, type MarketPriceRow } from "@/lib/api";
 
 // Re-exported so callers that only need the presentation vocabulary (the
 // terminal, the display tests) do not have to reach into the transport module
@@ -257,13 +257,17 @@ export const FAILURE_COPY: Record<MarketFetchReason, FailureCopy> = {
     headline: "行情数据源未配置",
     action: "后端未配置 ALPACA_API_KEY / ALPACA_API_SECRET，故不提供任何行情；本页也不会用合成数据填补。",
   },
+  "gateway-unconfigured": {
+    headline: "Go 网关未配置",
+    action: "环境变量 NEXT_PUBLIC_GO_BACKEND_URL 未配置或指向本地地址；生产环境请配置有效的 Go 后端服务地址。",
+  },
   "upstream-error": {
     headline: "上游行情源返回错误",
     action: "后端已配置凭据，但读取 Alpaca 失败；下方数字为空白，重试可能恢复。",
   },
   unreachable: {
     headline: "后端不可达",
-    action: "未能连接到 Go 网关（默认 http://localhost:8080）；请确认后端进程已启动。",
+    action: `未能连接到 Go 网关（${GO_BACKEND_URL}）；请确认后端进程已启动。`,
   },
   "invalid-symbol": {
     headline: "上游无此标的的行情",
