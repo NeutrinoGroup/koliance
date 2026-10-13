@@ -383,8 +383,39 @@ export async function errorDetail(res: Response): Promise<string> {
   return env.error || `HTTP ${res.status}`;
 }
 
-function classifyStatus(status: number, detail: string): { reason: MarketFetchReason; detail: string } {
-  if (status === 503) return { reason: "not-configured", detail };
+export function classifyStatus(
+  status: number,
+  detail: string,
+  envelope?: ApiErrorEnvelope | { code?: string }
+): { reason: MarketFetchReason; detail: string } {
+  const code = envelope?.code;
+
+  if (code) {
+    if (code === "SERVICE_NOT_CONFIGURED") {
+      return { reason: "not-configured", detail };
+    }
+    if (
+      code === "DATABASE_UNAVAILABLE" ||
+      code === "UPSTREAM_UNAVAILABLE" ||
+      code === "INTERNAL_ERROR" ||
+      code === "RATE_LIMITED"
+    ) {
+      return { reason: "upstream-error", detail };
+    }
+    if (code === "RESOURCE_NOT_FOUND") {
+      return { reason: "invalid-symbol", detail };
+    }
+    if (status === 503) {
+      return { reason: "upstream-error", detail };
+    }
+  }
+
+  if (status === 503) {
+    if (detail && detail.toLowerCase().includes("database")) {
+      return { reason: "upstream-error", detail };
+    }
+    return { reason: "not-configured", detail };
+  }
   if (status === 404) return { reason: "invalid-symbol", detail };
   return { reason: "upstream-error", detail };
 }
@@ -408,11 +439,12 @@ async function marketGet<T>(path: string): Promise<MarketFetch<T>> {
 
   if (!res.ok) {
     const env = await parseApiError(res);
-    const classified = classifyStatus(res.status, env.error || `HTTP ${res.status}`);
+    const detail = env.error || `HTTP ${res.status}`;
+    const classified = classifyStatus(res.status, detail, env);
     return {
       ok: false,
       reason: classified.reason,
-      detail: env.error || classified.detail,
+      detail: classified.detail,
       code: env.code,
       requestId: env.requestId,
     };

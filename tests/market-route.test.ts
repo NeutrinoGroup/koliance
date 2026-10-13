@@ -154,7 +154,7 @@ describe("market route — relays real data or refuses, never generates", () => 
       const res = await GET(req("NVDA"));
       const body = await res.json();
 
-      expect(res.status).toBe(503);
+      expect(res.status).toBe(502);
       expect(body.reason).toBe("upstream-error");
       expect(body.error).toContain("alpaca bars");
     });

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildSymbolPayload, type SymbolPayload } from "@/lib/marketFeed";
-import { GO_BACKEND_URL } from "@/lib/api";
+import { GO_BACKEND_URL, classifyStatus } from "@/lib/api";
 
 /**
  * GET /api/market?symbol=…&range=…&interval=…
@@ -118,12 +118,10 @@ export async function GET(request: NextRequest) {
       if (headerReqId) requestId = headerReqId;
     }
 
-    // The gateway's own status decides the reason, and every branch is a
-    // refusal. 503 is the no-credentials case the old code used to answer with
-    // a generated series.
-    const reason: RouteReason =
-      upstream.status === 503 ? "not-configured" : upstream.status === 404 ? "invalid-symbol" : "upstream-error";
-    const status = upstream.status === 404 ? 404 : 503;
+    // Prioritize upstream ADR-006 error code and preserve upstream status.
+    // If code === "DATABASE_UNAVAILABLE", reason becomes "upstream-error" rather than guessing "not-configured".
+    const { reason } = classifyStatus(upstream.status, detail, { code, error: detail, requestId });
+    const status = upstream.status;
     return refuse(status, reason, detail, { symbol, code, requestId });
   }
 

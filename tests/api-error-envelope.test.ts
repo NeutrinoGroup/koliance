@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import {
   parseApiError,
+  classifyStatus,
   executeMarketTrade,
   closeMarketPosition,
   createStripeCheckout,
@@ -324,6 +325,47 @@ describe("ADR-006 Frontend Error Envelope Handling", () => {
     });
   });
 
+  describe("classifyStatus", () => {
+    it("prioritizes DATABASE_UNAVAILABLE over 503 and returns upstream-error instead of not-configured", () => {
+      const result = classifyStatus(503, "database is unavailable; this endpoint requires a durable store", {
+        code: "DATABASE_UNAVAILABLE",
+      });
+      expect(result.reason).toBe("upstream-error");
+      expect(result.detail).toBe("database is unavailable; this endpoint requires a durable store");
+    });
+
+    it("maps SERVICE_NOT_CONFIGURED on 503 to not-configured", () => {
+      const result = classifyStatus(503, "service credentials are not configured on this deployment", {
+        code: "SERVICE_NOT_CONFIGURED",
+      });
+      expect(result.reason).toBe("not-configured");
+    });
+
+    it("maps UPSTREAM_UNAVAILABLE on 502 to upstream-error", () => {
+      const result = classifyStatus(502, "upstream market data provider failed to respond", {
+        code: "UPSTREAM_UNAVAILABLE",
+      });
+      expect(result.reason).toBe("upstream-error");
+    });
+
+    it("maps RESOURCE_NOT_FOUND on 404 to invalid-symbol", () => {
+      const result = classifyStatus(404, "requested resource or market symbol not found", {
+        code: "RESOURCE_NOT_FOUND",
+      });
+      expect(result.reason).toBe("invalid-symbol");
+    });
+
+    it("falls back to upstream-error when status is 503 and detail mentions database without envelope code", () => {
+      const result = classifyStatus(503, "database connection error: connection refused");
+      expect(result.reason).toBe("upstream-error");
+    });
+
+    it("falls back to not-configured when status is 503 without code or database detail", () => {
+      const result = classifyStatus(503, "missing credentials");
+      expect(result.reason).toBe("not-configured");
+    });
+  });
+
   describe("fetchMarketOverviewChecked", () => {
     it("populates code and requestId on non-2xx failure", async () => {
       vi.stubGlobal(
@@ -350,6 +392,34 @@ describe("ADR-006 Frontend Error Envelope Handling", () => {
         expect(res.code).toBe("SERVICE_NOT_CONFIGURED");
         expect(res.requestId).toBe("req_overview_503");
         expect(res.detail).toBe("service credentials are not configured on this deployment");
+      }
+    });
+
+    it("does not guess not-configured on 503 when code is DATABASE_UNAVAILABLE", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "DATABASE_UNAVAILABLE",
+              error: "database is unavailable; this endpoint requires a durable store",
+              requestId: "req_overview_db_down",
+            }),
+            {
+              status: 503,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
+        )
+      );
+
+      const res = await fetchMarketOverviewChecked();
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.reason).toBe("upstream-error");
+        expect(res.code).toBe("DATABASE_UNAVAILABLE");
+        expect(res.requestId).toBe("req_overview_db_down");
+        expect(res.detail).toBe("database is unavailable; this endpoint requires a durable store");
       }
     });
   });
@@ -382,6 +452,119 @@ describe("ADR-006 Frontend Error Envelope Handling", () => {
       expect(json.code).toBe("SERVICE_NOT_CONFIGURED");
       expect(json.requestId).toBe("req_bff_relay_503");
       expect(json.error).toBe("service credentials are not configured on this deployment");
+    });
+
+    it("classifies DATABASE_UNAVAILABLE as upstream-error and preserves status 503", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "DATABASE_UNAVAILABLE",
+              error: "database is unavailable; this endpoint requires a durable store",
+              requestId: "req_bff_db_503",
+            }),
+            {
+              status: 503,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
+        )
+      );
+
+      const req = new NextRequest("http://localhost/api/market?symbol=NVDA");
+      const res = await marketRouteHandler(req);
+      const json = await res.json();
+
+      expect(res.status).toBe(503);
+      expect(json.reason).toBe("upstream-error");
+      expect(json.code).toBe("DATABASE_UNAVAILABLE");
+      expect(json.requestId).toBe("req_bff_db_503");
+      expect(json.error).toBe("database is unavailable; this endpoint requires a durable store");
+    });
+
+    it("preserves upstream status 500 rather than forcing to 503", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "INTERNAL_ERROR",
+              error: "internal service error; please reference requestId for support",
+              requestId: "req_bff_500",
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
+        )
+      );
+
+      const req = new NextRequest("http://localhost/api/market?symbol=NVDA");
+      const res = await marketRouteHandler(req);
+      const json = await res.json();
+
+      expect(res.status).toBe(500);
+      expect(json.reason).toBe("upstream-error");
+      expect(json.code).toBe("INTERNAL_ERROR");
+      expect(json.requestId).toBe("req_bff_500");
+    });
+
+    it("preserves upstream status 502 rather than forcing to 503", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "UPSTREAM_UNAVAILABLE",
+              error: "upstream market data provider failed to respond",
+              requestId: "req_bff_502",
+            }),
+            {
+              status: 502,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
+        )
+      );
+
+      const req = new NextRequest("http://localhost/api/market?symbol=NVDA");
+      const res = await marketRouteHandler(req);
+      const json = await res.json();
+
+      expect(res.status).toBe(502);
+      expect(json.reason).toBe("upstream-error");
+      expect(json.code).toBe("UPSTREAM_UNAVAILABLE");
+      expect(json.requestId).toBe("req_bff_502");
+    });
+
+    it("preserves upstream status 429 rather than forcing to 503", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue(
+          new Response(
+            JSON.stringify({
+              code: "RATE_LIMITED",
+              error: "request rate limit exceeded; please retry later",
+              requestId: "req_bff_429",
+            }),
+            {
+              status: 429,
+              headers: { "Content-Type": "application/json" },
+            }
+          )
+        )
+      );
+
+      const req = new NextRequest("http://localhost/api/market?symbol=NVDA");
+      const res = await marketRouteHandler(req);
+      const json = await res.json();
+
+      expect(res.status).toBe(429);
+      expect(json.reason).toBe("upstream-error");
+      expect(json.code).toBe("RATE_LIMITED");
+      expect(json.requestId).toBe("req_bff_429");
     });
   });
 });
