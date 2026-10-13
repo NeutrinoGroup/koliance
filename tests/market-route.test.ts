@@ -135,6 +135,36 @@ describe("market route — relays real data or refuses, never generates", () => 
       expect(body.reason).toBe("gateway-unconfigured");
       expect(body.error).toContain("Market gateway is not configured");
     });
+
+    it("intercepts upfront and returns 503 gateway-unconfigured even if upstream mock returns 200", async () => {
+      vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://localhost:8080");
+      const fetchSpy = vi.fn(() => Promise.resolve(jsonResponse(200, backendRow())));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const res = await GET(req("NVDA"));
+      const body = await res.json();
+
+      expect(res.status).toBe(503);
+      expect(body.reason).toBe("gateway-unconfigured");
+      expect(body.error).toContain("Market gateway is not configured");
+      expect(body.synthetic).toBe(false);
+      // Upstream fetch was intercepted upfront and never invoked
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("intercepts upfront and returns 503 when pointing to loopback 127.0.0.2 even if upstream mock returns 200", async () => {
+      vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://127.0.0.2:8080");
+      const fetchSpy = vi.fn(() => Promise.resolve(jsonResponse(200, backendRow())));
+      vi.stubGlobal("fetch", fetchSpy);
+
+      const res = await GET(req("NVDA"));
+      const body = await res.json();
+
+      expect(res.status).toBe(503);
+      expect(body.reason).toBe("gateway-unconfigured");
+      expect(body.error).toContain("Market gateway is not configured");
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe("when the gateway has no credentials (503)", () => {

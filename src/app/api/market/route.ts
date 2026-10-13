@@ -80,7 +80,17 @@ export async function GET(request: NextRequest) {
   const range = ALLOWED_RANGES.has(rawRange) ? rawRange : "1mo";
   const interval = ALLOWED_INTERVALS.has(rawInterval) ? rawInterval : "1d";
 
-  // Rule 3: ask the gateway. It serves real Alpaca data or refuses; there is no
+  // Gatekeeping Rule 3: gateway configuration check before outbound fetch.
+  if (!isGoBackendConfigured()) {
+    return refuse(
+      503,
+      "gateway-unconfigured",
+      `Market gateway is not configured for this environment: ${GO_BACKEND_URL}. No synthetic series is generated in its place.`,
+      { symbol }
+    );
+  }
+
+  // Rule 4: ask the gateway. It serves real Alpaca data or refuses; there is no
   // third answer, and none is manufactured here.
   let upstream: Response;
   try {
@@ -93,8 +103,7 @@ export async function GET(request: NextRequest) {
       return refuse(
         503,
         "gateway-unconfigured",
-        `Market gateway is not configured for this environment: ${GO_BACKEND_URL}. ` +
-          "No synthetic series is generated in its place.",
+        `Market gateway is not configured for this environment: ${GO_BACKEND_URL}. No synthetic series is generated in its place.`,
         { symbol }
       );
     }

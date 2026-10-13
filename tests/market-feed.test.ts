@@ -275,28 +275,56 @@ describe("gateway configuration and catch classification", () => {
     vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://localhost:8080");
     expect(isGoBackendConfigured()).toBe(false);
 
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://127.0.0.1:8080");
+    expect(isGoBackendConfigured()).toBe(false);
+
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://127.0.0.2:8080");
+    expect(isGoBackendConfigured()).toBe(false);
+
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://0.0.0.0:8080");
+    expect(isGoBackendConfigured()).toBe(false);
+
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://[::1]:8080");
+    expect(isGoBackendConfigured()).toBe(false);
+
     vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "https://api.koliance.xyz");
     expect(isGoBackendConfigured()).toBe(true);
   });
 
-  it("marketGet catch distinguishes unreachable vs gateway-unconfigured", async () => {
+  it("marketGet distinguishes unreachable vs gateway-unconfigured unconditionally", async () => {
     vi.stubGlobal("fetch", () => Promise.reject(new Error("ECONNREFUSED")));
 
     // 1. In local environment, connection failure -> unreachable
     const localRes = await fetchMarketPrices("NVDA");
     expect(localRes.ok).toBe(false);
-    if (!localRes.ok) {
-      expect(localRes.reason).toBe("unreachable");
-    }
+    expect((localRes as { reason?: unknown }).reason).toBe("unreachable");
 
-    // 2. In production without remote URL, connection failure -> gateway-unconfigured
+    // 2. In production without remote URL, pre-fetch/catch -> gateway-unconfigured
     vi.stubEnv("NODE_ENV", "production");
     vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "");
     const prodRes = await fetchMarketPrices("NVDA");
     expect(prodRes.ok).toBe(false);
-    if (!prodRes.ok) {
-      expect(prodRes.reason).toBe("gateway-unconfigured");
-    }
+    expect((prodRes as { reason?: unknown }).reason).toBe("gateway-unconfigured");
+
+    // 3. In production with loopback address like 127.0.0.2 -> gateway-unconfigured
+    vi.stubEnv("NEXT_PUBLIC_GO_BACKEND_URL", "http://127.0.0.2:8080");
+    const loopbackRes = await fetchMarketPrices("NVDA");
+    expect(loopbackRes.ok).toBe(false);
+    expect((loopbackRes as { reason?: unknown }).reason).toBe("gateway-unconfigured");
+
+    // 4. In production with unconfigured gateway, even if fetch resolves 200, pre-fetch gate blocks it
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve([row()]),
+      } as unknown as Response)
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+    const mock200Res = await fetchMarketPrices("NVDA");
+    expect(mock200Res.ok).toBe(false);
+    expect((mock200Res as { reason?: unknown }).reason).toBe("gateway-unconfigured");
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });
 

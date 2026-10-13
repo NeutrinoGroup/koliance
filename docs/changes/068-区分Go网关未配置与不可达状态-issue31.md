@@ -86,38 +86,89 @@ Exit code: 0 (clean, no errors)
 ```
 $ npm test
 
- ✓ tests/google-callback.test.ts (14 tests) 38ms
- ✓ tests/market-feed.test.ts (34 tests) 92ms
- ✓ tests/steam-auth.test.ts (5 tests) 44ms
- ✓ tests/market-route.test.ts (21 tests) 106ms
- ✓ tests/auth-state.test.ts (47 tests) 201ms
- ✓ tests/google-auth.test.ts (20 tests) 96ms
- ✓ tests/github-auth.test.ts (5 tests) 64ms
- ✓ tests/user-profile-security.test.ts (10 tests) 84ms
- ✓ tests/performance-benchmark.test.ts (2 tests) 481ms
- ✓ tests/market-movers.test.ts (12 tests) 32ms
- ✓ tests/wallet-login.test.ts (16 tests) 29ms
- ✓ tests/market-no-synthetic.test.ts (13 tests) 567ms
- ✓ tests/liquidation-funding-parity.test.ts (5 tests) 22ms
- ✓ tests/perp.test.ts (19 tests) 29ms
- ✓ tests/liquidation-parity.test.ts (4 tests) 35ms
- ✓ tests/market-independence.test.ts (29 tests) 595ms
- ✓ tests/navbar-responsive.test.ts (5 tests) 13ms
- ✓ tests/oauth-state.test.ts (6 tests) 23ms
- ✓ tests/schema-indexes.test.ts (2 tests) 7ms
- ✓ tests/api-key-db.test.ts (4 tests) 2776ms
- ✓ tests/quantum-bootloader.test.ts (1 test) 36ms
- ✓ tests/auth-providers.test.ts (3 tests) 49ms
- ✓ tests/contact-modal.test.ts (5 tests) 58ms
- ✓ tests/console-api-keys-route.test.ts (4 tests) 6859ms
+ ✓ tests/auth-state.test.ts (47 tests) 205ms
+ ✓ tests/google-callback.test.ts (14 tests) 32ms
+ ✓ tests/steam-auth.test.ts (5 tests) 48ms
+ ✓ tests/market-feed.test.ts (34 tests) 112ms
+ ✓ tests/market-route.test.ts (23 tests) 131ms
+ ✓ tests/google-auth.test.ts (20 tests) 92ms
+ ✓ tests/github-auth.test.ts (5 tests) 92ms
+ ✓ tests/user-profile-security.test.ts (10 tests) 86ms
+ ✓ tests/performance-benchmark.test.ts (2 tests) 538ms
+ ✓ tests/market-movers.test.ts (12 tests) 29ms
+ ✓ tests/perp.test.ts (19 tests) 28ms
+ ✓ tests/oauth-state.test.ts (6 tests) 27ms
+ ✓ tests/market-independence.test.ts (29 tests) 469ms
+ ✓ tests/liquidation-parity.test.ts (4 tests) 23ms
+ ✓ tests/wallet-login.test.ts (16 tests) 30ms
+ ✓ tests/market-no-synthetic.test.ts (13 tests) 573ms
+ ✓ tests/navbar-responsive.test.ts (5 tests) 14ms
+ ✓ tests/liquidation-funding-parity.test.ts (5 tests) 20ms
+ ✓ tests/schema-indexes.test.ts (2 tests) 6ms
+ ✓ tests/quantum-bootloader.test.ts (1 test) 29ms
+ ✓ tests/api-key-db.test.ts (4 tests) 5247ms
+ ✓ tests/auth-providers.test.ts (3 tests) 39ms
+ ✓ tests/contact-modal.test.ts (5 tests) 53ms
+ ✓ tests/console-api-keys-route.test.ts (4 tests) 8144ms
 
  Test Files  24 passed (24)
-      Tests  286 passed (286)
-   Start at  23:47:56
-   Duration  9.04s (transform 5.48s, setup 0ms, import 28.49s, tests 12.34s, environment 6ms)
+      Tests  288 passed (288)
+   Start at  00:04:43
+   Duration  10.30s (transform 5.16s, setup 0ms, import 26.63s, tests 16.07s, environment 6ms)
 ```
 
 - 24 个测试文件全部通过（24/24 passed）
-- 286 个测试用例全部通过（286/286 passed，新增 9 个用例）
+- 288 个测试用例全部通过（288/288 passed，新增 11 个用例）
 - 5 状态错误分类、动态网关 URL、本地/生产环境配置判断及代理路由/终端组件分流全部覆盖通过。
+
+---
+
+## 5. Falsifier 审查意见与加固记录
+
+根据 Falsifier 独立证伪审查（针对判据脆弱性与前置门禁缺失的攻击向量），完成以下针对性加固：
+
+### 5.1 代理路由增加前置门禁 (`src/app/api/market/route.ts`)
+- **脆弱点**：原逻辑仅在 `fetch` 抛出网络异常时的 `catch` 块中检测 `!isGoBackendConfigured()`。若生产环境网关未配，但网络环境中有代理或 mock 误返回 200，则会绕过未配置拒绝。
+- **加固**：在发起 `fetch` 之前，增加前置门禁断言：
+  ```ts
+  if (!isGoBackendConfigured()) {
+    return refuse(503, "gateway-unconfigured", `Market gateway is not configured for this environment: ${GO_BACKEND_URL}. No synthetic series is generated in its place.`, { symbol });
+  }
+  ```
+- **AST 完整性**：503 位于 `tests/market-independence.test.ts` 的 AST 白名单（`0, 200, 400, 404, 502, 503`）内，零 AST 破损。
+
+### 5.2 客户端适配层加固与环回正则拦截 (`src/lib/api.ts`)
+- **`marketGet` 前置拦截**：在向后端发起网络请求前，直接检查 `if (!isGoBackendConfigured())`，立即短路返回 `{ ok: false, reason: "gateway-unconfigured", ... }`，阻止外发调用。
+- **环回正则与 URL 解析**：将 `isGoBackendConfigured()` 中原有的简单字面量判断升级为：
+  ```ts
+  const trimmed = envUrl.trim();
+  if (/^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|::1|\[::1\])/i.test(trimmed)) {
+    return false;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host === "0.0.0.0" ||
+      host === "::1" ||
+      host === "[::1]" ||
+      /^127\.\d+\.\d+\.\d+$/.test(host)
+    ) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  ```
+  彻底封死 `127.0.0.2`、`[::1]` 等环回变体绕过。
+
+### 5.3 路由攻击测试用例 (`tests/market-route.test.ts`)
+- 新增攻击用例：在生产环境未配置网关（或指向 `127.0.0.2`）时，即使模拟 upstream 返回 200，route 依然在发起 `fetch` 前被前置门禁拦截并返回 503 `gateway-unconfigured`，且断言外发 `fetch` spy 从未被调用。
+
+### 5.4 测试判据去条件化与环回全覆盖 (`tests/market-feed.test.ts`)
+- 移除了所有 `if (!localRes.ok)` 等脆弱的条件式包裹断言，改为无条件断言 `expect((localRes as { reason?: unknown }).reason).toBe(...)`，防止因 `ok` 为真时断言被静默跳过。
+- 补全 `127.0.0.1`、`127.0.0.2`、`0.0.0.0`、`[::1]` 等全套生产环回拦截断言。
+- 增加 `marketGet` 在生产未配网关时即使 `fetch` 成功也短路拦截的断言。
+
 

@@ -21,9 +21,10 @@ export function isLocalEnvironment(): boolean {
     const hostname = window.location.hostname;
     return (
       hostname === "localhost" ||
-      hostname === "127.0.0.1" ||
       hostname === "0.0.0.0" ||
       hostname === "::1" ||
+      hostname === "[::1]" ||
+      /^127\.\d+\.\d+\.\d+$/.test(hostname) ||
       hostname.endsWith(".local")
     );
   }
@@ -43,13 +44,23 @@ export function isGoBackendConfigured(): boolean {
     if (!envUrl || envUrl.trim() === "") {
       return false;
     }
-    const lower = envUrl.trim().toLowerCase();
-    if (
-      lower.includes("localhost") ||
-      lower.includes("127.0.0.1") ||
-      lower.includes("0.0.0.0") ||
-      lower.includes("::1")
-    ) {
+    const trimmed = envUrl.trim();
+    if (/^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|0\.0\.0\.0|::1|\[::1\])/i.test(trimmed)) {
+      return false;
+    }
+    try {
+      const parsed = new URL(trimmed);
+      const host = parsed.hostname.toLowerCase();
+      if (
+        host === "localhost" ||
+        host === "0.0.0.0" ||
+        host === "::1" ||
+        host === "[::1]" ||
+        /^127\.\d+\.\d+\.\d+$/.test(host)
+      ) {
+        return false;
+      }
+    } catch {
       return false;
     }
     return true;
@@ -374,6 +385,14 @@ function classifyStatus(status: number, detail: string): { reason: MarketFetchRe
  * words.
  */
 async function marketGet<T>(path: string): Promise<MarketFetch<T>> {
+  if (!isGoBackendConfigured()) {
+    return {
+      ok: false,
+      reason: "gateway-unconfigured",
+      detail: `Go backend gateway is not configured for this environment: ${GO_BACKEND_URL}`,
+    };
+  }
+
   let res: Response;
   try {
     res = await fetch(`${GO_BACKEND_URL}${path}`, { cache: "no-store" });
