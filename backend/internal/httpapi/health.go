@@ -3,9 +3,11 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +62,16 @@ type ProbeResult struct {
 	AgeMS  int64 `json:"ageMs,omitempty"`
 }
 
+var reURLWithQuery = regexp.MustCompile(`(https?://[^\s?"'<>]*)(\?[^\s"'<>]*)`)
+
+func sanitizeProbeError(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := reURLWithQuery.ReplaceAllString(err.Error(), "${1}")
+	return sanitizeLogValue(s)
+}
+
 // runProbe executes fn under its own timeout and converts panic/error into a
 // false verdict with the reason attached.
 //
@@ -82,13 +94,14 @@ func runProbe(ctx context.Context, fn func(context.Context) (string, error)) Pro
 		detail string
 		err    error
 	}
+
 	ch := make(chan outcome, 1)
 
 	go func() {
 		var out outcome
 		defer func() {
 			if r := recover(); r != nil {
-				out = outcome{err: fmt.Errorf("probe panicked: %v", r)}
+				out = outcome{err: errors.New("probe panicked")}
 			}
 			ch <- out
 		}()
@@ -99,7 +112,7 @@ func runProbe(ctx context.Context, fn func(context.Context) (string, error)) Pro
 	select {
 	case out := <-ch:
 		if out.err != nil {
-			result.Error = out.err.Error()
+			result.Error = sanitizeProbeError(out.err)
 		} else {
 			result.OK = true
 			result.Detail = out.detail

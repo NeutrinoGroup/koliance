@@ -975,6 +975,36 @@ func TestSanitizeLogValue(t *testing.T) {
 			absent:     []string{"hunter2"},
 		},
 		{
+			name:       "DSN enclosed in backticks",
+			in:         "`postgres://koliance:hunter2@db.internal.example:5432/koliance`",
+			wantMarker: markDSN,
+			absent:     []string{"hunter2", "db.internal.example"},
+		},
+		{
+			name:       "DSN enclosed in double quotes",
+			in:         `"postgres://koliance:hunter2@db.internal.example:5432/koliance"`,
+			wantMarker: markDSN,
+			absent:     []string{"hunter2", "db.internal.example"},
+		},
+		{
+			name:       "DSN enclosed in parentheses",
+			in:         "(postgres://koliance:hunter2@db.internal.example:5432/koliance)",
+			wantMarker: markDSN,
+			absent:     []string{"hunter2", "db.internal.example"},
+		},
+		{
+			name:       "truncated alpaca API error body (SEC-P0-3)",
+			in:         `alpaca API error [422]: {"message":"invalid symbol","code":401100`,
+			wantMarker: markUpstream,
+			absent:     []string{"invalid symbol"},
+		},
+		{
+			name:       "truncated alpaca bars status body (SEC-P0-3)",
+			in:         `alpaca bars status 500: {"error":"internal failure`,
+			wantMarker: markUpstream,
+			absent:     []string{"internal failure"},
+		},
+		{
 			name:       "go stack frame",
 			in:         "goroutine 1 [running]:",
 			wantMarker: markStack,
@@ -1176,8 +1206,8 @@ func TestSanitizeLogValueKnownResiduals(t *testing.T) {
 		why     string
 	}{
 		{
-			name:    "truncated third-party body",
-			in:      `alpaca API error [422]: {"message":"invalid symbol","code":401100`,
+			name:    "truncated third-party body (generic non-alpaca)",
+			in:      `upstream API error [422]: {"message":"invalid symbol","code":401100`,
 			present: "invalid symbol",
 			why:     "no closing brace survives truncation, so no shape identifies the body",
 		},
@@ -1240,3 +1270,32 @@ func TestErrorChainTextExpandsAndBounds(t *testing.T) {
 		t.Errorf("rendered %d links, want the maxDepth of 32", n)
 	}
 }
+
+// TestRecordErrorSlotMutationSurvivesAcrossLayers verifies that recordError correctly
+// mutates the errSlot pointer in the request context and survives handler stack execution.
+func TestRecordErrorSlotMutationSurvivesAcrossLayers(t *testing.T) {
+	buf, logger := logSink()
+
+	raw := errors.New("upstream failed: SQLSTATE 23505 duplicate key")
+	h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordError(r, raw)
+		writeError(w, r, http.StatusBadGateway, CodeUpstreamUnavailable, raw)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/market/prices", nil)
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	line := logLine(t, buf)
+	gotErr := strField(t, line, "err")
+	if gotErr == "" {
+		t.Fatal("expected err to be logged via errSlot, got empty string")
+	}
+	if strings.Contains(gotErr, "23505") {
+		t.Errorf("logged err contains SQLSTATE: %q", gotErr)
+	}
+	if !strings.Contains(gotErr, markSQL) {
+		t.Errorf("logged err missing markSQL: %q", gotErr)
+	}
+}
+

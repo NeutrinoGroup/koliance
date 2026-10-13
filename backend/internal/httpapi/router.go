@@ -150,8 +150,8 @@ func NewRouter(d Deps) http.Handler {
 	marketData := func(fn http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if !cfg.AlpacaConfigured() {
-				jsonError(w, http.StatusServiceUnavailable,
-					"market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured (no synthetic data is served)")
+				writeError(w, r, http.StatusServiceUnavailable, CodeServiceNotConfigured,
+					errors.New("market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured (no synthetic data is served)"))
 				return
 			}
 			fn(w, r)
