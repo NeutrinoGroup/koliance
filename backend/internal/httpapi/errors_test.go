@@ -13,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/koliance/backend/internal/agentapi"
 	"github.com/koliance/backend/internal/verifier"
 )
 
@@ -246,31 +247,41 @@ func TestEveryErrorCodeIsReachable(t *testing.T) {
 			},
 		},
 		{
-			name:       "QUOTA_EXHAUSTED (403 via writeError on quota refusal)",
+			name:       "QUOTA_EXHAUSTED (403 via agent bind route with zero-quota key)",
 			code:       CodeQuotaExhausted,
 			wantStatus: http.StatusForbidden,
 			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
-				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					writeError(w, r, http.StatusForbidden, CodeQuotaExhausted, errors.New("developer quota exhausted"))
-				}))
-				rec := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/bind", nil)
-				handler.ServeHTTP(rec, req)
-				return rec
+				agentSvc := agentapi.NewService(nil)
+				key, err := agentSvc.GenerateAPIKey("0x1111111111111111111111111111111111111111", "STARTER_FREE", "quota-test")
+				if err != nil {
+					t.Fatalf("GenerateAPIKey: %v", err)
+				}
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+					d.AgentAPI = agentSvc
+				})
+				return do(h, http.MethodPost, "/api/v1/agent/bind",
+					`{"walletAddress":"0x1111111111111111111111111111111111111111","agentId":"agent-1","name":"Agent One"}`,
+					map[string]string{"Authorization": "Bearer " + key.RawKey})
 			},
 		},
 		{
-			name:       "RESOURCE_NOT_FOUND (404 via writeError on absent entity)",
+			name:       "RESOURCE_NOT_FOUND (404 via market prices route with invalid symbol)",
 			code:       CodeResourceNotFound,
 			wantStatus: http.StatusNotFound,
 			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
-				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					writeError(w, r, http.StatusNotFound, CodeResourceNotFound, errors.New("resource not found"))
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"bars":{}}`))
 				}))
-				rec := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodGet, "/api/v1/resources/404", nil)
-				handler.ServeHTTP(rec, req)
-				return rec
+				t.Cleanup(srv.Close)
+
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+					d.Cfg.AlpacaDataURL = srv.URL
+				})
+				return do(h, http.MethodGet, "/api/v1/market/prices?symbol=INVALID_SYMBOL_XYZ", "", nil)
 			},
 		},
 		{
@@ -283,31 +294,38 @@ func TestEveryErrorCodeIsReachable(t *testing.T) {
 			},
 		},
 		{
-			name:       "RATE_LIMITED (429 via writeError on rate limit exceeded)",
+			name:       "RATE_LIMITED (429 via agent bind route with exhausted rate limit)",
 			code:       CodeRateLimited,
 			wantStatus: http.StatusTooManyRequests,
 			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
-				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					writeError(w, r, http.StatusTooManyRequests, CodeRateLimited, errors.New("rate limited: 100 rpm exceeded"))
-				}))
-				rec := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodPost, "/api/v1/agent/pay", nil)
-				handler.ServeHTTP(rec, req)
-				return rec
+				agentSvc := agentapi.NewService(nil)
+				key, err := agentSvc.GenerateAPIKey("0x1111111111111111111111111111111111111111", "STARTER_FREE", "ratelimit-test")
+				if err != nil {
+					t.Fatalf("GenerateAPIKey: %v", err)
+				}
+				for i := 0; i < 100; i++ {
+					if _, err := agentSvc.ValidateAndDeductKey(key.RawKey, 1); errors.Is(err, agentapi.ErrRateLimited) {
+						break
+					}
+				}
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+					d.AgentAPI = agentSvc
+				})
+				return do(h, http.MethodPost, "/api/v1/agent/bind",
+					`{"walletAddress":"0x1111111111111111111111111111111111111111","agentId":"agent-1","name":"Agent One"}`,
+					map[string]string{"Authorization": "Bearer " + key.RawKey})
 			},
 		},
 		{
-			name:       "INTERNAL_ERROR (500 via writeError on internal failure)",
+			name:       "INTERNAL_ERROR (500 via market overview route when upstream account fails)",
 			code:       CodeInternalError,
 			wantStatus: http.StatusInternalServerError,
 			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
-				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					writeError(w, r, http.StatusInternalServerError, CodeInternalError, errors.New("internal server failure"))
-				}))
-				rec := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodGet, "/api/v1/internal", nil)
-				handler.ServeHTTP(rec, req)
-				return rec
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+				})
+				return do(h, http.MethodGet, "/api/v1/market/overview", "", nil)
 			},
 		},
 		{
@@ -324,17 +342,14 @@ func TestEveryErrorCodeIsReachable(t *testing.T) {
 			},
 		},
 		{
-			name:       "UPSTREAM_UNAVAILABLE (502 via writeError on upstream provider timeout)",
+			name:       "UPSTREAM_UNAVAILABLE (502 via market movers route when upstream fails)",
 			code:       CodeUpstreamUnavailable,
 			wantStatus: http.StatusBadGateway,
 			exec: func(t *testing.T, logger *slog.Logger) *httptest.ResponseRecorder {
-				handler := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-					writeError(w, r, http.StatusBadGateway, CodeUpstreamUnavailable, errors.New("upstream market connection reset"))
-				}))
-				rec := httptest.NewRecorder()
-				req := httptest.NewRequest(http.MethodGet, "/api/v1/market/prices", nil)
-				handler.ServeHTTP(rec, req)
-				return rec
+				h := newTestRouter(t, func(d *Deps) {
+					d.Logger = logger
+				})
+				return do(h, http.MethodGet, "/api/v1/market/movers", "", nil)
 			},
 		},
 		{
@@ -462,3 +477,55 @@ func TestEveryErrorCodeIsReachable(t *testing.T) {
 		})
 	}
 }
+
+// TestWriteErrorAndJsonEnvelopeErrorFallbackOnIllegalCode verifies that any ErrorCode
+// outside the AllErrorCodes closed set is safely forced to CodeInternalError and logged with a warning.
+func TestWriteErrorAndJsonEnvelopeErrorFallbackOnIllegalCode(t *testing.T) {
+	t.Run("writeError fallback", func(t *testing.T) {
+		buf, logger := logSink()
+		h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, r, http.StatusBadRequest, ErrorCode("UNKNOWN_ILLEGAL_CODE"), errors.New("raw failure"))
+		}))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/test/fallback", nil)
+		h.ServeHTTP(rec, req)
+
+		var obj map[string]interface{}
+		if err := json.Unmarshal(rec.Body.Bytes(), &obj); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if obj["code"] != string(CodeInternalError) {
+			t.Errorf("code = %v, want %s", obj["code"], CodeInternalError)
+		}
+		if obj["error"] != errorCopyFor(CodeInternalError) {
+			t.Errorf("error = %v, want %s", obj["error"], errorCopyFor(CodeInternalError))
+		}
+		_ = logLine(t, buf)
+	})
+
+	t.Run("jsonEnvelopeError fallback", func(t *testing.T) {
+		buf, logger := logSink()
+		h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, ErrorCode("UNKNOWN_ILLEGAL_CODE_2"), errors.New("raw failure"))
+		}))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/test/fallback", nil)
+		h.ServeHTTP(rec, req)
+
+		var obj map[string]interface{}
+		if err := json.Unmarshal(rec.Body.Bytes(), &obj); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if obj["errorCode"] != string(CodeInternalError) {
+			t.Errorf("errorCode = %v, want %s", obj["errorCode"], CodeInternalError)
+		}
+		if obj["error"] != errorCopyFor(CodeInternalError) {
+			t.Errorf("error = %v, want %s", obj["error"], errorCopyFor(CodeInternalError))
+		}
+		if obj["response"] != errorCopyFor(CodeInternalError) {
+			t.Errorf("response = %v, want %s", obj["response"], errorCopyFor(CodeInternalError))
+		}
+		_ = logLine(t, buf)
+	})
+}
+

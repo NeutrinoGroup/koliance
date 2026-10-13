@@ -60,9 +60,17 @@ func newTestRouter(t testing.TB, mutate func(*Deps)) http.Handler {
 	if mutate != nil {
 		mutate(d)
 	}
-	alp := market.NewAlpacaClient("http://127.0.0.1:1", "k", "s")
+	dataURL := "http://127.0.0.1:1"
+	if cfg.AlpacaDataURL != "" {
+		dataURL = cfg.AlpacaDataURL
+	}
+	alpURL := "http://127.0.0.1:1"
+	if cfg.AlpacaBaseURL != "" {
+		alpURL = cfg.AlpacaBaseURL
+	}
+	alp := market.NewAlpacaClient(alpURL, "k", "s")
 	oracle := market.NewPriceOracle("k", "s")
-	oracle.SetDataBaseURL("http://127.0.0.1:1")
+	oracle.SetDataBaseURL(dataURL)
 	// cfg.AlpacaConfigured() gates /api/v1/market/*, and the existing tests below
 	// exercise trade *validation*, which must still reach the handler and answer
 	// 400. Credentials that point at a dead host keep both properties: the gate
@@ -73,10 +81,18 @@ func newTestRouter(t testing.TB, mutate func(*Deps)) http.Handler {
 	probeCache.Lock()
 	probeCache.entries = map[string]cachedProbe{}
 	probeCache.Unlock()
-	d.Market = market.NewService(alp, oracle, nil)
-	d.PriceOracle = oracle
-	d.Stripe = stripeclient.New("")
-	d.Dev = developer.NewService(developer.NewGitHubClient(""))
+	if d.PriceOracle == nil {
+		d.PriceOracle = oracle
+	}
+	if d.Market == nil {
+		d.Market = market.NewService(alp, d.PriceOracle, nil)
+	}
+	if d.Stripe == nil {
+		d.Stripe = stripeclient.New("")
+	}
+	if d.Dev == nil {
+		d.Dev = developer.NewService(developer.NewGitHubClient(""))
+	}
 	return NewRouter(*d)
 }
 

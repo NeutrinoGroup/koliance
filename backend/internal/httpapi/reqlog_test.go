@@ -358,7 +358,10 @@ func mutatedLoggingMiddleware(logger *slog.Logger, next http.Handler) http.Handl
 		}
 		w.Header().Set(requestIDHeader, id)
 
-		r = r.WithContext(context.WithValue(r.Context(), ctxKeyRequestID{}, id))
+		slot := &errSlot{}
+		ctx := context.WithValue(r.Context(), ctxKeyErrSlot{}, slot)
+		ctx = context.WithValue(ctx, ctxKeyRequestID{}, id)
+		r = r.WithContext(ctx)
 
 		sw := &statusWriter{ResponseWriter: w}
 		if n5WriteBody && (n5WriteBodyOn == nil || *n5WriteBodyOn == r.Method) {

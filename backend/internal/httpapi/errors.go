@@ -1,8 +1,11 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
+	"slices"
 )
 
 // ErrorCode defines the 12 closed-set error codes established in ADR-006 §3.6.2.
@@ -64,6 +67,28 @@ func errorCopyFor(code ErrorCode) string {
 	return errorCopy[CodeInternalError]
 }
 
+// sanitizeErrorCode validates that code belongs to the AllErrorCodes closed set.
+// If code is not in the closed set, it logs a warning with requestId and falls back to CodeInternalError.
+func sanitizeErrorCode(r *http.Request, code ErrorCode) ErrorCode {
+	if slices.Contains(AllErrorCodes, code) {
+		return code
+	}
+	var ctx context.Context
+	reqID := ""
+	if r != nil {
+		ctx = r.Context()
+		reqID = requestIDFrom(ctx)
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	slog.WarnContext(ctx, "illegal error code outside closed set; falling back to INTERNAL_ERROR",
+		slog.String("illegalCode", string(code)),
+		slog.String("requestId", reqID),
+	)
+	return CodeInternalError
+}
+
 // errorEnvelope is the standard closed-set error envelope answered to API callers.
 type errorEnvelope struct {
 	Code      string `json:"code"`
@@ -76,6 +101,7 @@ type errorEnvelope struct {
 func writeError(w http.ResponseWriter, r *http.Request, status int, code ErrorCode, rawErr error) {
 	recordError(r, rawErr)
 	reqID := requestIDFrom(r.Context())
+	code = sanitizeErrorCode(r, code)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(errorEnvelope{
@@ -90,6 +116,7 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code ErrorCo
 func jsonEnvelopeError(w http.ResponseWriter, r *http.Request, httpStatus int, codeInt int, errCode ErrorCode, rawErr error) {
 	recordError(r, rawErr)
 	reqID := requestIDFrom(r.Context())
+	errCode = sanitizeErrorCode(r, errCode)
 	msg := errorCopyFor(errCode)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)
