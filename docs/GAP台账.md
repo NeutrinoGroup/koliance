@@ -1,4 +1,4 @@
-﻿# Koliance 质量缺口台账（GAP）
+# Koliance 质量缺口台账（GAP）
 
 > **用途**：本项目**所有未完成事项的唯一台账**。任何"还没做"的东西都必须出现在这里，
 > 否则它就不存在。协作者据此判断现状，不要依赖口头同步。
@@ -273,6 +273,7 @@
 | **GAP-74** | **报错处理体系未落地**：原始报错仍在流向调用方（`router.go` 里 **36 行**把 `err.Error()` 直接写进响应体：31 处 `jsonError` + 4 处 `jsonEnvelope` + 1 处手写 map），且**无任何 request-id / 结构化请求日志** | 🟠 P1 | 🟠 | 见 §5.12（**设计环已交付**：`docs/adr/ADR-006-统一报错处理体系.md`）。**取号（D4 / `AGENTS.md` §6）**：全 ref 并集最大为 **`GAP-73`**（见下方取号注），`GAP-74` 在全部 **32 个 ref** 上零命中（实测） |
 | **GAP-75** | **`docs/` 里的 20 处「`AGENTS.md` §N」引用在读者检出里解析到另一份同名文件** —— 本仓确有 `AGENTS.md`（**上游的 Koliance 协作指南**），**不是框架的约束规范**，两者章节号与含义完全不同 | 🟡 P2 | 🟠 | 见 §5.12（**ADR-006 轮顺带发现**，`git grep` 实测）。**登记未修**：改法是**框架级口径决策**，不在 `ssot-scribe` 单方作用域 |
 | **GAP-76** | 钱包轨登录**无组件级判据**（`vitest` 是 `node` 环境无 DOM，点击不可测），且 `loginMethods: ["wallet"]` 的**运行时**行为只读到了**类型与 JSDoc**、未经真实 Privy 验证 | 🟡 P2 | 🟠 | 见 §5.13。**与 GAP-73（#37 分支）的教训同族**：登录态这一类缺陷**住在组件里**，而没有 DOM 的套件够不到它。本轮的源文本断言**第一版就是假的**——见 §5.13.2 |
+| **GAP-77** | **Market 模块对 Go 网关失败状态文案混淆**：未区分「网关未配置（环境变量缺失/线上误指 localhost）」与「网关不可达（网络超时/服务未启动）」，且文案硬编码默认 localhost 误导线上运维 | 🟡 P2 | ✅ | 见 §5.14（issue **#31** 修复轮；关闭于 `docs/changes/068`）。`isGoBackendConfigured()` 显式区分环境与配置，`MarketFetchReason` 扩充 `gateway-unconfigured`，文案与代理路由 503 分流，动态插值网关地址 |
 
 > **⚠️ GAP-72 的取号注（2026-10-12，第三次合并 `fix/login-state-sync` ← `upstream/main` `22fa845`）**：
 > **`GAP-72` 不是本分支的号**——它随 `upstream/main`（#36 后端覆盖率门禁，`docs/changes/048`）**带进来**，
@@ -1752,6 +1753,17 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 > `### 5.x` 并集 **`§5.1` … `§5.13` 无重号**（本分支的 `§5.11` 已让位，仓内不再有同号两义）。
 > **本次冲突只在 `docs/GAP台账.md` 三处**（§1 索引行 · §1 状态表尾 · §5 节序），按 **union + 号序**解；
 > `src/components/NavAuthBadges.tsx` 等代码侧**自动合并干净**（`git status` 无 `UU`）。完整取证见 **`docs/changes/054`**。
+>
+> **⚠️ GAP-77 的取号注（2026-10-13，issue #31 修复轮）**：
+> 全 34 个 ref 检索 `GAP-77` 零命中，最大号为 `GAP-76`，故顺延取 **`GAP-77`**，无洞不重号。
+
+### 5.14 Market 模块区分 Go 网关未配置与不可达（2026-10-13，GAP-77）
+
+#### GAP-77 · Go 网关失败状态与文案混淆（🟡 P2，✅ 已关闭）
+
+- **缺陷事实**：Market 模块将 Go 网关连接失败笼统归类为 `unreachable`（“后端不可达”），文案硬编码提示“未能连接到 Go 网关（默认 http://localhost:8080）；请确认后端进程已启动。”
+- **生产误导**：Vercel 生产环境中若未配置 `NEXT_PUBLIC_GO_BACKEND_URL` 或照抄了 `.env.example` 中的 localhost，前端必然报错且向用户/运维误报“请确认后端进程已启动”，造成严重排障混淆。
+- **修复依据**：`docs/changes/068-区分Go网关未配置与不可达状态-issue31.md`。新增 `isGoBackendConfigured()` 与 `isLocalEnvironment()`，`MarketFetchReason` 扩充 `gateway-unconfigured`，文案与代理路由 503 分流并动态插值网关地址。
 
 ---
 

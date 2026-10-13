@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildSymbolPayload, type SymbolPayload } from "@/lib/marketFeed";
-import { GO_BACKEND_URL, classifyStatus } from "@/lib/api";
+import { GO_BACKEND_URL, isGoBackendConfigured, classifyStatus } from "@/lib/api";
 
 /**
  * GET /api/market?symbol=…&range=…&interval=…
@@ -38,7 +38,7 @@ const ALLOWED_INTERVALS = new Set(["5m", "15m", "1d", "1wk"]);
 const SYMBOL_PATTERN = /^[A-Z0-9.\-]{1,10}$/;
 
 /** Same vocabulary the client adapter uses, so both halves read alike. */
-type RouteReason = "not-configured" | "upstream-error" | "unreachable" | "invalid-symbol";
+type RouteReason = "not-configured" | "gateway-unconfigured" | "upstream-error" | "unreachable" | "invalid-symbol";
 
 /**
  * Answers a refusal without a price in it.
@@ -80,7 +80,17 @@ export async function GET(request: NextRequest) {
   const range = ALLOWED_RANGES.has(rawRange) ? rawRange : "1mo";
   const interval = ALLOWED_INTERVALS.has(rawInterval) ? rawInterval : "1d";
 
-  // Rule 3: ask the gateway. It serves real Alpaca data or refuses; there is no
+  // Gatekeeping Rule 3: gateway configuration check before outbound fetch.
+  if (!isGoBackendConfigured()) {
+    return refuse(
+      503,
+      "gateway-unconfigured",
+      `Market gateway is not configured for this environment: ${GO_BACKEND_URL}. No synthetic series is generated in its place.`,
+      { symbol }
+    );
+  }
+
+  // Rule 4: ask the gateway. It serves real Alpaca data or refuses; there is no
   // third answer, and none is manufactured here.
   let upstream: Response;
   try {
@@ -89,6 +99,14 @@ export async function GET(request: NextRequest) {
       { cache: "no-store" }
     );
   } catch (err) {
+    if (!isGoBackendConfigured()) {
+      return refuse(
+        503,
+        "gateway-unconfigured",
+        `Market gateway is not configured for this environment: ${GO_BACKEND_URL}. No synthetic series is generated in its place.`,
+        { symbol }
+      );
+    }
     return refuse(
       502,
       "unreachable",
