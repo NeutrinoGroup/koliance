@@ -68,10 +68,11 @@ func errorCopyFor(code ErrorCode) string {
 }
 
 // sanitizeErrorCode validates that code belongs to the AllErrorCodes closed set.
-// If code is not in the closed set, it logs a warning with requestId and falls back to CodeInternalError.
-func sanitizeErrorCode(r *http.Request, code ErrorCode) ErrorCode {
+// If code is not in the closed set, it logs a warning with requestId, falls back to CodeInternalError,
+// and ensures status is synchronously corrected to http.StatusInternalServerError if not already 5xx.
+func sanitizeErrorCode(r *http.Request, code ErrorCode, status int) (ErrorCode, int) {
 	if slices.Contains(AllErrorCodes, code) {
-		return code
+		return code, status
 	}
 	var ctx context.Context
 	reqID := ""
@@ -86,7 +87,10 @@ func sanitizeErrorCode(r *http.Request, code ErrorCode) ErrorCode {
 		slog.String("illegalCode", string(code)),
 		slog.String("requestId", reqID),
 	)
-	return CodeInternalError
+	if status < 500 || status > 599 {
+		status = http.StatusInternalServerError
+	}
+	return CodeInternalError, status
 }
 
 // errorEnvelope is the standard closed-set error envelope answered to API callers.
@@ -101,7 +105,7 @@ type errorEnvelope struct {
 func writeError(w http.ResponseWriter, r *http.Request, status int, code ErrorCode, rawErr error) {
 	recordError(r, rawErr)
 	reqID := requestIDFrom(r.Context())
-	code = sanitizeErrorCode(r, code)
+	code, status = sanitizeErrorCode(r, code, status)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(errorEnvelope{
@@ -116,7 +120,7 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code ErrorCo
 func jsonEnvelopeError(w http.ResponseWriter, r *http.Request, httpStatus int, codeInt int, errCode ErrorCode, rawErr error) {
 	recordError(r, rawErr)
 	reqID := requestIDFrom(r.Context())
-	errCode = sanitizeErrorCode(r, errCode)
+	errCode, httpStatus = sanitizeErrorCode(r, errCode, httpStatus)
 	msg := errorCopyFor(errCode)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(httpStatus)

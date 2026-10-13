@@ -479,9 +479,10 @@ func TestEveryErrorCodeIsReachable(t *testing.T) {
 }
 
 // TestWriteErrorAndJsonEnvelopeErrorFallbackOnIllegalCode verifies that any ErrorCode
-// outside the AllErrorCodes closed set is safely forced to CodeInternalError and logged with a warning.
+// outside the AllErrorCodes closed set is safely forced to CodeInternalError and logged with a warning,
+// and any non-5xx HTTP status code is synchronously corrected to http.StatusInternalServerError.
 func TestWriteErrorAndJsonEnvelopeErrorFallbackOnIllegalCode(t *testing.T) {
-	t.Run("writeError fallback", func(t *testing.T) {
+	t.Run("writeError fallback corrects 400 to 500", func(t *testing.T) {
 		buf, logger := logSink()
 		h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			writeError(w, r, http.StatusBadRequest, ErrorCode("UNKNOWN_ILLEGAL_CODE"), errors.New("raw failure"))
@@ -489,6 +490,10 @@ func TestWriteErrorAndJsonEnvelopeErrorFallbackOnIllegalCode(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/test/fallback", nil)
 		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
 
 		var obj map[string]interface{}
 		if err := json.Unmarshal(rec.Body.Bytes(), &obj); err != nil {
@@ -503,7 +508,53 @@ func TestWriteErrorAndJsonEnvelopeErrorFallbackOnIllegalCode(t *testing.T) {
 		_ = logLine(t, buf)
 	})
 
-	t.Run("jsonEnvelopeError fallback", func(t *testing.T) {
+	t.Run("writeError fallback corrects 404 to 500", func(t *testing.T) {
+		buf, logger := logSink()
+		h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, r, http.StatusNotFound, ErrorCode("UNKNOWN_ILLEGAL_404"), errors.New("not found failure"))
+		}))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/test/fallback_404", nil)
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
+
+		var obj map[string]interface{}
+		if err := json.Unmarshal(rec.Body.Bytes(), &obj); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if obj["code"] != string(CodeInternalError) {
+			t.Errorf("code = %v, want %s", obj["code"], CodeInternalError)
+		}
+		_ = logLine(t, buf)
+	})
+
+	t.Run("writeError fallback preserves 5xx status", func(t *testing.T) {
+		buf, logger := logSink()
+		h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, r, http.StatusServiceUnavailable, ErrorCode("UNKNOWN_ILLEGAL_503"), errors.New("upstream service error"))
+		}))
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/test/fallback_503", nil)
+		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusServiceUnavailable)
+		}
+
+		var obj map[string]interface{}
+		if err := json.Unmarshal(rec.Body.Bytes(), &obj); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if obj["code"] != string(CodeInternalError) {
+			t.Errorf("code = %v, want %s", obj["code"], CodeInternalError)
+		}
+		_ = logLine(t, buf)
+	})
+
+	t.Run("jsonEnvelopeError fallback corrects 400 to 500", func(t *testing.T) {
 		buf, logger := logSink()
 		h := loggingMiddleware(logger, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, ErrorCode("UNKNOWN_ILLEGAL_CODE_2"), errors.New("raw failure"))
@@ -511,6 +562,10 @@ func TestWriteErrorAndJsonEnvelopeErrorFallbackOnIllegalCode(t *testing.T) {
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/test/fallback", nil)
 		h.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+		}
 
 		var obj map[string]interface{}
 		if err := json.Unmarshal(rec.Body.Bytes(), &obj); err != nil {
