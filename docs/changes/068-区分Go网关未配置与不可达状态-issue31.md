@@ -171,4 +171,34 @@ $ npm test
 - 补全 `127.0.0.1`、`127.0.0.2`、`0.0.0.0`、`[::1]` 等全套生产环回拦截断言。
 - 增加 `marketGet` 在生产未配网关时即使 `fetch` 成功也短路拦截的断言。
 
+---
+
+## 6. 与 upstream/main (PR #44 ADR-006) 合流与冲突解决
+
+### 6.1 合流背景
+`upstream/main` 刚合并了 PR #44（commit `66149ea`，Track 1: ADR-006 统一报错处理体系）。本分支执行 `git merge upstream/main` 进行合流，并在保持各自责任契约与质量门禁的前提下完成冲突解决。
+
+### 6.2 冲突解决清单
+1. **`src/app/api/market/route.ts`**：
+   - 导入合并：同时保留本分支新增的 `isGoBackendConfigured` 与上游引入的 `classifyStatus`，均统一从 `@/lib/api` 导入，严格遵守模块导入白名单（`@/lib/api`、`@/lib/marketFeed`、`next/server`）。
+   - 保留前置门禁：在发起网络请求前，完整保留 `if (!isGoBackendConfigured()) return refuse(503, "gateway-unconfigured", ...);`。
+   - 保留 catch 块分流：异常捕获中区分 `unreachable` 与 `gateway-unconfigured`。
+   - 融合 ADR-006 错误信封：对于 upstream 非 2xx 响应，优先提取 `code` 与 `requestId`，经 `classifyStatus` 语义保真分类后透传状态码。
+   - 严格遵循 AST 守卫：未引入任何新数字字面量，503 位于允许白名单内。
+2. **`src/components/MarketTerminal.tsx`**：
+   - 在 `fetchMarketData` catch 块中，统一收敛两方改动：
+     ```ts
+     const reasonKey = isGoBackendConfigured() ? "unreachable" : "gateway-unconfigured";
+     setQuoteFailure(FAILURE_COPY[reasonKey]);
+     setQuoteEnvelope(null);
+     ```
+   - 保留徽标基于 `!isGoBackendConfigured()` 的 `GATEWAY UNCONFIGURED` / `GATEWAY UNREACHABLE` 区分呈现。
+   - 保留上游 `FailureNotice` 接收与渲染 `code` 与 `requestId` 的能力。
+
+### 6.3 合流后全量验证结果
+- `npx tsc --noEmit`：退出码 0，全仓类型检查无错误。
+- `npx vitest run tests/market-independence.test.ts`：29/29 测试用例全部通过，AST 守卫与零合成数据结构约束 100% 保持。
+- `npm test`：25 个测试文件、314 个测试用例全部通过（25/25 passed, 314/314 passed）。
+
+
 

@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -92,12 +93,12 @@ func isOperator(configured string, r *http.Request) bool {
 func requireOperator(configured string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if configured == "" {
-			jsonError(w, http.StatusServiceUnavailable, "operator endpoint disabled: KOLIANCE_API_TOKEN is not configured")
+			writeError(w, r, http.StatusServiceUnavailable, CodeServiceNotConfigured, errors.New("operator endpoint disabled: KOLIANCE_API_TOKEN is not configured"))
 			return
 		}
 		if !isOperator(configured, r) {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="koliance"`)
-			jsonError(w, http.StatusUnauthorized, "operator token required")
+			writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, errors.New("operator token required"))
 			return
 		}
 		next(w, r)
@@ -108,7 +109,7 @@ func methodOnly(method string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != method {
 			w.Header().Set("Allow", method)
-			jsonError(w, http.StatusMethodNotAllowed, "method not allowed")
+			writeError(w, r, http.StatusMethodNotAllowed, CodeMethodNotAllowed, fmt.Errorf("method %s not allowed", r.Method))
 			return
 		}
 		next(w, r)
@@ -130,7 +131,7 @@ func jsonError(w http.ResponseWriter, status int, msg string) {
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) bool {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(dst); err != nil && !errors.Is(err, io.EOF) {
-		jsonError(w, http.StatusBadRequest, "invalid payload")
+		writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 		return false
 	}
 	return true

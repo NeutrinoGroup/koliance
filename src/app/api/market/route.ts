@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { buildSymbolPayload, type SymbolPayload } from "@/lib/marketFeed";
-import { GO_BACKEND_URL, isGoBackendConfigured } from "@/lib/api";
+import { GO_BACKEND_URL, isGoBackendConfigured, classifyStatus } from "@/lib/api";
 
 /**
  * GET /api/market?symbol=…&range=…&interval=…
@@ -118,20 +118,29 @@ export async function GET(request: NextRequest) {
 
   if (!upstream.ok) {
     let detail = `HTTP ${upstream.status}`;
+    let code: string | undefined;
+    let requestId: string | undefined;
     try {
       const body = await upstream.json();
-      if (body && typeof body.error === "string" && body.error) detail = body.error;
+      if (body && typeof body === "object") {
+        if (typeof body.error === "string" && body.error) detail = body.error;
+        if (typeof body.code === "string" && body.code) code = body.code;
+        if (typeof body.requestId === "string" && body.requestId) requestId = body.requestId;
+      }
     } catch {
       // Non-JSON body: the status line is the detail.
     }
 
-    // The gateway's own status decides the reason, and every branch is a
-    // refusal. 503 is the no-credentials case the old code used to answer with
-    // a generated series.
-    const reason: RouteReason =
-      upstream.status === 503 ? "not-configured" : upstream.status === 404 ? "invalid-symbol" : "upstream-error";
-    const status = upstream.status === 404 ? 404 : 503;
-    return refuse(status, reason, detail, { symbol });
+    if (!requestId && upstream.headers && typeof upstream.headers.get === "function") {
+      const headerReqId = upstream.headers.get("X-Request-Id");
+      if (headerReqId) requestId = headerReqId;
+    }
+
+    // Prioritize upstream ADR-006 error code and preserve upstream status.
+    // If code === "DATABASE_UNAVAILABLE", reason becomes "upstream-error" rather than guessing "not-configured".
+    const { reason } = classifyStatus(upstream.status, detail, { code, error: detail, requestId });
+    const status = upstream.status;
+    return refuse(status, reason, detail, { symbol, code, requestId });
   }
 
   let row: unknown;

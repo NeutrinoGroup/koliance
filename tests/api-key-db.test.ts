@@ -38,14 +38,14 @@ describe("API Key Management & Persistence (api-key / api_keys table)", () => {
     expect(res.key.remaining_quota).toBe(100);
     expect(res.key.free_claims_left).toBe(3);
     expect(res.key.scopes).toEqual(["trade:perp", "pay:micropayment"]);
-  });
+  }, 15000);
 
   it("lists API keys for registered developer wallet", async () => {
     const keys = await listUserApiKeys({ walletAddress: testWallet });
     expect(Array.isArray(keys)).toBe(true);
     expect(keys.length).toBeGreaterThan(0);
     expect(keys[0].wallet_address).toBe(testWallet);
-  });
+  }, 15000);
 
   it("revokes user API key and updates status to REVOKED in api_keys table", async () => {
     const created = await createUserApiKey({

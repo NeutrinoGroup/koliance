@@ -123,12 +123,12 @@ func NewRouter(d Deps) http.Handler {
 	withDB := func(fn http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if d.DB == nil {
-				jsonError(w, http.StatusServiceUnavailable, "database is not configured; this endpoint cannot serve requests without it")
+				writeError(w, r, http.StatusServiceUnavailable, CodeDatabaseUnavailable, errors.New("database is not configured; this endpoint cannot serve requests without it"))
 				return
 			}
 			if !d.DB.IsConnected {
 				w.Header().Set("Retry-After", "5")
-				jsonError(w, http.StatusServiceUnavailable, "database is not reachable; this endpoint refuses to serve from a non-durable store")
+				writeError(w, r, http.StatusServiceUnavailable, CodeDatabaseUnavailable, errors.New("database is not reachable; this endpoint refuses to serve from a non-durable store"))
 				return
 			}
 			fn(w, r)
@@ -150,8 +150,8 @@ func NewRouter(d Deps) http.Handler {
 	marketData := func(fn http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
 			if !cfg.AlpacaConfigured() {
-				jsonError(w, http.StatusServiceUnavailable,
-					"market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured (no synthetic data is served)")
+				writeError(w, r, http.StatusServiceUnavailable, CodeServiceNotConfigured,
+					errors.New("market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured (no synthetic data is served)"))
 				return
 			}
 			fn(w, r)
@@ -217,11 +217,11 @@ func NewRouter(d Deps) http.Handler {
 		if raw := r.URL.Query().Get("limit"); raw != "" {
 			n, err := strconv.Atoi(raw)
 			if err != nil || n < 1 {
-				jsonError(w, http.StatusBadRequest, "limit must be a positive integer")
+				writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("limit must be a positive integer"))
 				return
 			}
 			if n > 200 {
-				jsonError(w, http.StatusBadRequest, "limit must be at most 200")
+				writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("limit must be at most 200"))
 				return
 			}
 			limit = n
@@ -233,7 +233,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		events, err := d.Liquidations.Latest(r.Context(), limit)
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, map[string]interface{}{"liquidations": events})
@@ -248,7 +248,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		stats, err := d.Game.GetUserGameStats(identifier)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, stats)
@@ -266,10 +266,10 @@ func NewRouter(d Deps) http.Handler {
 		proof, err := d.Game.GenerateGameplayProof(strings.TrimSpace(req.SteamID), strings.TrimSpace(req.WalletAddress), req.AppID)
 		if err != nil {
 			if errors.Is(err, game.ErrInvalidSteamID) || errors.Is(err, game.ErrInvalidWallet) {
-				jsonError(w, http.StatusBadRequest, err.Error())
+				writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 				return
 			}
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)
@@ -283,12 +283,12 @@ func NewRouter(d Deps) http.Handler {
 			username = "moonhotline"
 		}
 		if !validGitHubUser(username) {
-			jsonError(w, http.StatusBadRequest, "invalid GitHub username")
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("invalid GitHub username"))
 			return
 		}
 		stats, err := d.Dev.GetDeveloperStats(username)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, stats)
@@ -307,16 +307,16 @@ func NewRouter(d Deps) http.Handler {
 			req.Username = "moonhotline"
 		}
 		if !validGitHubUser(req.Username) {
-			jsonError(w, http.StatusBadRequest, "invalid GitHub username")
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("invalid GitHub username"))
 			return
 		}
 		if err := game.ValidateWallet(strings.TrimSpace(req.WalletAddress)); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 			return
 		}
 		proof, err := d.Dev.GenerateBUIDLProof(req.Username, strings.TrimSpace(req.WalletAddress))
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)
@@ -338,7 +338,7 @@ func NewRouter(d Deps) http.Handler {
 			name = "KOLIANCE AGENT"
 		}
 		if len(name) > 64 {
-			jsonError(w, http.StatusBadRequest, "cardholderName too long")
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("cardholderName too long"))
 			return
 		}
 		deposit := agentcard.DefaultDepositUSD
@@ -347,7 +347,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		card, err := d.Cards.CreateCard(strings.TrimSpace(req.WalletAddress), name, deposit)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, "initialDeposit: "+err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("initialDeposit: "+err.Error()))
 			return
 		}
 		jsonResponse(w, http.StatusOK, card)
@@ -359,12 +359,12 @@ func NewRouter(d Deps) http.Handler {
 		asOp := isOperator(cfg.APIToken, r)
 		if token == "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="koliance"`)
-			jsonError(w, http.StatusUnauthorized, "card token required")
+			writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, errors.New("card token required"))
 			return
 		}
 		card, err := d.Cards.GetCard(cardID, token, asOp)
 		if err != nil {
-			jsonError(w, http.StatusNotFound, err.Error())
+			writeError(w, r, http.StatusNotFound, CodeResourceNotFound, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, card)
@@ -385,16 +385,18 @@ func NewRouter(d Deps) http.Handler {
 		token := bearer(r)
 		if token == "" {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="koliance"`)
-			jsonError(w, http.StatusUnauthorized, "card token required")
+			writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, errors.New("card token required"))
 			return
 		}
 		sk, err := d.Cards.IssueSessionKey(req.CardID, token, isOperator(cfg.APIToken, r), req.AgentID, req.MaxPerTxUSD, req.DailyLimitUSD, req.AllowedMCCs, req.TTLHours)
 		if err != nil {
 			status := http.StatusBadRequest
+			code := CodeInvalidRequest
 			if errors.Is(err, agentcard.ErrCardNotFound) {
 				status = http.StatusNotFound
+				code = CodeResourceNotFound
 			}
-			jsonError(w, status, err.Error())
+			writeError(w, r, status, code, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, sk)
@@ -408,12 +410,12 @@ func NewRouter(d Deps) http.Handler {
 		resp, err := d.Cards.AuthorizeMicropayment(req, bearer(r))
 		switch {
 		case errors.Is(err, agentcard.ErrInvalidAmount):
-			jsonError(w, http.StatusBadRequest, "amountUSD: "+err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("amountUSD: "+err.Error()))
 		case errors.Is(err, agentcard.ErrUnauthorized):
 			w.Header().Set("WWW-Authenticate", `Bearer realm="koliance"`)
-			jsonError(w, http.StatusUnauthorized, err.Error())
+			writeError(w, r, http.StatusUnauthorized, CodeUnauthorized, err)
 		case err != nil:
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 		default:
 			jsonResponse(w, http.StatusOK, resp)
 		}
@@ -440,7 +442,7 @@ func NewRouter(d Deps) http.Handler {
 	h("/api/v1/market/overview", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
 		overview, err := d.Market.GetMarketOverview(r.Context())
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, overview)
@@ -451,7 +453,7 @@ func NewRouter(d Deps) http.Handler {
 		if symbol != "" {
 			sym, err := normalizeSymbol(symbol)
 			if err != nil {
-				jsonError(w, http.StatusBadRequest, err.Error())
+				writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 				return
 			}
 			p, err := d.Market.GetPrice(r.Context(), sym)
@@ -459,10 +461,10 @@ func NewRouter(d Deps) http.Handler {
 				// A symbol with no bar is a 404; an upstream failure is not the
 				// caller's fault and must not be reported as one.
 				if errors.Is(err, market.ErrNoMarketData) {
-					jsonError(w, http.StatusNotFound, err.Error())
+					writeError(w, r, http.StatusNotFound, CodeResourceNotFound, err)
 					return
 				}
-				jsonError(w, http.StatusBadGateway, err.Error())
+				writeError(w, r, http.StatusBadGateway, CodeUpstreamUnavailable, err)
 				return
 			}
 			jsonResponse(w, http.StatusOK, p)
@@ -471,7 +473,7 @@ func NewRouter(d Deps) http.Handler {
 
 		prices, err := d.PriceOracle.PriceList(r.Context())
 		if err != nil {
-			jsonError(w, http.StatusBadGateway, err.Error())
+			writeError(w, r, http.StatusBadGateway, CodeUpstreamUnavailable, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, prices)
@@ -483,7 +485,7 @@ func NewRouter(d Deps) http.Handler {
 	h("/api/v1/market/movers", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
 		movers, err := d.Market.GetMovers(r.Context())
 		if err != nil {
-			jsonError(w, http.StatusBadGateway, err.Error())
+			writeError(w, r, http.StatusBadGateway, CodeUpstreamUnavailable, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, movers)
@@ -496,14 +498,14 @@ func NewRouter(d Deps) http.Handler {
 		}
 		sym, err := normalizeSymbol(req.Symbol)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 			return
 		}
 		req.Symbol = sym
 		req.Side = strings.ToLower(strings.TrimSpace(req.Side))
 		lev, err := validateTrade(req.Side, req.NotionalUSD, req.Leverage)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 			return
 		}
 		req.Leverage = lev
@@ -513,9 +515,11 @@ func NewRouter(d Deps) http.Handler {
 			// 200 carrying `success:false`, so a client cannot report "the trade
 			// was rejected by the broker" when no broker was ever configured.
 			if errors.Is(err, market.ErrAlpacaCredentialsMissing) {
-				jsonError(w, http.StatusServiceUnavailable, err.Error())
+				writeError(w, r, http.StatusServiceUnavailable, CodeServiceNotConfigured, err)
 				return
 			}
+			recordError(r, err)
+			res.Message = errorCopyFor(CodeUpstreamUnavailable)
 			jsonResponse(w, http.StatusOK, res)
 			return
 		}
@@ -531,15 +535,15 @@ func NewRouter(d Deps) http.Handler {
 		}
 		sym, err := normalizeSymbol(req.Symbol)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 			return
 		}
 		if err := d.Market.ClosePosition(r.Context(), sym); err != nil {
 			if errors.Is(err, market.ErrAlpacaCredentialsMissing) {
-				jsonError(w, http.StatusServiceUnavailable, err.Error())
+				writeError(w, r, http.StatusServiceUnavailable, CodeServiceNotConfigured, err)
 				return
 			}
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, map[string]string{"message": "Position closed", "symbol": sym})
@@ -559,7 +563,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		if err := validateStripeAmount(req.AmountCents); err != nil {
-			jsonError(w, http.StatusBadRequest, err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 			return
 		}
 		req.Currency = strings.ToLower(strings.TrimSpace(req.Currency))
@@ -567,28 +571,28 @@ func NewRouter(d Deps) http.Handler {
 			req.Currency = "usd"
 		}
 		if req.Currency != "usd" {
-			jsonError(w, http.StatusBadRequest, `currency must be "usd"`)
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("currency must be usd"))
 			return
 		}
 		if len(req.Description) > 200 {
-			jsonError(w, http.StatusBadRequest, "description too long")
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("description too long"))
 			return
 		}
 		if req.SuccessURL == "" {
 			req.SuccessURL = "https://" + cfg.SteamDomain + "/agentcard?status=success"
 		} else if !sameOriginAllowed(req.SuccessURL, cfg.CORSAllowedOrigins) {
-			jsonError(w, http.StatusBadRequest, "successUrl must be on an allowed origin")
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("successUrl must be on an allowed origin"))
 			return
 		}
 		if req.CancelURL == "" {
 			req.CancelURL = "https://" + cfg.SteamDomain + "/agentcard?status=cancel"
 		} else if !sameOriginAllowed(req.CancelURL, cfg.CORSAllowedOrigins) {
-			jsonError(w, http.StatusBadRequest, "cancelUrl must be on an allowed origin")
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("cancelUrl must be on an allowed origin"))
 			return
 		}
 		sess, err := d.Stripe.CreateCheckoutSession(req.SuccessURL, req.CancelURL, req.AmountCents, req.Currency, req.Description)
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, map[string]interface{}{"id": sess.ID, "url": sess.URL})
@@ -605,7 +609,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		cust, err := d.Stripe.CreateCustomer(req.Email, req.Name, req.WalletAddress)
 		if err != nil {
-			jsonError(w, http.StatusInternalServerError, err.Error())
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, map[string]interface{}{"customerId": cust.ID, "email": cust.Email})
@@ -635,23 +639,23 @@ func NewRouter(d Deps) http.Handler {
 		}
 		subject := strings.TrimSpace(req.Subject)
 		if subject == "" {
-			jsonError(w, http.StatusBadRequest, "subject is required")
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("subject is required"))
 			return
 		}
 		proof, err := decodeHexField(req.Proof)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, "proof: "+err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, fmt.Errorf("proof: %w", err))
 			return
 		}
 		publicInputs, err := decodeHexField(req.PublicInputs)
 		if err != nil {
-			jsonError(w, http.StatusBadRequest, "publicInputs: "+err.Error())
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, fmt.Errorf("publicInputs: %w", err))
 			return
 		}
 		if d.Verifier == nil {
 			// A deployment that forgot to wire the slot must say so rather
 			// than panic on a nil interface.
-			jsonError(w, http.StatusServiceUnavailable, "proof verifier is not configured")
+			writeError(w, r, http.StatusServiceUnavailable, CodeVerifierUnavailable, errors.New("proof verifier is not configured"))
 			return
 		}
 
@@ -668,13 +672,16 @@ func NewRouter(d Deps) http.Handler {
 				"scheme": d.Verifier.Scheme(),
 			})
 		case errors.Is(err, verifier.ErrInvalidProof):
+			recordError(r, err)
 			jsonResponse(w, http.StatusBadRequest, map[string]interface{}{
-				"valid":  false,
-				"scheme": d.Verifier.Scheme(),
-				"error":  err.Error(),
+				"valid":     false,
+				"scheme":    d.Verifier.Scheme(),
+				"error":     errorCopyFor(CodeInvalidProof),
+				"code":      string(CodeInvalidProof),
+				"requestId": requestIDFrom(r.Context()),
 			})
 		default:
-			jsonError(w, http.StatusNotImplemented, err.Error())
+			writeError(w, r, http.StatusNotImplemented, CodeVerifierUnavailable, err)
 		}
 	}))
 
@@ -700,14 +707,14 @@ func NewRouter(d Deps) http.Handler {
 		if token != "" {
 			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
 				if errors.Is(err, agentapi.ErrQuotaExhausted) {
-					jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_QUOTA_EXHAUSTED", nil)
+					jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeQuotaExhausted, err)
 					return
 				}
 				if errors.Is(err, agentapi.ErrRateLimited) {
-					jsonEnvelope(w, http.StatusTooManyRequests, 429, "ERROR_RATE_LIMITED", nil)
+					jsonEnvelopeError(w, r, http.StatusTooManyRequests, 429, CodeRateLimited, err)
 					return
 				}
-				jsonEnvelope(w, http.StatusUnauthorized, 401, "ERROR_UNAUTHORIZED", nil)
+				jsonEnvelopeError(w, r, http.StatusUnauthorized, 401, CodeUnauthorized, err)
 				return
 			}
 		}
@@ -718,7 +725,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		binding, err := d.AgentAPI.BindAgent(req.WalletAddress, req)
 		if err != nil {
-			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: "+err.Error(), nil)
+			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, err)
 			return
 		}
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", binding)
@@ -730,14 +737,14 @@ func NewRouter(d Deps) http.Handler {
 		if token != "" {
 			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
 				if errors.Is(err, agentapi.ErrQuotaExhausted) {
-					jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_QUOTA_EXHAUSTED", nil)
+					jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeQuotaExhausted, err)
 					return
 				}
 				if errors.Is(err, agentapi.ErrRateLimited) {
-					jsonEnvelope(w, http.StatusTooManyRequests, 429, "ERROR_RATE_LIMITED", nil)
+					jsonEnvelopeError(w, r, http.StatusTooManyRequests, 429, CodeRateLimited, err)
 					return
 				}
-				jsonEnvelope(w, http.StatusUnauthorized, 401, "ERROR_UNAUTHORIZED", nil)
+				jsonEnvelopeError(w, r, http.StatusUnauthorized, 401, CodeUnauthorized, err)
 				return
 			}
 		}
@@ -748,7 +755,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		order, err := d.AgentAPI.ProcessPayment("", req)
 		if err != nil {
-			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: "+err.Error(), nil)
+			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, err)
 			return
 		}
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", order)
@@ -765,7 +772,7 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		if req.WalletAddress == "" {
-			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_INVALID_PARAMS: wallet_address is required", nil)
+			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, errors.New("wallet_address is required"))
 			return
 		}
 		resp, err := d.AgentAPI.ClaimOrPurchasePackage(req.WalletAddress, agentapi.PackageClaimRequest{
@@ -774,10 +781,10 @@ func NewRouter(d Deps) http.Handler {
 		})
 		if err != nil {
 			if errors.Is(err, agentapi.ErrFreeClaimsExhausted) {
-				jsonEnvelope(w, http.StatusForbidden, 403, "ERROR_FREE_CLAIMS_EXHAUSTED", nil)
+				jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeQuotaExhausted, err)
 				return
 			}
-			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_PACKAGE_FAILED: "+err.Error(), nil)
+			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, err)
 			return
 		}
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", resp)
@@ -807,7 +814,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		key, err := d.AgentAPI.GenerateAPIKey(req.WalletAddress, req.Tier, req.Name)
 		if err != nil {
-			jsonEnvelope(w, http.StatusBadRequest, 400, "ERROR_KEY_GEN: "+err.Error(), nil)
+			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, err)
 			return
 		}
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", key)

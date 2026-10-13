@@ -172,7 +172,9 @@ describe("market route — relays real data or refuses, never generates", () => 
       vi.stubGlobal("fetch", () =>
         Promise.resolve(
           jsonResponse(503, {
-            error: "market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured",
+            code: "SERVICE_NOT_CONFIGURED",
+            error: "service credentials are not configured on this deployment",
+            requestId: "req-test-123",
           })
         )
       );
@@ -184,7 +186,9 @@ describe("market route — relays real data or refuses, never generates", () => 
 
       expect(res.status).toBe(503);
       expect(body.reason).toBe("not-configured");
-      expect(body.error).toContain("ALPACA_API_KEY");
+      expect(body.code).toBe("SERVICE_NOT_CONFIGURED");
+      expect(body.requestId).toBe("req-test-123");
+      expect(body.error).toContain("service credentials are not configured");
     });
 
     it("does not fall back to the FALLBACK_MARKET_DATA table", async () => {
@@ -216,7 +220,7 @@ describe("market route — relays real data or refuses, never generates", () => 
       const res = await GET(req("NVDA"));
       const body = await res.json();
 
-      expect(res.status).toBe(503);
+      expect(res.status).toBe(502);
       expect(body.reason).toBe("upstream-error");
       expect(body.error).toContain("alpaca bars");
     });

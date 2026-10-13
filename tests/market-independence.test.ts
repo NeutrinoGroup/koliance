@@ -382,7 +382,7 @@ describe("2. a malformed or empty gateway response never becomes invented data",
     {
       name: "a gateway 500",
       upstream: () => Promise.resolve(jsonResponse(500, { error: "boom" })),
-      wantStatus: [503],
+      wantStatus: [500],
     },
   ];
 
