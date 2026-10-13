@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
@@ -270,7 +270,10 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
         // Direct redirect to Stripe Hosted Checkout
         window.location.href = res.url;
       } else {
-        setStripeToast(`Stripe 异常: ${res?.error || "请检查网络或稍后重试"}`);
+        const parts = [res?.error || "请检查网络或稍后重试"];
+        if (res?.code) parts.push(`[${res.code}]`);
+        if (res?.requestId) parts.push(`(Req ID: ${res.requestId})`);
+        setStripeToast(`Stripe 异常: ${parts.join(" ")}`);
       }
     } catch (err: any) {
       setStripeToast(`发起支付失败: ${err?.message || err}`);
@@ -334,8 +337,11 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
           },
           ...prev.slice(0, 5),
         ]);
+        const errParts = [res.message || res.error || "交易被拒绝"];
+        if (res.code) errParts.push(`[${res.code}]`);
+        if (res.requestId) errParts.push(`(Req ID: ${res.requestId})`);
         setMicropayNotice({
-          msg: `Visa 拒付拦截 [代码 ${res.responseCode || "57"} - NOT PERMITTED]：${res.message}`,
+          msg: `Visa 拒付拦截 [代码 ${res.responseCode || "57"} - NOT PERMITTED]：${errParts.join(" ")}`,
           type: "error",
         });
       }

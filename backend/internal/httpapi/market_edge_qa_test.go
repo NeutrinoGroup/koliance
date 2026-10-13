@@ -183,8 +183,9 @@ func TestIndyRefusalCarriesNoPriceFieldAtAll(t *testing.T) {
 		// Exactly one key. A payload key here — `realtimePrices`, `gainers`,
 		// `meta`, anything — is a quote that reached a caller with no data
 		// behind it.
-		if len(top) != 1 || !top["error"] {
-			t.Errorf("GET %s: top-level keys = %v, want exactly [error]", path, indyKeys(top))
+		keys := indyKeys(top)
+		if len(keys) != 3 || !top["code"] || !top["error"] || !top["requestId"] {
+			t.Errorf("GET %s: top-level keys = %v, want exactly [code error requestId]", path, keys)
 		}
 		if len(nums) != 0 {
 			t.Errorf("GET %s: refusal body contains JSON numbers %v — a refusal carries no number", path, nums)
@@ -197,6 +198,11 @@ func TestIndyRefusalCarriesNoPriceFieldAtAll(t *testing.T) {
 	if n := atomic.LoadInt32(hits); n != 0 {
 		t.Errorf("the upstream was called %d times although no credentials are configured", n)
 	}
+}
+
+// TestIndyNoDataMeansNoNumbers aliases TestIndyRefusalCarriesNoPriceFieldAtAll for ADR-006 Step 2.1 suite naming.
+func TestIndyNoDataMeansNoNumbers(t *testing.T) {
+	TestIndyRefusalCarriesNoPriceFieldAtAll(t)
 }
 
 // Positive control. Without this, the test above would also pass against a

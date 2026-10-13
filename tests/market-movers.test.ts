@@ -39,7 +39,11 @@ describe("market adapters — failure classification", () => {
   it("classifies the gateway's 503 as not-configured and keeps its words", async () => {
     vi.stubGlobal("fetch", () =>
       Promise.resolve(
-        jsonResponse(503, { error: "market data unavailable: ALPACA_API_KEY/ALPACA_API_SECRET are not configured" })
+        jsonResponse(503, {
+          code: "SERVICE_NOT_CONFIGURED",
+          error: "service credentials are not configured on this deployment",
+          requestId: "req-test-movers-503",
+        })
       )
     );
 
@@ -48,7 +52,9 @@ describe("market adapters — failure classification", () => {
     expect(res.ok).toBe(false);
     if (res.ok) throw new Error("unreachable");
     expect(res.reason).toBe("not-configured");
-    expect(res.detail).toContain("ALPACA_API_KEY");
+    expect(res.code).toBe("SERVICE_NOT_CONFIGURED");
+    expect(res.requestId).toBe("req-test-movers-503");
+    expect(res.detail).toContain("service credentials are not configured");
   });
 
   it("classifies a 404 as invalid-symbol, not as a generic failure", async () => {

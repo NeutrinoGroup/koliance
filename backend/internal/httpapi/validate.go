@@ -10,7 +10,7 @@ import (
 
 var (
 	githubUserRe = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$`)
-	symbolRe     = regexp.MustCompile(`^[A-Z0-9]{1,10}(/[A-Z]{3,4})?$`)
+	symbolRe     = regexp.MustCompile(`^[A-Z0-9_]{1,32}(/[A-Z]{3,4})?$`)
 )
 
 const (

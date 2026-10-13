@@ -158,6 +158,12 @@ func (w *statusWriter) observeStatus() int {
 	return w.status
 }
 
+type errSlot struct {
+	err error
+}
+
+type ctxKeyErrSlot struct{}
+
 // loggingMiddleware is the request logger. `logger` is injected rather than
 // read from slog.Default() at call time so a test can capture the line without
 // touching global state (cmd/api owns the production logger).
@@ -175,7 +181,10 @@ func loggingMiddleware(logger *slog.Logger, next http.Handler) http.Handler {
 		// in the recorder and absent on the wire — the worst of both.
 		w.Header().Set(requestIDHeader, id)
 
-		r = r.WithContext(context.WithValue(r.Context(), ctxKeyRequestID{}, id))
+		slot := &errSlot{}
+		ctx := context.WithValue(r.Context(), ctxKeyErrSlot{}, slot)
+		ctx = context.WithValue(ctx, ctxKeyRequestID{}, id)
+		r = r.WithContext(ctx)
 
 		sw := &statusWriter{ResponseWriter: w}
 		next.ServeHTTP(sw, r)
@@ -212,14 +221,31 @@ func recordRequest(logger *slog.Logger, r *http.Request, id string, status int, 
 	)
 }
 
+// recordError attaches raw error to the request context and error slot so that
+// loggingMiddleware can record and sanitize it without inspecting the response body.
+func recordError(r *http.Request, err error) {
+	if r == nil || err == nil {
+		return
+	}
+	if slot, ok := r.Context().Value(ctxKeyErrSlot{}).(*errSlot); ok && slot != nil {
+		slot.err = err
+	}
+	*r = *r.WithContext(context.WithValue(r.Context(), errContextKey{}, err))
+}
+
 // requestError returns the error the handler recorded for this request, or nil.
 //
-// This is the seam between the middleware and the handlers that will follow it.
-// The handlers in this round still answer with jsonError(w, status, err.Error())
-// and record nothing, so this returns nil and `err` is empty — which is the
+// It returns nil when no error was recorded — which includes every successful
+// request, and every error request before the handler migration round. That is an
 // honest reading of "no raw error was recorded for this request", not a
 // stand-in for "nothing went wrong".
 func requestError(ctx context.Context) error {
+	if ctx == nil {
+		return nil
+	}
+	if slot, ok := ctx.Value(ctxKeyErrSlot{}).(*errSlot); ok && slot != nil && slot.err != nil {
+		return slot.err
+	}
 	err, _ := ctx.Value(errContextKey{}).(error)
 	return err
 }
@@ -338,7 +364,13 @@ var (
 	// because a lone `a=b` is a sentence and a run of them is a connection
 	// string. The `password|passwd|pwd` alternative keeps the credential covered
 	// even when it is the only keyword present.
-	reDSN = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://\S*|\b(?:password|passwd|pwd)\s*=\s*\S+|(?:^|\s)[a-z_]{2,20}=[^\s]+(?:\s+[a-z_]{2,20}=[^\s]+)+`)
+	//
+	// SEC-P0-3: Prefixes extended to support backticks, quotes and brackets so
+	// connection strings embedded in error strings or prose are reliably redacted.
+	reDSN = regexp.MustCompile("(?i)(^|[\\s`\"'(\\[])([a-z][a-z0-9+.-]*://\\S*|\\b(?:password|passwd|pwd)\\s*=\\s*\\S+|[a-z_]{2,20}=[^\\s]+(?:\\s+[a-z_]{2,20}=[^\\s]+)+)")
+
+	// SEC-P0-3: Truncated third-party upstream bodies from Alpaca client and price oracle.
+	reTruncatedAlpacaBody = regexp.MustCompile(`(?i)((?:alpaca API error \[\d+\]:|alpaca bars status \d+:)\s*).*$`)
 
 	// §3.4 #4/#5 — environment variable names, and `NAME=value` pairs where
 	// the value must never be written out. The name pattern requires at least
@@ -484,7 +516,8 @@ func sanitizeLogValue(s string) string {
 		to string
 	}{
 		{reGoStack, markStack},
-		{reDSN, markDSN},
+		{reTruncatedAlpacaBody, "${1}" + markUpstream},
+		{reDSN, "${1}" + markDSN},
 		{reSQL, markSQL},
 		{reEnvAssign, markEnv},
 		{reEnvName, markEnvName},

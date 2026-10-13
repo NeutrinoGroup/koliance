@@ -82,15 +82,29 @@ const PRESET_SYMBOLS = [
  * Printing which one it is costs one component and is the difference between a
  * page that can be operated and one that can only be stared at.
  */
-function FailureNotice({ failure, context }: { failure: FailureCopy; context?: string }) {
+function FailureNotice({
+  failure,
+  context,
+  code,
+  requestId,
+}: {
+  failure: FailureCopy;
+  context?: string;
+  code?: string;
+  requestId?: string;
+}) {
   return (
     <div className="rounded-md border border-amber-500/30 bg-amber-500/[0.06] px-3 py-2.5 text-[11px] font-mono text-amber-200/90 space-y-1">
       <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-amber-300">
         <AlertCircle className="w-3.5 h-3.5 shrink-0" />
         <span>{failure.headline}</span>
         {context && <span className="text-amber-200/50 normal-case tracking-normal">· {context}</span>}
+        {code && <span className="text-amber-400/80 bg-amber-400/10 px-1 py-0.5 rounded text-[10px]">[{code}]</span>}
       </div>
       <p className="leading-relaxed">{failure.action}</p>
+      {requestId && (
+        <p className="text-[10px] text-amber-300/60 font-mono tracking-tight">Request ID: {requestId}</p>
+      )}
     </div>
   );
 }
@@ -117,6 +131,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
   // Set whenever the quote request produced no quote. `marketData` is null in
   // that case, and this says which of the four reasons it was.
   const [quoteFailure, setQuoteFailure] = useState<FailureCopy | null>(null);
+  const [quoteEnvelope, setQuoteEnvelope] = useState<{ code?: string; requestId?: string } | null>(null);
 
   // ==================== ALPACA PAPER TRADING STATE ====================
   //
@@ -126,6 +141,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
   // anything (GAP-52).
   const [account, setAccount] = useState<MarketOverviewAccount | null>(null);
   const [accountFailure, setAccountFailure] = useState<FailureCopy | null>(null);
+  const [accountEnvelope, setAccountEnvelope] = useState<{ code?: string; requestId?: string } | null>(null);
   const [priceRows, setPriceRows] = useState<MarketPriceRow[]>([]);
   const [pricesFailure, setPricesFailure] = useState<FailureCopy | null>(null);
   const [movers, setMovers] = useState<Movers | null>(null);
@@ -166,10 +182,12 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       setAccount(overviewRes.data.account ?? null);
       setAlpacaPositions(overviewRes.data.positions ?? []);
       setAccountFailure(null);
+      setAccountEnvelope(null);
     } else {
       // Not zeroed: an unreported balance is unknown, and `---` says so.
       setAccount(null);
       setAccountFailure(FAILURE_COPY[overviewRes.reason]);
+      setAccountEnvelope({ code: overviewRes.code, requestId: overviewRes.requestId });
     }
 
     if (pricesRes.ok) {
@@ -215,7 +233,10 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
         setTradeToast({ msg: `平仓成功：标的 ${sym} 已全部平仓结算`, type: "success" });
         await loadBackendData();
       } else {
-        setTradeToast({ msg: `平仓异常: ${res.error}`, type: "error" });
+        const parts = [`平仓异常: ${res.error}`];
+        if (res.code) parts.push(`[${res.code}]`);
+        if (res.requestId) parts.push(`(Req ID: ${res.requestId})`);
+        setTradeToast({ msg: parts.join(" "), type: "error" });
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -240,13 +261,21 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       if (!res.ok) {
         setMarketData(null);
         setQuoteFailure(FAILURE_COPY[(json?.reason as keyof typeof FAILURE_COPY) || "upstream-error"]);
-        if (res.status === 400 && typeof json?.error === "string") setSearchError(json.error);
+        setQuoteEnvelope({ code: json?.code, requestId: json?.requestId });
+        if (res.status === 400 && typeof json?.error === "string") {
+          const parts = [json.error];
+          if (json.code) parts.push(`[${json.code}]`);
+          if (json.requestId) parts.push(`(Req ID: ${json.requestId})`);
+          setSearchError(parts.join(" "));
+        }
         return;
       }
+      setQuoteEnvelope(null);
       setMarketData(json as MarketResponse);
     } catch (err: unknown) {
       setMarketData(null);
       setQuoteFailure(FAILURE_COPY.unreachable);
+      setQuoteEnvelope(null);
       setSearchError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
@@ -288,7 +317,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
       // rendered "Alpaca 提示：undefined" in exactly the case an operator needs
       // to read, and it looks like a broker rejection rather than a missing
       // credential.
-      const detail = res.message || res.error;
+      const detail = res.error || res.message;
       if (res.success && !res.error) {
         setRecentOrders((prev) => [
           {
@@ -312,8 +341,11 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
         });
         await loadBackendData();
       } else {
+        const parts = [`订单未成交：${detail || "后端未返回失败原因"}`];
+        if (res.code) parts.push(`[${res.code}]`);
+        if (res.requestId) parts.push(`(Req ID: ${res.requestId})`);
         setTradeToast({
-          msg: `订单未成交：${detail || "后端未返回失败原因"}`,
+          msg: parts.join(" "),
           type: "error",
         });
       }
@@ -481,7 +513,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
         </div>
       </div>
 
-      {accountFailure && <FailureNotice failure={accountFailure} context="账户 / 持仓" />}
+      {accountFailure && <FailureNotice failure={accountFailure} context="账户 / 持仓" code={accountEnvelope?.code} requestId={accountEnvelope?.requestId} />}
 
       {/* 3. Search & Range Bar */}
       <div className="rounded-lg bg-[#121622]/90 border border-white/[0.08] p-5 sm:p-6 shadow-xl backdrop-blur-xl space-y-4">
@@ -595,7 +627,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
                 <span>Loading Chart Data...</span>
               </div>
             ) : quoteFailure ? (
-              <FailureNotice failure={quoteFailure} context={selectedSymbol} />
+              <FailureNotice failure={quoteFailure} context={selectedSymbol} code={quoteEnvelope?.code} requestId={quoteEnvelope?.requestId} />
             ) : chartCoordinates ? (
               <svg className="w-full h-full overflow-visible" viewBox="0 0 640 180">
                 <defs>

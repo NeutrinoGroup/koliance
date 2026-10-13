@@ -3,9 +3,11 @@ package httpapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync/atomic"
@@ -100,13 +102,20 @@ func withCreds(c *config.Config) {
 // Numbers are collected from the *parsed tree*, so a number nested inside an
 // object or an array is seen; a `json.Unmarshal` into a struct would lose both
 // the unknown keys and the literals.
-func jsonTree(t *testing.T, label string, body []byte) (any, []string) {
+type refusalReporter interface {
+	Helper()
+	Errorf(format string, args ...any)
+	Fatalf(format string, args ...any)
+}
+
+func jsonTreeWithReporter(t refusalReporter, label string, body []byte) (any, []string) {
 	t.Helper()
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
 	var v any
 	if err := dec.Decode(&v); err != nil {
 		t.Fatalf("%s: body is not JSON: %v (%s)", label, err, string(body))
+		return nil, nil
 	}
 	var nums []string
 	var walk func(any)
@@ -129,9 +138,14 @@ func jsonTree(t *testing.T, label string, body []byte) (any, []string) {
 	return v, nums
 }
 
-// assertRefusal pins the shape of a refusal: exactly one top-level key `error`,
-// whose value is a plain string naming the missing configuration, and no JSON
-// number anywhere in the body.
+func jsonTree(t *testing.T, label string, body []byte) (any, []string) {
+	t.Helper()
+	return jsonTreeWithReporter(t, label, body)
+}
+
+// assertRefusal pins the shape of an ADR-006 standard refusal: exactly top-level keys
+// ["code", "error", "requestId"], code == "SERVICE_NOT_CONFIGURED", no leak of ALPACA_API_KEY,
+// and no JSON number anywhere in the body.
 //
 // Why the shape and not a word list: the defect issue #14 guards against is a
 // refusal that still carries a quote. `lastKnownRegularMarketPrice`,
@@ -165,10 +179,13 @@ func jsonTree(t *testing.T, label string, body []byte) (any, []string) {
 // ALPACA_API_KEY / ALPACA_API_SECRET — so the narrow form costs nothing.
 var priceShapedInText = regexp.MustCompile(`\d+\.\d{2,}|\d{3,}`)
 
-func assertRefusal(t *testing.T, label string, body []byte) {
+func assertRefusalWithReporter(t refusalReporter, label string, body []byte) {
 	t.Helper()
 
-	v, nums := jsonTree(t, label, body)
+	v, nums := jsonTreeWithReporter(t, label, body)
+	if v == nil {
+		return
+	}
 	obj, isObj := v.(map[string]any)
 	if !isObj {
 		t.Errorf("%s: refusal body is a %T, want a JSON object: %s", label, v, string(body))
@@ -179,8 +196,9 @@ func assertRefusal(t *testing.T, label string, body []byte) {
 		}
 		sort.Strings(keys)
 
-		if len(keys) != 1 || keys[0] != "error" {
-			t.Errorf("%s: top-level keys = %v, want exactly [error] — a refusal is an error and nothing else", label, keys)
+		expectedKeys := []string{"code", "error", "requestId"}
+		if !slices.Equal(keys, expectedKeys) {
+			t.Errorf("%s: top-level keys = %v, want exactly %v — standard error envelope", label, keys, expectedKeys)
 		}
 		if e, present := obj["error"]; present {
 			if _, isString := e.(string); !isString {
@@ -200,14 +218,95 @@ func assertRefusal(t *testing.T, label string, body []byte) {
 		t.Errorf("%s: refusal body carries JSON number(s) %v — a refusal carries no number", label, nums)
 	}
 
-	// The refusal still has to be actionable: #14 is about not inventing data,
-	// not about hiding why there is none. Asserted as a property (some error
-	// message names the variable) rather than as the exact `jsonError` wording.
+	// The refusal must carry the standard closed-set code SERVICE_NOT_CONFIGURED
+	// and must NOT leak internal credential names (ALPACA_API_KEY / ALPACA_API_SECRET)
+	// into the client response envelope (ADR-006 §3.5 & issue #33).
 	var payload struct {
+		Code  string `json:"code"`
 		Error string `json:"error"`
 	}
-	if err := json.Unmarshal(body, &payload); err != nil || !strings.Contains(payload.Error, "ALPACA_API_KEY") {
-		t.Errorf("%s: refusal does not name the missing configuration: %s", label, body)
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Errorf("%s: refusal body is not valid JSON payload: %v", label, err)
+	} else {
+		if payload.Code != "SERVICE_NOT_CONFIGURED" {
+			t.Errorf("%s: payload.Code = %q, want SERVICE_NOT_CONFIGURED", label, payload.Code)
+		}
+		if strings.Contains(string(body), "ALPACA_API_KEY") || strings.Contains(string(body), "ALPACA_API_SECRET") {
+			t.Errorf("%s: refusal body leaks API key: %s", label, body)
+		}
+	}
+}
+
+func assertRefusal(t *testing.T, label string, body []byte) {
+	t.Helper()
+	assertRefusalWithReporter(t, label, body)
+}
+
+type mockRefusalReporter struct {
+	errors []string
+}
+
+func (m *mockRefusalReporter) Helper() {}
+func (m *mockRefusalReporter) Errorf(format string, args ...any) {
+	m.errors = append(m.errors, fmt.Sprintf(format, args...))
+}
+func (m *mockRefusalReporter) Fatalf(format string, args ...any) {
+	m.errors = append(m.errors, fmt.Sprintf(format, args...))
+}
+func (m *mockRefusalReporter) failed() bool {
+	return len(m.errors) > 0
+}
+
+// TestAssertRefusalNegativeControl proves assertRefusal has teeth (D3 falsification)
+// by mutating response shapes, codes, numbers, and leaked credentials, ensuring every mutant fails.
+func TestAssertRefusalNegativeControl(t *testing.T) {
+	valid := []byte(`{"code":"SERVICE_NOT_CONFIGURED","error":"service credentials are not configured on this deployment","requestId":"0123456789abcdef0123456789abcdef"}`)
+
+	// Positive control: valid ADR-006 envelope MUST pass
+	rep := &mockRefusalReporter{}
+	assertRefusalWithReporter(rep, "positive-control", valid)
+	if rep.failed() {
+		t.Fatalf("positive control failed: %v", rep.errors)
+	}
+
+	// Negative mutant 1: carries extra key (e.g. price)
+	mutantExtraKey := []byte(`{"code":"SERVICE_NOT_CONFIGURED","error":"service credentials are not configured on this deployment","requestId":"req1","price":100}`)
+	rep1 := &mockRefusalReporter{}
+	assertRefusalWithReporter(rep1, "extra-key", mutantExtraKey)
+	if !rep1.failed() {
+		t.Error("mutant with extra key 'price' unexpectedly passed assertRefusal")
+	}
+
+	// Negative mutant 2: wrong error code
+	mutantWrongCode := []byte(`{"code":"INTERNAL_ERROR","error":"service credentials are not configured on this deployment","requestId":"req1"}`)
+	rep2 := &mockRefusalReporter{}
+	assertRefusalWithReporter(rep2, "wrong-code", mutantWrongCode)
+	if !rep2.failed() {
+		t.Error("mutant with code 'INTERNAL_ERROR' unexpectedly passed assertRefusal")
+	}
+
+	// Negative mutant 3: leaks API key in body
+	mutantLeakedKey := []byte(`{"code":"SERVICE_NOT_CONFIGURED","error":"ALPACA_API_KEY is not configured","requestId":"req1"}`)
+	rep3 := &mockRefusalReporter{}
+	assertRefusalWithReporter(rep3, "leaked-key", mutantLeakedKey)
+	if !rep3.failed() {
+		t.Error("mutant leaking ALPACA_API_KEY unexpectedly passed assertRefusal")
+	}
+
+	// Negative mutant 4: legacy single-key error envelope
+	mutantLegacy := []byte(`{"error":"ALPACA_API_KEY is not configured"}`)
+	rep4 := &mockRefusalReporter{}
+	assertRefusalWithReporter(rep4, "legacy-envelope", mutantLegacy)
+	if !rep4.failed() {
+		t.Error("legacy single-key error envelope unexpectedly passed assertRefusal")
+	}
+
+	// Negative mutant 5: carries embedded JSON number
+	mutantWithNum := []byte(`{"code":"SERVICE_NOT_CONFIGURED","error":"service credentials are not configured on this deployment","requestId":"req1","count":42}`)
+	rep5 := &mockRefusalReporter{}
+	assertRefusalWithReporter(rep5, "json-number", mutantWithNum)
+	if !rep5.failed() {
+		t.Error("mutant with JSON number unexpectedly passed assertRefusal")
 	}
 }
 
