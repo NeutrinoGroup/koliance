@@ -100,11 +100,22 @@ export async function GET(request: NextRequest) {
 
   if (!upstream.ok) {
     let detail = `HTTP ${upstream.status}`;
+    let code: string | undefined;
+    let requestId: string | undefined;
     try {
       const body = await upstream.json();
-      if (body && typeof body.error === "string" && body.error) detail = body.error;
+      if (body && typeof body === "object") {
+        if (typeof body.error === "string" && body.error) detail = body.error;
+        if (typeof body.code === "string" && body.code) code = body.code;
+        if (typeof body.requestId === "string" && body.requestId) requestId = body.requestId;
+      }
     } catch {
       // Non-JSON body: the status line is the detail.
+    }
+
+    if (!requestId && upstream.headers && typeof upstream.headers.get === "function") {
+      const headerReqId = upstream.headers.get("X-Request-Id");
+      if (headerReqId) requestId = headerReqId;
     }
 
     // The gateway's own status decides the reason, and every branch is a
@@ -113,7 +124,7 @@ export async function GET(request: NextRequest) {
     const reason: RouteReason =
       upstream.status === 503 ? "not-configured" : upstream.status === 404 ? "invalid-symbol" : "upstream-error";
     const status = upstream.status === 404 ? 404 : 503;
-    return refuse(status, reason, detail, { symbol });
+    return refuse(status, reason, detail, { symbol, code, requestId });
   }
 
   let row: unknown;

@@ -115,6 +115,15 @@ export type MarketFetchReason =
   | "invalid-symbol";
 
 /**
+ * Standard ADR-006 error envelope shape returned by the Go backend.
+ */
+export interface ApiErrorEnvelope {
+  code?: string;
+  error?: string;
+  requestId?: string;
+}
+
+/**
  * The result of a market fetch.
  *
  * The previous adapters answered `T | null`, which collapsed "no credentials
@@ -126,7 +135,7 @@ export type MarketFetchReason =
  */
 export type MarketFetch<T> =
   | { ok: true; data: T }
-  | { ok: false; reason: MarketFetchReason; detail: string };
+  | { ok: false; reason: MarketFetchReason; detail: string; code?: string; requestId?: string };
 
 export interface MarketOverviewData {
   account: {
@@ -261,16 +270,86 @@ export async function generateAgentCard(walletAddress: string, cardholderName: s
   }
 }
 
-export async function authorizeMicropayment(cardId: string, sessionKey: string, amountUSD: number, merchantName: string, mcc: string = "7999") {
+/**
+ * Safely parses ADR-006 error envelope from response body and headers without throwing or assuming JSON.
+ */
+export async function parseApiError(res: Response): Promise<ApiErrorEnvelope & { rawStatus: number }> {
+  let error = `HTTP ${res.status}`;
+  let code: string | undefined;
+  let requestId: string | undefined;
+
+  try {
+    const body = await res.json();
+    if (body && typeof body === "object") {
+      if (typeof body.error === "string" && body.error) {
+        error = body.error;
+      }
+      if (typeof body.code === "string" && body.code) {
+        code = body.code;
+      } else if (typeof body.errorCode === "string" && body.errorCode) {
+        code = body.errorCode;
+      }
+      if (typeof body.requestId === "string" && body.requestId) {
+        requestId = body.requestId;
+      }
+    }
+  } catch {
+    // Non-JSON body: keep status line fallback.
+  }
+
+  if (!requestId && res.headers && typeof res.headers.get === "function") {
+    const headerReqId = res.headers.get("X-Request-Id");
+    if (headerReqId) requestId = headerReqId;
+  }
+
+  return { error, code, requestId, rawStatus: res.status };
+}
+
+export interface MicropaymentResult {
+  success: boolean;
+  message?: string;
+  transaction?: {
+    txId: string;
+    cardId: string;
+    amountUSD: number;
+    merchantName: string;
+    mcc: string;
+    timestamp: string;
+  };
+  authCode?: string;
+  responseCode?: string;
+  error?: string;
+  code?: string;
+  requestId?: string;
+}
+
+export async function authorizeMicropayment(
+  cardId: string,
+  sessionKey: string,
+  amountUSD: number,
+  merchantName: string,
+  mcc: string = "7999"
+): Promise<MicropaymentResult> {
   try {
     const res = await fetch(`${GO_BACKEND_URL}/api/v1/agentcard/authorize`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ cardId, sessionKey, amountUSD, merchantName, mcc }),
     });
+    if (!res.ok) {
+      const env = await parseApiError(res);
+      return {
+        success: false,
+        message: env.error,
+        error: env.error,
+        code: env.code,
+        requestId: env.requestId,
+      };
+    }
     return await res.json();
   } catch (err) {
-    return { success: false, message: String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    return { success: false, message: msg, error: msg };
   }
 }
 
@@ -299,14 +378,9 @@ export async function authorizeMicropayment(cardId: string, sessionKey: string, 
 // "the answer was nothing" must not be the same outcome.
 
 /** Reads the gateway's `{"error": "..."}` body without assuming it is JSON. */
-async function errorDetail(res: Response): Promise<string> {
-  try {
-    const body = await res.json();
-    if (body && typeof body.error === "string" && body.error) return body.error;
-  } catch {
-    // Non-JSON: fall through to the status line.
-  }
-  return `HTTP ${res.status}`;
+export async function errorDetail(res: Response): Promise<string> {
+  const env = await parseApiError(res);
+  return env.error || `HTTP ${res.status}`;
 }
 
 function classifyStatus(status: number, detail: string): { reason: MarketFetchReason; detail: string } {
@@ -333,8 +407,15 @@ async function marketGet<T>(path: string): Promise<MarketFetch<T>> {
   }
 
   if (!res.ok) {
-    const detail = await errorDetail(res);
-    return { ok: false, ...classifyStatus(res.status, detail) };
+    const env = await parseApiError(res);
+    const classified = classifyStatus(res.status, env.error || `HTTP ${res.status}`);
+    return {
+      ok: false,
+      reason: classified.reason,
+      detail: env.error || classified.detail,
+      code: env.code,
+      requestId: env.requestId,
+    };
   }
 
   try {
@@ -412,43 +493,160 @@ export async function fetchMarketHealth(): Promise<MarketFetch<MarketDataHealth>
   return marketGet<MarketDataHealth>("/api/v1/market/health");
 }
 
-export async function executeMarketTrade(symbol: string, side: "buy" | "sell", notionalUSD: number, leverage: number = 4) {
+export interface TradeOrder {
+  id: string;
+  client_order_id?: string;
+  symbol: string;
+  status: string;
+  side: string;
+  notional?: string;
+  qty?: string;
+  filled_qty?: string;
+  type?: string;
+  created_at?: string;
+}
+
+export interface ExecuteTradeResult {
+  success: boolean;
+  message?: string;
+  order?: TradeOrder;
+  symbol?: string;
+  side?: string;
+  notionalUSD?: number;
+  error?: string;
+  code?: string;
+  requestId?: string;
+}
+
+export async function executeMarketTrade(
+  symbol: string,
+  side: "buy" | "sell",
+  notionalUSD: number,
+  leverage: number = 4
+): Promise<ExecuteTradeResult> {
   try {
     const res = await fetch(`${GO_BACKEND_URL}/api/v1/market/trade`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol, side, notionalUSD, leverage }),
     });
-    return await res.json();
+
+    if (!res.ok) {
+      const env = await parseApiError(res);
+      return {
+        success: false,
+        error: env.error,
+        code: env.code,
+        requestId: env.requestId,
+        message: env.error,
+        symbol,
+        side,
+        notionalUSD: notionalUSD * leverage,
+      };
+    }
+
+    const data = await res.json();
+    if (data && typeof data === "object") {
+      const headerReqId =
+        res.headers && typeof res.headers.get === "function" ? res.headers.get("X-Request-Id") : undefined;
+      const requestId = (typeof data.requestId === "string" ? data.requestId : undefined) || headerReqId || undefined;
+      const code = typeof data.code === "string" ? data.code : undefined;
+      const error =
+        typeof data.error === "string"
+          ? data.error
+          : (!data.success && data.message ? data.message : undefined);
+
+      return {
+        ...data,
+        code: code ?? (data.success ? undefined : "UPSTREAM_UNAVAILABLE"),
+        requestId,
+        error,
+      };
+    }
+    return data;
   } catch (err) {
-    return { success: false, message: String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      message: msg,
+      error: msg,
+      symbol,
+      side,
+      notionalUSD: notionalUSD * leverage,
+    };
   }
 }
 
-export async function closeMarketPosition(symbol: string) {
+export interface ClosePositionResult {
+  success?: boolean;
+  message?: string;
+  symbol?: string;
+  error?: string;
+  code?: string;
+  requestId?: string;
+}
+
+export async function closeMarketPosition(symbol: string): Promise<ClosePositionResult> {
   try {
     const res = await fetch(`${GO_BACKEND_URL}/api/v1/market/close`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol }),
     });
-    return await res.json();
+
+    if (!res.ok) {
+      const env = await parseApiError(res);
+      return {
+        success: false,
+        error: env.error,
+        code: env.code,
+        requestId: env.requestId,
+        symbol,
+      };
+    }
+
+    const data = await res.json();
+    return {
+      success: true,
+      ...data,
+    };
   } catch (err) {
-    return { error: String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      error: msg,
+      symbol,
+    };
   }
 }
 
 // ==================== STRIPE ====================
-export async function createStripeCheckout(amountCents: number, description: string) {
+export interface StripeCheckoutResult {
+  url?: string;
+  id?: string;
+  error?: string;
+  code?: string;
+  requestId?: string;
+}
+
+export async function createStripeCheckout(amountCents: number, description: string): Promise<StripeCheckoutResult> {
   try {
     const res = await fetch(`${GO_BACKEND_URL}/api/v1/stripe/checkout-session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amountCents, description }),
     });
+    if (!res.ok) {
+      const env = await parseApiError(res);
+      return {
+        error: env.error,
+        code: env.code,
+        requestId: env.requestId,
+      };
+    }
     return await res.json();
   } catch (err) {
-    return { error: String(err) };
+    return { error: err instanceof Error ? err.message : String(err) };
   }
 }
 
