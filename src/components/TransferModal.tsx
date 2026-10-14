@@ -18,13 +18,12 @@ import {
   createPublicClient,
   createWalletClient,
   custom,
-  http,
-  fallback,
   encodeFunctionData,
   isAddress,
 } from "viem";
 import {
   monadTestnet,
+  monadRpcTransport,
   KOL_TOKEN_ADDRESS,
   KOL_TOKEN_ABI,
 } from "@/lib/contract";
@@ -66,10 +65,7 @@ export function TransferModal({
       try {
         const publicClient = createPublicClient({
           chain: monadTestnet,
-          transport: fallback([
-            http("https://monad-testnet.drpc.org"),
-            http("https://testnet-rpc.monad.xyz"),
-          ]),
+          transport: monadRpcTransport(),
         });
 
         const bal = await publicClient.readContract({
