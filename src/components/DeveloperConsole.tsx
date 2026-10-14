@@ -35,6 +35,8 @@ import {
   UserCheck,
 } from "lucide-react";
 import { useKolianceAuth } from "@/components/Providers";
+import { useSignMessage } from "wagmi";
+import { authHeaders, ensureWalletSession, getWalletSessionToken } from "@/lib/sessionClient";
 import type { ApiKeyRecord } from "@/lib/apiKeyDb";
 import { getAuditHistory, recordAuditEvent, AuditRecord, AuditCategory } from "@/lib/audit";
 import { useLanguage } from "@/lib/i18n";
@@ -93,6 +95,24 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
   }, []);
 
   const activeWallet = currentAccount || authAddress || localDevWallet || null;
+  const connectedWallet = (currentAccount || authAddress || null)?.toLowerCase() ?? null;
+  const { signMessageAsync } = useSignMessage();
+
+  // Issue #35: the console authenticates with a server-verified session token
+  // obtained by signing a challenge with the connected wallet - not by naming
+  // a wallet in the query string. `interactive` controls whether a signature
+  // prompt may be shown (never on passive page loads).
+  const getConsoleToken = async (wallet: string, interactive: boolean): Promise<string | null> => {
+    const cached = getWalletSessionToken(wallet);
+    if (cached) return cached;
+    if (!interactive || !connectedWallet || connectedWallet !== wallet.toLowerCase()) return null;
+    try {
+      return await ensureWalletSession(wallet, (message) => signMessageAsync({ message }));
+    } catch (err) {
+      console.error("Wallet sign-in failed:", err);
+      return null;
+    }
+  };
   const isRegistered = Boolean(activeWallet);
 
   // Navigation tab in Console
@@ -228,7 +248,13 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
   const loadKeys = async (wallet: string) => {
     setLoadingKeys(true);
     try {
-      const res = await fetch(`/api/console/api-keys?wallet=${wallet}`);
+      const token = await getConsoleToken(wallet, false);
+      if (!token) {
+        setUserKeys([]);
+        setActiveKeyId(null);
+        return;
+      }
+      const res = await fetch("/api/console/api-keys", { headers: authHeaders(token) });
       if (res.ok) {
         const json = await res.json();
         if (Array.isArray(json.keys)) {
@@ -279,7 +305,11 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
     if (!activeWallet) return;
     async function loadStats() {
       try {
-        const res = await fetch(`/api/v1/developer/stats?wallet_address=${activeWallet}`);
+        // Go backend requires the wallet's own API key (issue #35 P0-4).
+        if (!createdSecretKey) return;
+        const res = await fetch(`/api/v1/developer/stats?wallet_address=${activeWallet}`, {
+          headers: authHeaders(createdSecretKey),
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.data) {
@@ -301,7 +331,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
       }
     }
     loadStats();
-  }, [activeWallet]);
+  }, [activeWallet, createdSecretKey]);
 
   const copyToClipboard = (textToCopy?: string) => {
     const text = textToCopy || effectiveApiKey;
@@ -321,11 +351,15 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
 
     setIsCreatingKey(true);
     try {
+      const token = await getConsoleToken(activeWallet, true);
+      if (!token) {
+        alert(lang === "en" ? "Please connect and sign with your wallet first." : "请先连接钱包并签名登录。");
+        return;
+      }
       const res = await fetch("/api/console/api-keys", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders(token) },
         body: JSON.stringify({
-          wallet_address: activeWallet,
           name: newKeyName.trim() || `API Key #${userKeys.length + 1}`,
           tier: newKeyTier,
           rate_limit_rpm: newKeyRpm,
@@ -365,8 +399,11 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
   const handleRevokeKey = async (keyId: string) => {
     if (!activeWallet) return;
     try {
-      const res = await fetch(`/api/console/api-keys?key_id=${keyId}&wallet=${activeWallet}`, {
+      const token = await getConsoleToken(activeWallet, true);
+      if (!token) return;
+      const res = await fetch(`/api/console/api-keys?key_id=${encodeURIComponent(keyId)}`, {
         method: "DELETE",
+        headers: authHeaders(token),
       });
       if (res.ok) {
         setUserKeys((prev) =>
@@ -391,18 +428,30 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
     e.preventDefault();
     setIsRegisteringDev(true);
     try {
-      const wallet =
-        devRegWallet.trim().toLowerCase() ||
-        `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
+      // Issue #35: registration requires proving wallet ownership, so the
+      // wallet must be the connected one (no random / typed-in addresses).
+      const typed = devRegWallet.trim().toLowerCase();
+      if (!connectedWallet || (typed && typed !== connectedWallet)) {
+        alert(
+          lang === "en"
+            ? "Connect the wallet you want to register; ownership is verified by signature."
+            : "请连接要注册的钱包；需要签名验证钱包所有权。"
+        );
+        if (!connectedWallet) authLogin();
+        return;
+      }
+      const wallet = connectedWallet;
       const name = devRegName.trim() || `Dev-${wallet.slice(0, 6)}`;
       const email = devRegEmail.trim() || `${wallet.slice(0, 8)}@koliance.user`;
+      const token = await getConsoleToken(wallet, true);
+      if (!token) return;
 
       try {
         await fetch("/api/user/profile", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "X-User-Id": `did:koliance:wallet:${wallet}`,
+            ...authHeaders(token),
           },
           body: JSON.stringify({
             id: `did:koliance:wallet:${wallet}`,
@@ -442,7 +491,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
     try {
       const res = await fetch("/api/v1/developer/packages/claim-or-purchase", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders(createdSecretKey) },
         body: JSON.stringify({
           wallet_address: activeWallet,
           tier_id: "STARTER_FREE_100",

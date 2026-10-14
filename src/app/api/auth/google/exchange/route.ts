@@ -2,27 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncUserToDatabase } from "@/lib/db";
 import { checkGoogleIdTokenClaims } from "@/lib/googleIdToken";
 import { googleLoginTier } from "@/lib/trustTier";
+import { corsHeadersFor } from "@/lib/cors";
+import { createSessionToken } from "@/lib/session";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+const CORS_METHODS = "POST, OPTIONS";
 
 // Fallback configuration for production server
 const DEFAULT_GOOGLE_CLIENT_ID =
   "59186292138-vd5g8l7uceqku34fua7f0sg79lpe2h98.apps.googleusercontent.com";
-// Obfuscated parts so GitHub secret-scanner will not false-alarm block git push:
-const DEFAULT_GOOGLE_CLIENT_SECRET = ["GOCSPX-sAWd4c", "RPfjyLGLr5fCd", "rmqKT0mwe"].join("");
+// Issue #35 P0-5: the committed client-secret fallback was removed. The secret
+// comes from GOOGLE_CLIENT_SECRET only; without it the route answers needsConfig.
 
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: corsHeaders,
-  });
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeadersFor(request, CORS_METHODS) });
 }
 
 export async function POST(request: NextRequest) {
+  const corsHeaders = corsHeadersFor(request, CORS_METHODS);
   try {
     const body = await request.json();
     // `clientId` / `clientSecret` in the body are deliberately ignored: the
@@ -43,7 +39,7 @@ export async function POST(request: NextRequest) {
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
       DEFAULT_GOOGLE_CLIENT_ID;
 
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || DEFAULT_GOOGLE_CLIENT_SECRET;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET || "";
 
     // Handle sandbox demo verification with explicit synthetic flag and zero credit allocation
     if (id_token === "demo_verified_google_identity") {
@@ -65,6 +61,7 @@ export async function POST(request: NextRequest) {
         {
           success: true,
           synthetic: true,
+          sessionToken: createSessionToken({ userId: demoUser.id, walletAddress: null }),
           dataCaveat: "Synthetic demo identity: Strictly 0 USD credit allocated by on-chain credit engine.",
           profile: {
             id: demoUser.id,
@@ -206,6 +203,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: true,
+        // Issue #35: the verified identity, signed server-side. The wallet is
+        // NOT included: wallet_address in the body is unverified input.
+        sessionToken: createSessionToken({ userId: kolianceUserId, walletAddress: null }),
         profile: {
           id: kolianceUserId,
           googleId: googleUser.sub,

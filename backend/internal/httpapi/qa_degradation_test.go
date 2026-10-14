@@ -70,8 +70,8 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodGet, "/api/v1/liquidations", "", "", 200, "unguarded: nil store degrades to an empty list, and an empty list is the truth when no bot has written one"},
 	{http.MethodGet, "/api/v1/market/health", "", "", 200, "unguarded: must stay able to report configured:false - that is the fact an operator needs, so it is deliberately NOT behind marketData"},
 	{http.MethodGet, "/api/v1/developer/github/profile?username=moonhotline", "", "", 200, "unguarded: GitHub-backed, persists nothing (fabricated fallback: see TestQAFindingGithubProfileCannotExpressProvenance)"},
-	{http.MethodGet, "/api/v1/developer/stats?wallet_address=0x0000000000000000000000000000000000000001", "", "", 200, "unguarded: agentapi is in-memory (its PG write is best-effort, in a goroutine)"},
-	{http.MethodGet, "/api/v1/developer/agents", "", "", 200, "unguarded: agentapi in-memory list"},
+	{http.MethodGet, "/api/v1/developer/stats?wallet_address=0x0000000000000000000000000000000000000001", "", "", 401, "unguarded by DB, but requires an API key (issue #35 P0-4)"},
+	{http.MethodGet, "/api/v1/developer/agents", "", "", 401, "unguarded by DB, but requires an API key (issue #35 P0-4)"},
 
 	// ---- no database needed, refused on other grounds ----
 	{http.MethodGet, "/api/v1/agentcard/cards/cX", "", "", 401, "unguarded: credential checked before any store is touched"},
@@ -81,9 +81,9 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodPost, "/api/v1/stripe/customer", `{}`, "", 401, "unguarded: operator-gated, Stripe-backed"},
 	{http.MethodPost, "/api/v1/verifier/verify", `{"subject":"s"}`, "", 501, "unguarded: pure computation, no store"},
 	{http.MethodPost, "/api/v1/market/trade", `{"symbol":"NVDA","side":"hold","notionalUSD":1,"leverage":1}`, "Bearer " + opToken, 400, "unguarded: Alpaca is the book of record; validation precedes the upstream call"},
-	{http.MethodPost, "/api/v1/agent/bind", `{}`, "", 400, "unguarded: wallet_address is required; no bearer token, so no key is deducted"},
-	{http.MethodPost, "/api/v1/agent/pay", `{}`, "", 400, "unguarded: an empty payment request is rejected before any store is touched"},
-	{http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{}`, "", 400, "unguarded: wallet_address is required; the whole path is in-memory"},
+	{http.MethodPost, "/api/v1/agent/bind", `{}`, "", 401, "unguarded by DB; no bearer token is now a 401 (issue #35 P0-4)"},
+	{http.MethodPost, "/api/v1/agent/pay", `{}`, "", 401, "unguarded by DB; no bearer token is now a 401 (issue #35 P0-4)"},
+	{http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{}`, "", 403, "unguarded by DB; a non-free tier without operator token is refused (issue #35 P0-4)"},
 
 	// ---- no database needed, but the upstream is the failure mode ----
 	// Driven against the closed local port this harness points Alpaca at, so the

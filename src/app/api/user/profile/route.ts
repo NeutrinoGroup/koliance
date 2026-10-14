@@ -1,38 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncUserToDatabase, fetchUserFromDatabase } from "@/lib/db";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-User-Id",
-};
+import { corsHeadersFor } from "@/lib/cors";
+import { getSessionIdentity, isValidWalletAddress } from "@/lib/session";
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 200, headers: corsHeaders });
+const CORS_METHODS = "GET, POST, PUT, OPTIONS";
+
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeadersFor(request, CORS_METHODS) });
 }
 
+/**
+ * Issue #35 P0-3: the bearer value used to BE the user id ("the house number
+ * is the key"). The caller's id now comes only from a verified session token
+ * (src/lib/session.ts); X-User-Id and the koliance_user_id cookie are ignored.
+ */
 function getAuthenticatedUserId(request: NextRequest): string | null {
-  // 1. Authorization: Bearer <id>
-  const authHeader = request.headers.get("authorization");
-  if (authHeader) {
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    if (token) return token;
+  try {
+    return getSessionIdentity(request)?.userId ?? null;
+  } catch (err) {
+    console.error("[Profile] session verification unavailable:", err);
+    return null;
   }
-  // 2. Custom header: X-User-Id
-  const xUserId = request.headers.get("x-user-id");
-  if (xUserId && xUserId.trim()) {
-    return xUserId.trim();
-  }
-  // 3. Cookie session
-  const cookieUser = request.cookies.get("koliance_user_id")?.value;
-  if (cookieUser && cookieUser.trim()) {
-    return cookieUser.trim();
-  }
-  return null;
 }
 
 // GET: Fetch user profile (authenticated users can only view their own profile)
 export async function GET(request: NextRequest) {
+  const corsHeaders = corsHeadersFor(request, CORS_METHODS);
   try {
     const url = new URL(request.url);
     const id = url.searchParams.get("id");
@@ -79,6 +73,7 @@ export async function GET(request: NextRequest) {
 
 // POST / PUT: Update user profile
 export async function POST(request: NextRequest) {
+  const corsHeaders = corsHeadersFor(request, CORS_METHODS);
   try {
     const authUserId = getAuthenticatedUserId(request);
     if (!authUserId) {
@@ -103,6 +98,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Forbidden: You may only update your own profile" },
         { status: 403, headers: corsHeaders }
+      );
+    }
+
+    if (wallet_address && !isValidWalletAddress(wallet_address)) {
+      return NextResponse.json(
+        { error: "wallet_address must be 0x followed by 40 hex characters" },
+        { status: 400, headers: corsHeaders }
       );
     }
 

@@ -1,15 +1,6 @@
 import { supabaseServer } from "@/lib/supabaseServer";
-import { createClient } from "@supabase/supabase-js";
-
-// Public Supabase client for anon client-side operations (subject to RLS)
-const supabaseUrl =
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "https://kjsggytvrmpkmlytkdri.supabase.co";
-const supabaseAnonKey =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  "sb_publishable_bnZzhsY4gqOQc_2n3_wBUA_X622_pre";
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Issue #35 P0-5: the unused anon client with a hard-coded project URL and
+// publishable key was removed; there are no credential fallbacks in this file.
 
 export interface DbUserRecord {
   id: string;
@@ -70,7 +61,7 @@ export async function syncUserToDatabase(
       updated_at: new Date().toISOString(),
     };
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabaseServer()
       .from("users")
       .upsert(payload, { onConflict: "id" })
       .select()
@@ -104,7 +95,7 @@ export async function fetchUserFromDatabase(params: { id?: string; email?: strin
       return null;
     }
 
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabaseServer()
       .from("users")
       .select("*")
       .eq("id", params.id)

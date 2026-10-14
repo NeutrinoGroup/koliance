@@ -1,5 +1,6 @@
 "use client";
 
+import { clearSessionTokens } from "@/lib/sessionClient";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -394,6 +395,7 @@ export function NavAuthBadges({
       // Last, and only after the session is really gone - a local-only failure
       // here would otherwise leave the user cleared out but still signed in.
       signOut();
+      clearSessionTokens(); // issue #35: drop server-signed session tokens too
     } finally {
       setSigningOut(false);
     }
