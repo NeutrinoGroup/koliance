@@ -4,14 +4,36 @@
 > 本文件只做一件事：**列出「只能由作者在 GitHub / Render / Vercel / Monad 等外部平台操作」的信息缺口**，
 > 以及每条缺口的**实测依据、不补的后果、是否阻塞当前进度**。
 
-- **仓库**：`moonhotline/koliance`（本分支 `docs/cicd-todo`，基于 `upstream/main`）
-- **取证基线**：HEAD = `9674f53`；全部行号与命令输出为 **2026-10-11（UTC）在本分支实测**（D1）。
+- **仓库**：`NeutrinoGroup/koliance`（本分支 `docs/cicd-sync-pr46-env`，基于 `upstream/main`）
+- **取证基线**：HEAD = `d72cf26`；本次增量取证为 **2026-10-14（UTC）**。
+  原文的 `9674f53` 读数**保留不改写**（它是当时的证据），但**行号引用前请重跑**（D1）。
 - **本文件的性质**：它是一条**待执行指令**，不是历史记录——故**必须与仓库实测一致**。
   若某条与仓库实测不符，**以实测为准并更新本文件**（D4）。
 
 ---
 
 ## 0. 怎么用这份清单
+
+> ### ⚠️ 2026-10-14 增量：PR #46 把 4 组变量从「可选」变成了「必需」
+>
+> 作者合并的 **PR #46**（修 issue #35 全部 P0）**移除了所有凭证兜底**——这正是 P0-5 的修法。
+> 代价是下列变量**不再有默认值，缺失即以新方式失败**。**重新部署前必须先补齐**，
+> 否则线上不是「回到旧行为」，而是**换一种坏法**（逐条依据见 §C / §B）。
+>
+> | 新必需项 | 平台 | 缺失的后果（代码依据） | 旧清单里的状态 |
+> | --- | --- | --- | --- |
+> | `KOLIANCE_SESSION_SECRET`（**≥ 32 字符**） | Vercel | 会话签发/校验**全部失败**（503）。`src/lib/session.ts:34-37` | **此前未列** |
+> | `KOLIANCE_ALLOWED_ORIGINS` | Vercel | CORS 已**去掉通配 `*`**，只回显白名单内 Origin。`src/lib/cors.ts:9-14` | **此前未列** |
+> | `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` | Vercel | 缺失**抛 `SupabaseConfigError`**（原来是回退占位值）。`src/lib/supabaseServer.ts:17,23-27` | C-2 列为「有兜底」——**兜底已被删除** |
+> | `GOOGLE_CLIENT_SECRET` | Vercel | 缺失 → exchange 返回 `needsConfig`（原来是回退混淆拼接的明文）。`src/app/api/auth/google/exchange/route.ts:42,87` | C-2 列为「有兜底」——**兜底已被删除** |
+>
+> **另一条 PR #46 无法自行完成的事**：**凭证轮换**。PR #46 正文写明「删代码不等于失效」——
+> git 历史里的 Supabase / Google / `.gitleaksignore` 登记的约 14 处凭证，
+> **必须在对应后台作废并重新生成**。这是 §E 的全部内容，且**顺序仍不可颠倒**（见 E-7）。
+>
+> **一条已实测的运维事实（供作者判断部署是否生效）**：截至 2026-10-14 01:30Z，
+> 线上 `koliance.oodai.space` 的 `GET /api/auth/wallet`（**PR #46 新增的路由**）返回 **404** ——
+> 即**线上跑的构建早于 PR #46**。重新部署后该路由应变为 **405**（存在但方法不符）。
 
 1. 每行是一件事，**只做「在哪里补」那一列**。
 2. `谁做` 只有两种取值：**作者**（人，外部后台）或**平台**（托管方自动完成）。
@@ -22,9 +44,10 @@
 
 ---
 
-## 0.1 阻塞当前进度的 6 项清单（单列）
+## 0.1 阻塞当前进度的 8 项清单（单列）
 
-> 以下 6 项标为「**阻塞=是**」，是阻断合约部署、生产联调或准出验收的关键瓶颈，已从下文 29 项明细中单独抽引汇总结算：
+> 以下 8 项标为「**阻塞=是**」，是阻断合约部署、生产联调或准出验收的关键瓶颈，已从下文 31 项明细中单独抽引汇总结算：
+> （**2026-10-14 增补 C-6 / C-7**——PR #46 移除兜底后它们成为新的阻塞项，见 §0 增量表。）
 
 | 编号 | 缺什么 | 在哪补 | 实测依据 | 不补的后果 | 谁做 | 影响面 / 阻塞关系 |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -34,6 +57,8 @@
 | **B-2** | `KOLIANCE_API_TOKEN` | Render 面板（`render.yaml:44-45`） | `backend/internal/config/config.go:67-71` | Operator 端点全部 503 拒决（`batch-settle` 等无法执行） | 作者 | 阻断演示运营与算力结算路径 |
 | **C-4** | `NEXT_PUBLIC_OAUTH_RELAY_ORIGINS` | Vercel 面板（`.env.example:25`） | `src/lib/oauthState.ts:22-27,38-40` | 若 Vercel 生产域名不在默认 4 个白名单内，OAuth 回跳被拒 | 作者 | 阻断非标域名下的 OAuth 登录 |
 | **F-1** | 分支保护 required check（CI 门禁） | GitHub 仓库 Settings → Branches | `docs/planning/执行方案-自治Agent清结算.md:405`、`docs/GAP台账.md:169` | CI 红灯 PR 仍可合入，门禁形同虚设 | 作者 | 03 环准出的唯一核心凭据 |
+| **C-6** | `KOLIANCE_SESSION_SECRET`（≥32 字符） | Vercel 面板 | `src/lib/session.ts:34-37`（**PR #46 新增**） | 会话签发/校验全失败（503），三条身份链全断 | 作者 | **是**（PR #46 部署后立即生效） |
+| **C-7** | `KOLIANCE_ALLOWED_ORIGINS` | Vercel 面板 | `src/lib/cors.ts:9-14`（**PR #46 新增**） | CORS 已无通配，白名单外域名调用被拒 | 作者 | **是**（PR #46 部署后立即生效） |
 
 ---
 
@@ -77,6 +102,8 @@
 | **C-3** | Perp 四地址：`NEXT_PUBLIC_PERP_USDC` / `_ORACLE` / `_VAULT` / `_POSITION_MANAGER` | Vercel 面板（`.env.example:8-11`） | 读取处 `src/lib/perpConfig.ts:95-98`；门禁 `PERP_IS_CONFIGURED` 在 `:102-106` | 面板**拒绝显示任何数字**，`/perp` 与演示控制台显示「Perp 模块未配置」（`src/components/PositionPanel.tsx:409-417`、`src/components/DemoControlPanel.tsx:278-283`）。**这是设计行为，不是 bug** | 作者（值来自 §D） | **是**（阻塞于 D-1） |
 | **C-4** | `NEXT_PUBLIC_OAUTH_RELAY_ORIGINS`（可选） | Vercel 面板（`.env.example:25`） | `src/lib/oauthState.ts:22-27` 硬编码默认白名单 = `koliance.oodai.space` / `koliance.vercel.app` / localhost:3000 / 127.0.0.1:3000；`:38-40` 为**精确匹配** | **若 Vercel 生产域名不是上面四个之一**（例如 `koliance-git-xxx.vercel.app`），GitHub OAuth 跨域回跳会被拒（`:126`）；此时**必须**用本变量显式加白 | 作者 | **是**（仅当域名不在默认白名单内） |
 | **C-5** | `NEXT_PUBLIC_KOLIANCE_ADDRESS` / `NEXT_PUBLIC_KOL_TOKEN_ADDRESS` | Vercel 面板（`.env.example:4-5`） | 读取处 `src/lib/contract.ts:41,45`，两者均有已部署地址兜底 | 不配也能跑；**但兜底值是身份合约的旧地址**——合约重新部署（见 `deploy/README.md:124-132` 的回滚段）后必须同步 | 作者 | 否 |
+| **C-6** | `KOLIANCE_SESSION_SECRET`（**≥ 32 字符**） | Vercel 面板（**PR #46 新增**，`.env.example` 尚未列出） | `src/lib/session.ts:34-37`：`!secret \|\| secret.length < 32` → 抛 `SessionConfigError` | **会话签发/校验全部失败（503）**——API key、profile、钱包签名登录三条链全断。**这是 PR #46 移除兜底的直接代价** | 作者 | **是**（PR #46 部署后立即生效） |
+| **C-7** | `KOLIANCE_ALLOWED_ORIGINS` | Vercel 面板（**PR #46 新增**，`.env.example` 尚未列出） | `src/lib/cors.ts:9-14`：读 `KOLIANCE_ALLOWED_ORIGINS`（逗号分隔）与 `NEXT_PUBLIC_SITE_URL` | **CORS 已去掉通配 `*`**（P0-1 的修法之一）。若前端域名不在白名单内，浏览器调用前端 API 路由会被拒 | 作者 | **是**（PR #46 部署后立即生效） |
 
 ### D. 部署阻塞：合约 → Monad 测试网
 
@@ -123,6 +150,8 @@
 | D-1 → C-3 | **GAP-45**（`docs/GAP台账.md:116`，§5.1） | 「清算结果大屏未接」**阻塞于 GAP-26** |
 | B-1 | **GAP-49**（`docs/GAP台账.md:496`） | 无 Supabase 凭据时 DB 层静默降级内存态 |
 | F-1 | 无独立编号（散在 `docs/changes/003` / `009` / `GAP台账` §2） | **本次不新开编号**：它是既有三处已记录事项，重开属编号撞车（D4） |
+| C-6 / C-7 | **GAP-12** 的续（PR #46 移除兜底后的新必需项） | 与 E 组同源：都是「曾经提交过的秘密」的收尾——**移除兜底是代码侧，轮换是后台侧**，两半都要做 |
+| C-2（更新） | **GAP-12** | 本节原称「有硬编码兜底，故不会报错」——**PR #46 已删除 Supabase / Google 两处兜底**，该描述自 2026-10-14 起不成立（见 §0 增量表） |
 
 > **本文件不改台账、不新开编号**（AI 协同方不在本文件的作用域内新增/变更编号）。
 
