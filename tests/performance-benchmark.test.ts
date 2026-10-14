@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { createSessionToken } from "@/lib/session";
 import { NextRequest } from "next/server";
 import { GET } from "@/app/api/market/route";
 import { POST } from "@/app/api/user/profile/route";
@@ -81,7 +82,7 @@ describe("Performance & Reliability Benchmarks", () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          authorization: "Bearer alice_bench",
+          authorization: `Bearer ${createSessionToken({ userId: "alice_bench", walletAddress: null })}`,
         },
         body: JSON.stringify(maliciousPayload),
       });

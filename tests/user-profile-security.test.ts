@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createSessionToken } from "@/lib/session";
 import { GET, POST, PUT } from "@/app/api/user/profile/route";
 import { NextRequest } from "next/server";
 import * as db from "@/lib/db";
@@ -45,7 +46,7 @@ describe("User Profile Security & Privilege Stripping", () => {
     const req = new NextRequest("http://localhost:3000/api/user/profile?id=victim_user", {
       method: "GET",
       headers: {
-        authorization: "Bearer attacker_user",
+        authorization: `Bearer ${createSessionToken({ userId: "attacker_user", walletAddress: null })}`,
       },
     });
 
@@ -67,7 +68,7 @@ describe("User Profile Security & Privilege Stripping", () => {
     const req = new NextRequest("http://localhost:3000/api/user/profile?id=alice_user", {
       method: "GET",
       headers: {
-        authorization: "Bearer alice_user",
+        authorization: `Bearer ${createSessionToken({ userId: "alice_user", walletAddress: null })}`,
       },
     });
 
@@ -100,7 +101,7 @@ describe("User Profile Security & Privilege Stripping", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        authorization: "Bearer attacker_user",
+        authorization: `Bearer ${createSessionToken({ userId: "attacker_user", walletAddress: null })}`,
       },
       body: JSON.stringify({
         id: "victim_user",
@@ -133,7 +134,7 @@ describe("User Profile Security & Privilege Stripping", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        authorization: "Bearer alice_user",
+        authorization: `Bearer ${createSessionToken({ userId: "alice_user", walletAddress: null })}`,
       },
       body: JSON.stringify({
         id: "alice_user",
@@ -174,7 +175,7 @@ describe("User Profile Security & Privilege Stripping", () => {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        authorization: "Bearer bob_user",
+        authorization: `Bearer ${createSessionToken({ userId: "bob_user", walletAddress: null })}`,
       },
       body: JSON.stringify({
         id: "bob_user",

@@ -447,3 +447,17 @@ func (s *Service) ListBoundAgents() []*AgentBindingView {
 	}
 	return agents
 }
+
+// ListBoundAgentsForWallet returns only the agents bound to walletAddress.
+func (s *Service) ListBoundAgentsForWallet(walletAddress string) []*AgentBindingView {
+	walletAddress = strings.ToLower(strings.TrimSpace(walletAddress))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	agents := make([]*AgentBindingView, 0)
+	for _, a := range s.agentBindings {
+		if a.WalletAddress == walletAddress {
+			agents = append(agents, a)
+		}
+	}
+	return agents
+}

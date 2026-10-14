@@ -7,6 +7,12 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
+    // Test-only values. Production must set real ones (issue #35: no
+    // credential fallbacks in source - see src/lib/session.ts / google exchange).
+    env: {
+      KOLIANCE_SESSION_SECRET: "test-only-session-secret-0123456789abcdef",
+      GOOGLE_CLIENT_SECRET: "test-only-google-client-secret",
+    },
     include: ["tests/**/*.test.ts"],
     exclude: ["e2e/**", "node_modules/**"],
 

@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabaseServer";
 import crypto from "crypto";
+import { isValidWalletAddress } from "@/lib/session";
 
 export interface ApiKeyRecord {
   id: string;
@@ -50,16 +51,30 @@ export async function listUserApiKeys(params: {
   if (!userId && !walletAddress) return [];
 
   try {
-    let query = supabaseServer.from("api_keys").select("*");
-    if (userId && walletAddress) {
-      query = query.or(`user_id.eq.${userId},wallet_address.eq.${walletAddress.toLowerCase()}`);
-    } else if (userId) {
-      query = query.eq("user_id", userId);
-    } else if (walletAddress) {
-      query = query.eq("wallet_address", walletAddress.toLowerCase());
+    // Issue #35 P0-2: never interpolate caller-influenced strings into a
+    // PostgREST filter expression (`.or("user_id.eq.${x},...")`). Each
+    // identity is matched with its own parameterised `.eq()` and the results
+    // are merged here.
+    const queries = [];
+    if (userId) {
+      queries.push(supabaseServer().from("api_keys").select("*").eq("user_id", userId).order("created_at", { ascending: false }));
     }
-
-    const { data, error } = await query.order("created_at", { ascending: false });
+    if (walletAddress) {
+      if (!isValidWalletAddress(walletAddress)) return [];
+      queries.push(
+        supabaseServer().from("api_keys").select("*").eq("wallet_address", walletAddress.toLowerCase()).order("created_at", { ascending: false })
+      );
+    }
+    const results = await Promise.all(queries);
+    const merged = new Map<string, ApiKeyRecord>();
+    let error: unknown = null;
+    for (const r of results) {
+      if (r.error) error = r.error;
+      for (const row of (r.data ?? []) as ApiKeyRecord[]) merged.set(row.id, row);
+    }
+    const data = Array.from(merged.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
 
     if (!error && Array.isArray(data) && data.length > 0) {
       return data as ApiKeyRecord[];
@@ -116,7 +131,7 @@ export async function createUserApiKey(params: {
 
   try {
     // Attempt persist to Supabase "api_keys" table
-    const { data, error } = await supabaseServer
+    const { data, error } = await supabaseServer()
       .from("api_keys")
       .insert(record)
       .select()
@@ -154,14 +169,20 @@ export async function revokeUserApiKey(params: {
   walletAddress?: string | null;
 }): Promise<boolean> {
   const { keyId, userId, walletAddress } = params;
+  // Ownership is mandatory: a revoke with no owner filter would revoke anyone's key.
+  if (!userId && !walletAddress) return false;
+  if (walletAddress && !isValidWalletAddress(walletAddress)) return false;
 
   try {
-    let query = supabaseServer.from("api_keys").update({ status: "REVOKED", updated_at: new Date().toISOString() }).eq("id", keyId);
+    let query = supabaseServer().from("api_keys").update({ status: "REVOKED", updated_at: new Date().toISOString() }).eq("id", keyId);
     if (userId) {
       query = query.eq("user_id", userId);
     }
-    const { error } = await query;
-    if (!error) {
+    if (walletAddress) {
+      query = query.eq("wallet_address", walletAddress.toLowerCase());
+    }
+    const { data: updated, error } = await query.select("id");
+    if (!error && Array.isArray(updated) && updated.length > 0) {
       const existing = memoryApiKeys.get(keyId);
       if (existing) {
         existing.status = "REVOKED";

@@ -31,6 +31,7 @@
  * mismatch), so both read the one constant in `src/lib/authConfig.ts`.
  */
 
+import { setSessionToken } from "@/lib/sessionClient";
 import { OAUTH_REDIRECT_URI } from "@/lib/authConfig";
 import { writeAccountState } from "@/lib/authState";
 
@@ -113,13 +114,15 @@ export async function exchangeGoogleCode(
     }),
   });
 
-  const data = (await res.json()) as { error?: string; profile?: GoogleProfile };
+  const data = (await res.json()) as { error?: string; profile?: GoogleProfile; sessionToken?: string };
   if (!res.ok || data.error) {
     throw new Error(data.error || "Google 认证授权失败");
   }
   if (!data.profile) {
     throw new Error("Google 认证授权响应缺少 profile");
   }
+  // Issue #35: keep the server-signed session token; API routes verify it.
+  setSessionToken(data.sessionToken ?? null);
   return data.profile;
 }
 

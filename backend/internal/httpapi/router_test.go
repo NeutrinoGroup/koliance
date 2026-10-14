@@ -546,7 +546,7 @@ func TestAgentAPIRoutes_BindAndPay(t *testing.T) {
 	wallet := "0x71C8360f3E118A7cD87A0cf633a69a089d4c20b2"
 
 	// 1. Generate Key
-	keyRec := do(h, http.MethodPost, "/api/v1/developer/keys", `{"wallet_address":"`+wallet+`","tier":"STARTER_FREE"}`, nil)
+	keyRec := do(h, http.MethodPost, "/api/v1/developer/keys", `{"wallet_address":"`+wallet+`","tier":"STARTER_FREE"}`, map[string]string{"Authorization": "Bearer " + opToken})
 	if keyRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on key gen, got %d: %s", keyRec.Code, keyRec.Body.String())
 	}
@@ -562,7 +562,7 @@ func TestAgentAPIRoutes_BindAndPay(t *testing.T) {
 	rawKey := keyResp.Data.RawKey
 
 	// 2. Claim free package
-	claimRec := do(h, http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{"wallet_address":"`+wallet+`","tier_id":"STARTER_FREE_100","payment_method":"free_claim"}`, nil)
+	claimRec := do(h, http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{"wallet_address":"`+wallet+`","tier_id":"STARTER_FREE_100","payment_method":"free_claim"}`, map[string]string{"Authorization": "Bearer " + rawKey})
 	if claimRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on package claim, got %d: %s", claimRec.Code, claimRec.Body.String())
 	}
@@ -601,13 +601,46 @@ func TestAgentAPIRoutes_BindAndPay(t *testing.T) {
 	}
 
 	// 5. Query stats & agents
-	statsRec := do(h, http.MethodGet, "/api/v1/developer/stats?wallet_address="+wallet, "", nil)
+	statsRec := do(h, http.MethodGet, "/api/v1/developer/stats?wallet_address="+wallet, "", map[string]string{"Authorization": "Bearer " + rawKey})
 	if statsRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on stats, got %d: %s", statsRec.Code, statsRec.Body.String())
 	}
 
-	agentsRec := do(h, http.MethodGet, "/api/v1/developer/agents", "", nil)
+	agentsRec := do(h, http.MethodGet, "/api/v1/developer/agents", "", map[string]string{"Authorization": "Bearer " + rawKey})
 	if agentsRec.Code != http.StatusOK {
 		t.Fatalf("expected 200 on agents, got %d: %s", agentsRec.Code, agentsRec.Body.String())
+	}
+
+	// 6. Issue #35 P0-4: the key cannot act for another wallet.
+	other := "0x0000000000000000000000000000000000000001"
+	auth := map[string]string{"Authorization": "Bearer " + rawKey}
+	if rec := do(h, http.MethodGet, "/api/v1/developer/stats?wallet_address="+other, "", auth); rec.Code != http.StatusForbidden {
+		t.Fatalf("stats for foreign wallet: want 403, got %d", rec.Code)
+	}
+	if rec := do(h, http.MethodPost, "/api/v1/agent/bind", strings.Replace(bindBody, wallet, other, 1), auth); rec.Code != http.StatusForbidden {
+		t.Fatalf("bind foreign wallet: want 403, got %d", rec.Code)
+	}
+	if rec := do(h, http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{"wallet_address":"`+wallet+`","tier_id":"SCALE_ULTRA_100K"}`, auth); rec.Code != http.StatusForbidden {
+		t.Fatalf("paid tier without operator: want 403, got %d", rec.Code)
+	}
+}
+
+func TestAgentAPIRoutes_RequireKey(t *testing.T) {
+	h := newTestRouter(t, nil)
+	cases := []struct{ method, path, body string }{
+		{http.MethodPost, "/api/v1/agent/bind", `{"agent_name":"a","model_name":"m","wallet_address":"0x0000000000000000000000000000000000000001"}`},
+		{http.MethodPost, "/api/v1/agent/pay", `{"amount":1,"item_name":"x","order_hash":"0x1","quantity":1,"payment_method":"crypto"}`},
+		{http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{"wallet_address":"0x0000000000000000000000000000000000000001","tier_id":"STARTER_FREE_100"}`},
+		{http.MethodGet, "/api/v1/developer/stats?wallet_address=0x0000000000000000000000000000000000000001", ""},
+		{http.MethodGet, "/api/v1/developer/agents", ""},
+		{http.MethodPost, "/api/v1/developer/keys", `{"wallet_address":"0x0000000000000000000000000000000000000001"}`},
+	}
+	for _, c := range cases {
+		for _, hdr := range []map[string]string{nil, {"Authorization": "Bearer kol_live_bogus"}} {
+			rec := do(h, c.method, c.path, c.body, hdr)
+			if rec.Code != http.StatusUnauthorized {
+				t.Errorf("%s %s (%v): want 401, got %d: %s", c.method, c.path, hdr, rec.Code, rec.Body.String())
+			}
+		}
 	}
 }

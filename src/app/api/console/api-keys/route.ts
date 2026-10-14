@@ -1,143 +1,114 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listUserApiKeys, createUserApiKey, revokeUserApiKey } from "@/lib/apiKeyDb";
 import { fetchUserFromDatabase, syncUserToDatabase } from "@/lib/db";
+import { corsHeadersFor } from "@/lib/cors";
+import { getSessionIdentity, SessionConfigError, type SessionIdentity } from "@/lib/session";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-User-Id, X-Wallet-Address",
-};
+/**
+ * Developer API keys.
+ *
+ * Security (issue #35 P0-1): the caller's identity comes ONLY from a verified
+ * session token (`Authorization: Bearer <token>`, see src/lib/session.ts).
+ * X-User-Id / X-Wallet-Address headers, the koliance_user_id cookie, the
+ * ?wallet= / ?user_id= query parameters and body.user_id / body.wallet_address
+ * are no longer read. CORS is restricted to KOLIANCE_ALLOWED_ORIGINS.
+ */
+const METHODS = "GET, POST, DELETE, OPTIONS";
+const ZERO_WALLET = "0x0000000000000000000000000000000000000000";
+const ALLOWED_TIERS = new Set(["STARTER_FREE"]);
+const ALLOWED_SCOPES = new Set(["trade:perp", "pay:micropayment", "query:proof"]);
 
-export async function OPTIONS() {
-  return new NextResponse(null, { status: 200, headers: corsHeaders });
+export async function OPTIONS(request: NextRequest) {
+  return new NextResponse(null, { status: 204, headers: corsHeadersFor(request, METHODS) });
 }
 
-function getAuthIdentity(request: NextRequest): { userId: string | null; walletAddress: string | null } {
-  let userId: string | null = null;
-  let walletAddress: string | null = null;
+type AuthResult = { identity: SessionIdentity } | { response: NextResponse };
 
-  const authHeader = request.headers.get("authorization");
-  if (authHeader) {
-    const token = authHeader.replace(/^Bearer\s+/i, "").trim();
-    if (token) {
-      if (token.startsWith("0x")) {
-        walletAddress = token.toLowerCase();
-      } else {
-        userId = token;
-      }
-    }
-  }
-
-  const xUserId = request.headers.get("x-user-id");
-  if (xUserId && xUserId.trim()) {
-    userId = xUserId.trim();
-  }
-
-  const xWallet = request.headers.get("x-wallet-address");
-  if (xWallet && xWallet.trim()) {
-    walletAddress = xWallet.trim().toLowerCase();
-  }
-
-  const cookieUser = request.cookies.get("koliance_user_id")?.value;
-  if (cookieUser && cookieUser.trim()) {
-    userId = cookieUser.trim();
-  }
-
-  // Also inspect query params for wallet if not specified
-  const url = new URL(request.url);
-  const qWallet = url.searchParams.get("wallet");
-  if (!walletAddress && qWallet && qWallet.startsWith("0x")) {
-    walletAddress = qWallet.trim().toLowerCase();
-  }
-
-  const qUser = url.searchParams.get("user_id");
-  if (!userId && qUser) {
-    userId = qUser.trim();
-  }
-
-  return { userId, walletAddress };
-}
-
-// GET: List API keys for authenticated & registered user
-export async function GET(request: NextRequest) {
+function authenticate(request: NextRequest, cors: Record<string, string>): AuthResult {
+  let identity: SessionIdentity | null;
   try {
-    const { userId, walletAddress } = getAuthIdentity(request);
-
-    if (!userId && !walletAddress) {
-      return NextResponse.json(
+    identity = getSessionIdentity(request);
+  } catch (err) {
+    if (err instanceof SessionConfigError) {
+      return { response: NextResponse.json({ error: "SESSION_NOT_CONFIGURED", message: err.message }, { status: 503, headers: cors }) };
+    }
+    throw err;
+  }
+  if (!identity) {
+    return {
+      response: NextResponse.json(
         {
           error: "UNAUTHORIZED_REGISTRATION_REQUIRED",
-          message: "User registration or authentication required to access developer API keys.",
+          message: "A valid session token is required. Sign in with Google or your wallet first.",
         },
-        { status: 401, headers: corsHeaders }
-      );
-    }
+        { status: 401, headers: cors }
+      ),
+    };
+  }
+  return { identity };
+}
 
+// GET: List API keys owned by the signed-in user
+export async function GET(request: NextRequest) {
+  const cors = corsHeadersFor(request, METHODS);
+  try {
+    const auth = authenticate(request, cors);
+    if ("response" in auth) return auth.response;
+    const { userId, walletAddress } = auth.identity;
     const keys = await listUserApiKeys({ userId, walletAddress });
-    return NextResponse.json({ success: true, keys }, { headers: corsHeaders });
+    return NextResponse.json({ success: true, keys }, { headers: cors });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: msg }, { status: 500, headers: corsHeaders });
+    return NextResponse.json({ error: msg }, { status: 500, headers: cors });
   }
 }
 
-// POST: Create a new API key for the registered user
+// POST: Create a new API key for the signed-in user
 export async function POST(request: NextRequest) {
+  const cors = corsHeadersFor(request, METHODS);
   try {
-    const identity = getAuthIdentity(request);
-    let body: any = {};
+    const auth = authenticate(request, cors);
+    if ("response" in auth) return auth.response;
+    const { userId, walletAddress } = auth.identity;
+
+    let body: Record<string, unknown> = {};
     try {
       body = await request.json();
     } catch {
       // Empty body allowed with defaults
     }
 
-    const userId = body.user_id || identity.userId || (identity.walletAddress ? `did:koliance:wallet:${identity.walletAddress}` : null);
-    const walletAddress = body.wallet_address || identity.walletAddress;
+    const effectiveWallet = walletAddress || ZERO_WALLET;
 
-    // Strict Gate: Developer MUST be registered / authenticated
-    if (!userId && !walletAddress) {
-      return NextResponse.json(
-        {
-          error: "REGISTRATION_REQUIRED",
-          message: "Please register your developer account or connect your wallet before creating an API key.",
-        },
-        { status: 401, headers: corsHeaders }
-      );
-    }
-
-    const effectiveWallet = walletAddress || "0x0000000000000000000000000000000000000000";
-    const effectiveUserId = userId || `did:koliance:wallet:${effectiveWallet}`;
-
-    // Ensure user record exists in database
-    if (effectiveUserId) {
-      try {
-        const existing = await fetchUserFromDatabase({ id: effectiveUserId });
-        if (!existing) {
-          await syncUserToDatabase(
-            {
-              id: effectiveUserId,
-              email: body.email || `${effectiveWallet.slice(0, 8)}@koliance.user`,
-              name: body.user_name || body.name || `Dev-${effectiveWallet.slice(0, 6)}`,
-              wallet_address: effectiveWallet,
-            },
-            false
-          );
-        }
-      } catch (e) {
-        console.warn("[API Keys Route] Notice during user existence check:", e);
+    try {
+      const existing = await fetchUserFromDatabase({ id: userId });
+      if (!existing) {
+        await syncUserToDatabase(
+          {
+            id: userId,
+            email: `${effectiveWallet.slice(0, 8)}@koliance.user`,
+            name: `Dev-${effectiveWallet.slice(0, 6)}`,
+            wallet_address: walletAddress,
+          },
+          false
+        );
       }
+    } catch (e) {
+      console.warn("[API Keys Route] Notice during user existence check:", e);
     }
 
-    const keyName = body.name?.trim() || "Default API Key";
-    const tier = body.tier || "STARTER_FREE";
-    const rateLimitRpm = body.rate_limit_rpm ? Number(body.rate_limit_rpm) : 60;
-    const scopes = Array.isArray(body.scopes) && body.scopes.length > 0
-      ? body.scopes
-      : ["trade:perp", "pay:micropayment", "query:proof"];
+    const keyName = typeof body.name === "string" && body.name.trim() ? body.name.trim().slice(0, 64) : "Default API Key";
+    // Tier and rate limit are billing attributes; self-service creation cannot raise them.
+    const tier = typeof body.tier === "string" && ALLOWED_TIERS.has(body.tier) ? body.tier : "STARTER_FREE";
+    const rpm = Number(body.rate_limit_rpm);
+    const rateLimitRpm = Number.isFinite(rpm) && rpm > 0 ? Math.min(Math.floor(rpm), 60) : 60;
+    const requestedScopes = Array.isArray(body.scopes)
+      ? body.scopes.filter((s): s is string => typeof s === "string" && ALLOWED_SCOPES.has(s))
+      : [];
+    const scopes = requestedScopes.length > 0 ? requestedScopes : Array.from(ALLOWED_SCOPES);
 
     const result = await createUserApiKey({
-      userId: effectiveUserId,
+      userId,
       walletAddress: effectiveWallet,
       name: keyName,
       tier,
@@ -152,38 +123,36 @@ export async function POST(request: NextRequest) {
         key: result.key,
         raw_key: result.raw_key, // Returned only once!
       },
-      { status: 201, headers: corsHeaders }
+      { status: 201, headers: cors }
     );
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: msg }, { status: 500, headers: corsHeaders });
+    return NextResponse.json({ error: msg }, { status: 500, headers: cors });
   }
 }
 
-// DELETE: Revoke an API key
+// DELETE: Revoke an API key owned by the signed-in user
 export async function DELETE(request: NextRequest) {
+  const cors = corsHeadersFor(request, METHODS);
   try {
-    const identity = getAuthIdentity(request);
+    const auth = authenticate(request, cors);
+    if ("response" in auth) return auth.response;
     const url = new URL(request.url);
     const keyId = url.searchParams.get("key_id") || url.searchParams.get("id");
 
-    if (!keyId) {
-      return NextResponse.json({ error: "key_id parameter is required" }, { status: 400, headers: corsHeaders });
+    if (!keyId || !/^key_[0-9a-f]{1,64}$/.test(keyId)) {
+      return NextResponse.json({ error: "key_id parameter is required" }, { status: 400, headers: cors });
     }
 
-    const revoked = await revokeUserApiKey({
-      keyId,
-      userId: identity.userId,
-      walletAddress: identity.walletAddress,
-    });
+    const revoked = await revokeUserApiKey({ keyId, userId: auth.identity.userId });
 
     if (!revoked) {
-      return NextResponse.json({ error: "Key not found or unauthorized to revoke" }, { status: 404, headers: corsHeaders });
+      return NextResponse.json({ error: "Key not found or unauthorized to revoke" }, { status: 404, headers: cors });
     }
 
-    return NextResponse.json({ success: true, message: "API key successfully revoked" }, { headers: corsHeaders });
+    return NextResponse.json({ success: true, message: "API key successfully revoked" }, { headers: cors });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: msg }, { status: 500, headers: corsHeaders });
+    return NextResponse.json({ error: msg }, { status: 500, headers: cors });
   }
 }

@@ -701,26 +701,59 @@ func NewRouter(d Deps) http.Handler {
 		})
 	}
 
+	// requireAgentKey (issue #35 P0-4): every agentapi route demands a valid
+	// `Authorization: Bearer kol_live_...` key. A missing key is a 401, not a
+	// pass-through - the old `if token != ""` let anonymous callers skip both
+	// the quota and the rate limiter. The key's own wallet is the caller's
+	// identity; wallet fields in the body are checked against it, never trusted.
+	requireAgentKey := func(w http.ResponseWriter, r *http.Request, cost int) (*agentapi.APIKeyCredential, bool) {
+		token := bearer(r)
+		if token == "" {
+			w.Header().Set("WWW-Authenticate", `Bearer realm="koliance"`)
+			jsonEnvelopeError(w, r, http.StatusUnauthorized, 401, CodeUnauthorized, errors.New("API key required"))
+			return nil, false
+		}
+		cred, err := d.AgentAPI.ValidateAndDeductKey(token, cost)
+		if err != nil {
+			switch {
+			case errors.Is(err, agentapi.ErrQuotaExhausted):
+				jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeQuotaExhausted, err)
+			case errors.Is(err, agentapi.ErrRateLimited):
+				jsonEnvelopeError(w, r, http.StatusTooManyRequests, 429, CodeRateLimited, err)
+			default:
+				jsonEnvelopeError(w, r, http.StatusUnauthorized, 401, CodeUnauthorized, err)
+			}
+			return nil, false
+		}
+		return cred, true
+	}
+	// sameWallet: an empty body wallet means "the key's wallet"; any other
+	// value must match it (case-insensitive) or the request is 403.
+	sameWallet := func(w http.ResponseWriter, r *http.Request, cred *agentapi.APIKeyCredential, wallet *string) bool {
+		got := strings.ToLower(strings.TrimSpace(*wallet))
+		if got == "" {
+			*wallet = cred.WalletAddress
+			return true
+		}
+		if got != strings.ToLower(cred.WalletAddress) {
+			jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeUnauthorized, errors.New("wallet_address does not match the API key's wallet"))
+			return false
+		}
+		*wallet = got
+		return true
+	}
+
 	// POST /api/v1/agent/bind - Agent and Wallet binding
 	h("/api/v1/agent/bind", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
-		token := bearer(r)
-		if token != "" {
-			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
-				if errors.Is(err, agentapi.ErrQuotaExhausted) {
-					jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeQuotaExhausted, err)
-					return
-				}
-				if errors.Is(err, agentapi.ErrRateLimited) {
-					jsonEnvelopeError(w, r, http.StatusTooManyRequests, 429, CodeRateLimited, err)
-					return
-				}
-				jsonEnvelopeError(w, r, http.StatusUnauthorized, 401, CodeUnauthorized, err)
-				return
-			}
+		cred, ok := requireAgentKey(w, r, 1)
+		if !ok {
+			return
 		}
-
 		var req agentapi.BindAgentRequest
 		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if !sameWallet(w, r, cred, &req.WalletAddress) {
 			return
 		}
 		binding, err := d.AgentAPI.BindAgent(req.WalletAddress, req)
@@ -733,27 +766,15 @@ func NewRouter(d Deps) http.Handler {
 
 	// POST /api/v1/agent/pay - Autonomous Agent Payment & On-Chain Committal
 	h("/api/v1/agent/pay", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
-		token := bearer(r)
-		if token != "" {
-			if _, err := d.AgentAPI.ValidateAndDeductKey(token, 1); err != nil {
-				if errors.Is(err, agentapi.ErrQuotaExhausted) {
-					jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeQuotaExhausted, err)
-					return
-				}
-				if errors.Is(err, agentapi.ErrRateLimited) {
-					jsonEnvelopeError(w, r, http.StatusTooManyRequests, 429, CodeRateLimited, err)
-					return
-				}
-				jsonEnvelopeError(w, r, http.StatusUnauthorized, 401, CodeUnauthorized, err)
-				return
-			}
+		cred, ok := requireAgentKey(w, r, 1)
+		if !ok {
+			return
 		}
-
 		var req agentapi.PaymentRequest
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		order, err := d.AgentAPI.ProcessPayment("", req)
+		order, err := d.AgentAPI.ProcessPayment(cred.WalletAddress, req)
 		if err != nil {
 			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, err)
 			return
@@ -761,7 +782,11 @@ func NewRouter(d Deps) http.Handler {
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", order)
 	}))
 
-	// POST /api/v1/developer/packages/claim-or-purchase - 3-tier recharge & 3-free-claims
+	// POST /api/v1/developer/packages/claim-or-purchase
+	//
+	// Free starter claims need the wallet's own API key. Paid tiers
+	// (GROWTH_PRO_10K / SCALE_ULTRA_100K) have no payment-proof check in this
+	// service, so they are operator-only until one exists (issue #35 P0-4).
 	h("/api/v1/developer/packages/claim-or-purchase", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			WalletAddress string `json:"wallet_address"`
@@ -771,9 +796,23 @@ func NewRouter(d Deps) http.Handler {
 		if !decodeJSON(w, r, &req) {
 			return
 		}
-		if req.WalletAddress == "" {
-			jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, errors.New("wallet_address is required"))
-			return
+		if req.TierID != "STARTER_FREE_100" {
+			if !isOperator(cfg.APIToken, r) {
+				jsonEnvelopeError(w, r, http.StatusForbidden, 403, CodeUnauthorized, errors.New("paid tiers require a verified payment; not available via self-service"))
+				return
+			}
+			if req.WalletAddress == "" {
+				jsonEnvelopeError(w, r, http.StatusBadRequest, 400, CodeInvalidRequest, errors.New("wallet_address is required"))
+				return
+			}
+		} else {
+			cred, ok := requireAgentKey(w, r, 0)
+			if !ok {
+				return
+			}
+			if !sameWallet(w, r, cred, &req.WalletAddress) {
+				return
+			}
 		}
 		resp, err := d.AgentAPI.ClaimOrPurchasePackage(req.WalletAddress, agentapi.PackageClaimRequest{
 			TierID:        req.TierID,
@@ -792,15 +831,12 @@ func NewRouter(d Deps) http.Handler {
 
 	// POST /api/v1/developer/keys - Create API Key
 	//
-	// withDB, unlike its agentapi siblings above: this is the one handler in the
-	// agentapi group that reaches db.Pool (GenerateAPIKey INSERTs into api_keys).
-	// The insert is best-effort - it runs in a goroutine and its error is
-	// discarded (agentapi/service.go:157-169) - so the route would still answer
-	// without a pool. It is guarded anyway: the process that serves it cannot
-	// start without a database (cmd/api), so the refusal costs nothing, and an
-	// unguarded 200 that issues a key nobody can ever look up again is exactly
-	// the "success that persisted nothing" shape GAP-49 removed.
-	h("/api/v1/developer/keys", methodOnly(http.MethodPost, withDB(func(w http.ResponseWriter, r *http.Request) {
+	// Operator-only (issue #35 P0-4): minting a key for an arbitrary wallet and
+	// tier is an administrative act. Self-service key creation for signed-in
+	// users goes through the Next.js console route (/api/console/api-keys),
+	// which verifies the session. withDB is kept for the reasons in the
+	// withDB comment above.
+	h("/api/v1/developer/keys", methodOnly(http.MethodPost, withDB(operator(func(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			WalletAddress string `json:"wallet_address"`
 			Tier          string `json:"tier"`
@@ -818,18 +854,29 @@ func NewRouter(d Deps) http.Handler {
 			return
 		}
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", key)
-	})))
+	}))))
 
-	// GET /api/v1/developer/stats - Console stats and usage metrics
+	// GET /api/v1/developer/stats - Console stats for the API key's own wallet.
 	h("/api/v1/developer/stats", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
-		wallet := strings.TrimSpace(r.URL.Query().Get("wallet_address"))
+		cred, ok := requireAgentKey(w, r, 0)
+		if !ok {
+			return
+		}
+		wallet := r.URL.Query().Get("wallet_address")
+		if !sameWallet(w, r, cred, &wallet) {
+			return
+		}
 		stats := d.AgentAPI.GetConsoleStats(wallet)
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", stats)
 	}))
 
-	// GET /api/v1/developer/agents - List bound agents
+	// GET /api/v1/developer/agents - Agents bound to the API key's own wallet.
 	h("/api/v1/developer/agents", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
-		agents := d.AgentAPI.ListBoundAgents()
+		cred, ok := requireAgentKey(w, r, 0)
+		if !ok {
+			return
+		}
+		agents := d.AgentAPI.ListBoundAgentsForWallet(cred.WalletAddress)
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", agents)
 	}))
 

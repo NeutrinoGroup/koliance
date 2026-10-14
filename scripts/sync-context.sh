@@ -11,8 +11,8 @@
 set -euo pipefail
 
 # 1. 解析环境变量或默认值
-SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:-https://kjsggytvrmpkmlytkdri.supabase.co}"
-SUPABASE_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:-sb_publishable_bnZzhsY4gqOQc_2n3_wBUA_X622_pre}"
+SUPABASE_URL="${NEXT_PUBLIC_SUPABASE_URL:?NEXT_PUBLIC_SUPABASE_URL must be set}"
+SUPABASE_KEY="${NEXT_PUBLIC_SUPABASE_ANON_KEY:?NEXT_PUBLIC_SUPABASE_ANON_KEY must be set}"
 
 # 如果根目录或 backend 存在 .env.local / .env，尝试读取
 if [ -f "$(dirname "$0")/../.env.local" ]; then

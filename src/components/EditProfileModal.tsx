@@ -1,5 +1,6 @@
 "use client";
 
+import { authHeaders, getSessionToken } from "@/lib/sessionClient";
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -80,8 +81,9 @@ export function EditProfileModal({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${profile.id}`,
-          "x-user-id": profile.id,
+          // Issue #35 P0-3: the server-signed session token from the Google
+          // exchange, not the (public) user id.
+          ...authHeaders(getSessionToken()),
         },
         body: JSON.stringify(payload),
       });
