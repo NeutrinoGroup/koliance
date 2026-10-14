@@ -261,12 +261,12 @@
 | **GAP-62** | `docs/changes/` 仍有 `027` / `028` 两个前缀**各两份**（上游横向合流带入、**非本轮引入**；git **不因文件名前缀相同而报冲突**，故静默） | 🟡 P2 | 🟠 | 见 `docs/changes/043` §2。**本轮只登记未修**——要动上游既有文件命名，需先定口径 |
 | **GAP-63** | `deploy/README.md:96` 的 `docs/changes/027` 是**悬空指针**（W1 侧引入；`027→035→039` 两次让位后失效） | 🟡 P2 | 🟠 | 见 `docs/changes/043` §2（首轮已登记，见 `docs/changes/041` §3.2 末条）。**改 `deploy/`，不在 `ssot-scribe` 作用域** |
 | **GAP-64** | `docs/planning/README.md` 的变更索引止于 `031`，未含 `032`~`041` | 🟡 P2 | 🟠 | 见 `docs/changes/043` §2。该文件**在 `docs/` 内、可直接派 `ssot-scribe`**，但**不属于本轮分派**，故先登记 |
-| **GAP-65** | `cmd/api` 的**启动 fail-fast（GAP-49 的核心）无任何自动化判据** —— 变异回静默内存降级后**全套仍绿** | 🟠 P1 | 🟠 | 见 §5.9（**本轮独立实测复核**，非转述）；`cmd/api` 至今**没有测试文件** |
+| **GAP-65** | `cmd/api` 的**启动 fail-fast（GAP-49 的核心）无任何自动化判据** —— 变异回静默内存降级后**全套仍绿** | 🟠 P1 | ✅ | **✅ 已修**（`docs/changes/069`）：新增 `backend/cmd/api/main_test.go` 2 条（`run` 必须返回 `ErrDatabaseURLRequired` · **持端口**证明拒绝先于绑定），负向对照真跑（变异回内存降级 → 两条同时红，且改为**有界 3s** 而非挂起）。`cmd/api` 不再 `[no test files]`。**残余**：`run` 的后续接线（Deps/handler 链）仍无判据，并入 GAP-60 |
 | **GAP-66** | `005` 触发器**允收自带 `ledger_seq`**（与自身注释矛盾），且产出的 `balance_after` **会被本仓 `CheckEntries` 拒收** | 🟠 P1 | 🟠 | 见 §5.9。**Go 侧已实测**（`ErrBalanceAfterMismatch: stored 7, replayed 10`）；**PG 侧未实测**，阻塞于 **GAP-60** |
 | **GAP-67** | DDL `NUMERIC(36,18)` **静默舍入** vs Go `ParseAmount` **拒收** 19 位小数 —— 两道门对同一字面量给出不同答案 | 🟡 P2 | 🟠 | 见 §5.9。Go 侧已实测；**PG 舍入未实测**（GAP-60） |
 | **GAP-68** | `user_address` **不参与任何不变量**：无格式 CHECK、无 FK、余额作用域不含它（Go 侧同样只查非空） | 🟡 P2 | 🟠 | 见 §5.9。**是口径决策**（归属 vs 标注），非 bug |
 | **GAP-69** | `settlement_ledger` **无 UPDATE/DELETE 守卫**（RLS 只挡 `anon`，应用是 owner），**且无运行判据读回审计** | 🟡 P2 | 🟠 | 见 §5.9。「只可追加」目前只是**命名**，不是约束；守卫与判据**两样都缺** |
-| **GAP-70** | qa 路由清单**无「路由 → 清单」反向对拍** —— **新增路由会静默免测** | 🟡 P2 | 🟠 | 见 §5.9。**刚发生过一次**：`/api/v1/developer/keys` 就住在缝里（`docs/changes/045` §3.1） |
+| **GAP-70** | qa 路由清单**无「路由 → 清单」反向对拍** —— **新增路由会静默免测** | 🟡 P2 | ✅ | **✅ 已修**（`docs/changes/069`）：新增 `internal/httpapi/qa_route_inventory_test.go`（AST 解析 `router.go` 的注册集 ⊆ `qaRouteInventory`）3 条含两道防真空守卫 + 负向对照。真跑：注入未列出路由 `/api/v1/qa-unlisted-probe` → **当场红**。**残余**：`router_test.go` 的 `dbGatedRoutes` 仍单向；直接 `mux.HandleFunc` 可绕过检测 |
 | **GAP-71** | `IsConnected` **运行期不会被翻 false** —— 断连后 `withDB` 放行，答 500 而非 503+`Retry-After` | 🟡 P2 | 🟠 | 见 §5.9。`withDB` 的第二道检查**恒不成立**；已有一条用例在守一个**不可能发生的状态** |
 | **GAP-72** | `internal/liquidation` **有测试文件却仍是 0.0% 覆盖率** —— `store_test.go` 只 `json.Marshal` 一个 `Event`，**42 条语句一条没跑** | 🟡 P2 | 🟠 | 见 §5.10。**W1 侧登记**（`docs/changes/048`）。这正是 `AGENTS.md` §8「**测试全绿 ≠ 被测覆盖**」的又一实例：用例在、全绿、**被测的东西没被覆盖**。同时后端此前**没有任何覆盖率门禁**，本行随**该门禁落地**一并登记 |
 | **GAP-73** | **登录态的行为级判据只覆盖纯函数那一半** —— 组件事件链（写入 → 重渲染 → 导航栏文案变化）无自动化判据。**第二轮（独立证伪后）又抓到该缺口的两个实例**：Sign Out 被 bridge effect 当场撤销（F1）· bridge 的写-依赖环终止只靠一条字符串相等（§4.3）——**两处都是 049 修复自己引入的，且当轮都不可能被发现**，因为 049 用无渲染器的判据宣布了完成。**第三轮再抓到两个实例，形态同为「产品路径的修复没有被判据绑住」**：§4.3 的结构面修复无判据（F5，改回改前形态全套仍绿）· 点「解除」解除不掉（F7，unlink 不经闸门）。**第四轮（用户第二轮实测仍未解决）再抓到一例，形态与前四次都不同：修复所在的那条路径根本不会被走到** —— Google 的 `redirect_uri` 是站点根，回到 `/` 后 `?code=` 被 `AgentCardTerminal` 当成 GitHub 的认领，唯一会兑换它的 `GoogleAuthWall` 根本没挂载，于是 049 修的那条链**从未被触发**。**第五轮再抓到一例，是这条缺口的布局面**：桌面导航栏把选项横向裁掉且**裁得静默**（`no-scrollbar` 抹掉滚动条），而本仓 CI **不跑 Playwright**，故"选项被裁掉"在 CI 上**完全不可观测** | 🟠 P1 | 🟠 | 见 §5.11（issue **#34** 修复轮登记；**F1/F5 的时序与运行时那一跳仍只有结构性断言** → `docs/changes/050` · `docs/changes/051`；**第四轮的挂载位置与守卫接线同为源级断言，且线上部署落后于 `upstream/main`** → `docs/changes/056`；**第五轮 5 例源级判据跑在 CI 上，但布局本身仍只能手跑** → `docs/changes/057`）。`vitest` 为 `environment: "node"` 且无 jsdom / `@testing-library`，故组件级只能做**结构性**断言（顺序、存在性、调用/不调用）；F7 的闸门另有**行为级**判据（5 例，重放 bridge 的写入） |
@@ -771,12 +771,12 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 | **GAP-62** | `docs/changes/` 仍有 `027`/`028` 两个前缀**各两份**（上游横向合流带入，非本轮引入） | `docs/changes/`（重命名 2 份） | 0.5 天（**要动上游既有命名，需先定口径**） |
 | **GAP-63** | `deploy/README.md:96` 的 `docs/changes/027` 是**悬空指针**（W1 侧引入；`027→035→039` 两次让位后失效） | `deploy/README.md:96` | 0.1 天（**改 `deploy/`，不在 `ssot-scribe` 作用域**） |
 | **GAP-64** | `docs/planning/README.md` 的变更索引止于 `031`，未含 `032`~`041` | `docs/planning/README.md` | 0.3 天（**该文件在 `docs/` 内，可直接派 `ssot-scribe`**） |
-| **GAP-65** | `cmd/api` 启动 fail-fast 无自动化判据（见 §5.9） | 新增 `backend/cmd/api/main_test.go`（`run(&config.Config{DATABASE_URL:""})` 必须返回 `ErrDatabaseURLRequired`） | 0.5 天 |
+| **GAP-65** | ~~`cmd/api` 启动 fail-fast 无自动化判据~~ **✅ 已补**（见 §5.15 / `docs/changes/069`） | `backend/cmd/api/main_test.go`（已落） | 已用 0.5 天 |
 | **GAP-66** | `005` 触发器允收自带 `ledger_seq` + 产出的 `balance_after` 被本仓判据拒收（见 §5.9） | `backend/migrations/005_settlement_ledger.sql` | **阻塞于 GAP-60**（需真 PG；两条解除路径需人裁） |
 | **GAP-67** | `NUMERIC(36,18)` 静默舍入 vs Go 拒收（见 §5.9） | 同上 | **阻塞于 GAP-60** |
 | **GAP-68** | `user_address` 不参与任何不变量（见 §5.9） | 同上 + `internal/settlement/ledger.go` | **需人先裁口径**（归属 vs 标注）+ GAP-60 |
 | **GAP-69** | `settlement_ledger` 无 UPDATE/DELETE 守卫、无读回审计（见 §5.9） | 同上 | **阻塞于 GAP-60**（守卫与判据须成对，只做守卫等于没做） |
-| **GAP-70** | qa 路由清单无「路由 → 清单」反向对拍（见 §5.9） | `internal/httpapi/router.go`（注册形式收敛）+ `qa_degradation_test.go` | 0.5 天 |
+| **GAP-70** | ~~qa 路由清单无「路由 → 清单」反向对拍~~ **✅ 已补**（见 §5.15 / `docs/changes/069`）。残余：`dbGatedRoutes` 仍单向 | `internal/httpapi/qa_route_inventory_test.go`（已落） | 已用 0.5 天 |
 | **GAP-71** | `IsConnected` 运行期不翻 false（见 §5.9） | `internal/platform/database/db.go` + `internal/httpapi/router.go` | 0.5 天（**需先定口径**：探活，还是删掉那道恒不成立的检查并写明） |
 | **GAP-73** | 登录态的**组件级**判据缺失（见 §5.11，issue #34 修复轮；**第二轮又抓到两个实例**，**第三轮再抓到两个**——F5「§4.3 结构面修复无判据」/ F7「解除解除不掉」，**第四轮再抓到一例**——「修复所在的那条路径根本不会被走到」，**第五轮再抓到一例**——布局面「选项被裁掉且裁得静默」，而 CI 不跑 Playwright） | `vitest.config.mts`（加 jsdom 项目）+ `tests/auth-state.test.ts`（补事件链用例）；**F5/F7 已用源级守卫 + 行为闸门各配判据，第四轮已把回调兑换搬到 layout 并收敛到唯一通道，第五轮已加 5 例源级响应式判据跑在 CI 上**；**剩下的那一跳（组件事件链）与布局本身都要渲染器** | 0.5 天（**需先定依赖/CI**：引入 jsdom + `@testing-library/react`（**对布局无效**，jsdom 不做布局），或给 `frontend` job 加 Playwright 步骤，或维持现状并人工守；**050 §6.2 · 051 §5 · 056 §7 · 057 §4 已各给出人工复核步骤**）。另有两项**口径/配置决策**：本地解绑要不要同时调 Privy 的 `unlinkGoogle`（`051` §6 第 5 条）· 构建期 `NEXT_PUBLIC_*` 注入与重新构建（`056` §6 第 2/3 条，**不在 `src/` 内**） |
 | **GAP-74** | 报错处理体系未落地（见 §5.12；**依赖顺序：本行 → 02 中间件 + 词表 → 03 测试**） | `backend/internal/httpapi/`（新增中间件 + 分类枚举 + 词表；迁 51 处调用点）· `src/lib/marketFeed.ts`（收缩 `FAILURE_COPY`） | 2 天（**先要两条口径定稿**：`pm-spec-driver` 定业务语言、`sec-auditor` 定敏感分级；另需成对互审） |
@@ -1764,6 +1764,37 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 - **缺陷事实**：Market 模块将 Go 网关连接失败笼统归类为 `unreachable`（“后端不可达”），文案硬编码提示“未能连接到 Go 网关（默认 http://localhost:8080）；请确认后端进程已启动。”
 - **生产误导**：Vercel 生产环境中若未配置 `NEXT_PUBLIC_GO_BACKEND_URL` 或照抄了 `.env.example` 中的 localhost，前端必然报错且向用户/运维误报“请确认后端进程已启动”，造成严重排障混淆。
 - **修复依据**：`docs/changes/068-区分Go网关未配置与不可达状态-issue31.md`。新增 `isGoBackendConfigured()` 与 `isLocalEnvironment()`，`MarketFetchReason` 扩充 `gateway-unconfigured`，文案与代理路由 503 分流并动态插值网关地址。
+
+---
+
+### 5.15 补两条判据缺口：`cmd/api` 启动守卫与路由清单反向对拍（2026-10-14，GAP-65 / GAP-70）
+
+> **来源**：`docs/GAP台账.md §5.9` 的两条登记缺口 —— 它们**是 §5.9 七条里唯一不需要真实 PostgreSQL 的两条**。
+> **完整取证、两次真实陷阱与四次变异见 `docs/changes/069`。** 本节只记**关闭了什么、没关闭什么**。
+> **取号**：**不新开 GAP 编号**——两条都已被既有编号覆盖（D4「与既有编号撞车比漏登记更糟」）。
+> `docs/changes/069` 的全 ref 并集最大号实测为 `068`，故取 **`069`**。
+
+#### GAP-65 · `cmd/api` 启动 fail-fast 的判据（✅ 已补，残余见下）
+
+- **缺口**：GAP-49 的主半（`cmd/api` 启动即拒）**没有测试文件**，台账记录「变异回静默内存降级后全套仍绿」。
+- **判据**：`backend/cmd/api/main_test.go` 两条 —— ① `run` 无 `DATABASE_URL` 必须返回 `ErrDatabaseURLRequired`；② **持有临时端口**再交给 `run`，仍必须返回同一 sentinel ⇒ **拒绝先于任何端口绑定**。
+- **为什么第 ② 条才是负向对照**：不持端口时，「返回 sentinel」与「已成功绑定端口、随后才失败」在观测上不可分。
+- **实测**：`go test -race ./cmd/api/...` → `ok`；`cmd/api` **不再** `[no test files]`。
+- **负向证伪**：退化回 `NewMemoryOnly()` 兜底 → **两条同时红**。**且首版判据在变异下会「挂起而非变红」**，故加了 3s 有界 `runBounded` —— **一个会在 CI 里挂起的判据等于没有判据**（与 GAP-65 同形，已照实记录）。
+- **残余（未关闭的部分）**：判据只到「启动拒绝」；`run` 之后的接线（`Deps` 组装 / handler 链）**仍无判据**，需活库 → **并入 GAP-60**。
+
+#### GAP-70 · qa 路由清单的反向对拍（✅ 已补，残余见下）
+
+- **缺口**：`qaRouteInventory` 只做**清单 → 路由**；反方向没有判据 ⇒ **新增路由静默免测**（`/api/v1/developer/keys` 即住在此缝里）。
+- **判据**：`backend/internal/httpapi/qa_route_inventory_test.go`，**AST 解析 `router.go`** 得到注册集，断言 **注册集 ⊆ `qaRouteInventory`**；含**两道防真空守卫**（找不到辅助函数即报错 · 注册集规模 ≥ 20）与两条负向对照。
+- **实测**：3 条全绿。
+- **负向证伪**：往 `router.go` 注入 `/api/v1/qa-unlisted-probe` → **当场红并点名该路径**。
+- **开发中真跑出的两个陷阱**（都不是"写错改一下"，而是这类判据的两种典型失效）：
+  - **取错标识符** → 找到 0 条注册 → **假绿**（守卫 ② 当场报红，这正是它存在的意义）；
+  - **过度归一化**（去掉尾随 `/`）→ 前缀路由 `/api/v1/agentcard/cards/` 被误报为孤儿 → **假红**（会诱使人把判据删掉），已由 `pathCovered` 修正并补用例钉住。
+- **残余（未关闭的部分）**：① `router_test.go` 的 `dbGatedRoutes` **仍是单向的**（本轮只接了 qa 清单）；② 检测依赖注册**一律走辅助函数**，直接 `mux.HandleFunc` 可绕过（**假绿方向**，前提已写进函数文档）。
+
+> **§5.9 的那句话不变**：其余六条（GAP-66/67/68/69/71 及 GAP-60 相关）的取证或解除**仍需要真实 PostgreSQL**，本机无 docker / psql / `DATABASE_URL`。**本轮关闭的两条恰好是不需要 PG 的那两条。**
 
 ---
 
