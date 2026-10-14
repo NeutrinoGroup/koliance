@@ -1,4 +1,30 @@
-import { defineChain } from "viem";
+import { defineChain, http, fallback } from "viem";
+
+// Single source of truth for the Monad Testnet read endpoints (issue #50).
+//
+// Order matters, and it is not cosmetic: `testnet-rpc.monad.xyz` MUST come
+// first. `monad-testnet.drpc.org` answers `eth_chainId` but rejects
+// `eth_call` / `eth_blockNumber` with -32601 ("method does not exist"), so as a
+// *primary* read RPC it costs one guaranteed-failed round-trip on every
+// contract read and spams the browser console with 400s. Components used to
+// keep their own copies of this list with drpc first, which is exactly how the
+// two orders drifted apart; they now call monadRpcTransport() below.
+export const MONAD_RPC_URLS = [
+  "https://testnet-rpc.monad.xyz",
+  "https://monad-testnet.drpc.org",
+] as const;
+
+/**
+ * A fresh viem transport for the Monad Testnet read endpoints.
+ *
+ * A function rather than a shared constant on purpose: each `createPublicClient`
+ * call gets its own transport instance, so there is no cross-client state to
+ * reason about. Prefer this over an inline `fallback([...])` so the endpoint set
+ * and its order stay defined in exactly one place.
+ */
+export function monadRpcTransport() {
+  return fallback(MONAD_RPC_URLS.map((url) => http(url)));
+}
 
 // Monad Testnet Chain Definition
 export const monadTestnet = defineChain({
@@ -10,18 +36,8 @@ export const monadTestnet = defineChain({
     decimals: 18,
   },
   rpcUrls: {
-    default: {
-      http: [
-        "https://testnet-rpc.monad.xyz",
-        "https://monad-testnet.drpc.org",
-      ],
-    },
-    public: {
-      http: [
-        "https://testnet-rpc.monad.xyz",
-        "https://monad-testnet.drpc.org",
-      ],
-    },
+    default: { http: [...MONAD_RPC_URLS] },
+    public: { http: [...MONAD_RPC_URLS] },
   },
   blockExplorers: {
     default: {

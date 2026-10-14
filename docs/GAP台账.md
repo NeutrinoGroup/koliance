@@ -274,6 +274,7 @@
 | **GAP-75** | **`docs/` 里的 20 处「`AGENTS.md` §N」引用在读者检出里解析到另一份同名文件** —— 本仓确有 `AGENTS.md`（**上游的 Koliance 协作指南**），**不是框架的约束规范**，两者章节号与含义完全不同 | 🟡 P2 | 🟠 | 见 §5.12（**ADR-006 轮顺带发现**，`git grep` 实测）。**登记未修**：改法是**框架级口径决策**，不在 `ssot-scribe` 单方作用域 |
 | **GAP-76** | 钱包轨登录**无组件级判据**（`vitest` 是 `node` 环境无 DOM，点击不可测），且 `loginMethods: ["wallet"]` 的**运行时**行为只读到了**类型与 JSDoc**、未经真实 Privy 验证 | 🟡 P2 | 🟠 | 见 §5.13。**与 GAP-73（#37 分支）的教训同族**：登录态这一类缺陷**住在组件里**，而没有 DOM 的套件够不到它。本轮的源文本断言**第一版就是假的**——见 §5.13.2 |
 | **GAP-77** | **Market 模块对 Go 网关失败状态文案混淆**：未区分「网关未配置（环境变量缺失/线上误指 localhost）」与「网关不可达（网络超时/服务未启动）」，且文案硬编码默认 localhost 误导线上运维 | 🟡 P2 | ✅ | 见 §5.14（issue **#31** 修复轮；关闭于 `docs/changes/068`）。`isGoBackendConfigured()` 显式区分环境与配置，`MarketFetchReason` 扩充 `gateway-unconfigured`，文案与代理路由 503 分流，动态插值网关地址 |
+| **GAP-78** | **Monad 读 RPC 端点表存在多份副本**，其中三份把 **`eth_call` 不可用的 `monad-testnet.drpc.org` 排在 `fallback` 首位** ⇒ 每次读合约先失败一次、控制台常驻 400（数值最终正确，因 `fallback` 退到第二个端点） | 🟡 P2 | ✅ | 见 §5.16（issue **#50** 修复轮；关闭于 `docs/changes/071`）。端点表提为 `contract.ts` 的 SSOT（`MONAD_RPC_URLS` + `monadRpcTransport()`），三处组件改调之；新增 `tests/monad-rpc-order.test.ts` 2 条（顺序 + **禁止 SSOT 外副本**），两条变异各自变红 |
 
 > **⚠️ GAP-72 的取号注（2026-10-12，第三次合并 `fix/login-state-sync` ← `upstream/main` `22fa845`）**：
 > **`GAP-72` 不是本分支的号**——它随 `upstream/main`（#36 后端覆盖率门禁，`docs/changes/048`）**带进来**，
@@ -1795,6 +1796,40 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 - **残余（未关闭的部分）**：① `router_test.go` 的 `dbGatedRoutes` **仍是单向的**（本轮只接了 qa 清单）；② 检测依赖注册**一律走辅助函数**，直接 `mux.HandleFunc` 可绕过（**假绿方向**，前提已写进函数文档）。
 
 > **§5.9 的那句话不变**：其余六条（GAP-66/67/68/69/71 及 GAP-60 相关）的取证或解除**仍需要真实 PostgreSQL**，本机无 docker / psql / `DATABASE_URL`。**本轮关闭的两条恰好是不需要 PG 的那两条。**
+
+---
+
+### 5.16 Monad 读 RPC 顺序与端点表 SSOT 收敛（2026-10-14，GAP-78）
+
+> **来源**：issue **#50** —— 真浏览器直连线上站点 + 直连 RPC 端点实测发现。
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-77`**，`GAP-78` 在全部 ref 上**零命中**（实测），故取 **78**；
+> `docs/changes/071` 亦零命中（`docs/changes/` 并集最大 `070`）。
+> **完整取证、修法、两条变异与残余边界见 `docs/changes/071`。**
+
+#### GAP-78 · Monad 读 RPC 端点表存在多份副本，且其中三份把 `eth_call` 不可用的 drpc 排在了首位（✅ 已关闭）
+
+| 事实 | 证据（实测） |
+| --- | --- |
+| `monad-testnet.drpc.org` **不支持合约读取** | 逐方法 POST：`eth_chainId` → **200**；`eth_call` / `eth_blockNumber` → **400** `the method … does not exist/is not available` |
+| 对照端点正常 | `testnet-rpc.monad.xyz` 的 `eth_call` → **200** + 正确结果 |
+| 三处把**不可用的那个**排在首位 | `NavAuthBadges.tsx:183-186` · `TransferModal.tsx:68-71` · `TokenStudio.tsx:83-86`，形态均为 `fallback([drpc, testnet-rpc])` |
+| **SSOT 本来就是对的** | `src/lib/contract.ts` 的 `rpcUrls` 是 `testnet-rpc` 在前 —— **对的那份没人用，错的那份被抄了三遍** |
+| 症状 | 线上 `/token` 页控制台常驻 **3 个 400**；每次读 KOL 余额 / 总供应量**先失败一次**（`fallback` 退到第二个端点，故**数值最终仍正确** —— 属「看起来在跑、其实每次先失败」那一类） |
+
+**根因**：不是「排序写错」，是**同一份端点表存在多处副本**（D4：两处不同成熟度的事实）。
+**这解释了它为何不会被任何测试发现**——没有判据约束「端点表只有一个来源」。
+
+**修法（本步）**：把端点表提为 `src/lib/contract.ts` 的 **SSOT**（`MONAD_RPC_URLS` + `monadRpcTransport()`），
+`rpcUrls` 改为 `[...MONAD_RPC_URLS]`（链定义与传输层同源），三处组件改调 `monadRpcTransport()`。
+**并新增判据 `tests/monad-rpc-order.test.ts`（2 条）**：① 顺序（`testnet-rpc` 必须首位、drpc 仍是备位）·
+② **端点表不得在 SSOT 之外出现**（遍历 `src/**`，违规文件点名）。
+**两条变异各自变红**（翻回顺序 / 重新内联副本），还原后 2 条全绿；全量 **327 passed**（325→327）。
+
+**残余（未做，登记备查）**：
+- `src/lib/perpChain.ts:34` · `src/lib/wagmi.ts:13,25` 各自单列 `testnet-rpc.monad.xyz`（**顺序本就正确**）。
+  它们用的是**单个 URL 而非 fallback 列表**，语义不同，**未合并**进 SSOT —— 属重构，不在本次修缺陷范围。
+- 判据**不验证** drpc 未来是否恢复 `eth_call`（若恢复，顺序仍应为 `testnet-rpc` 在前，无理由改）。
+- 「干脆删掉 drpc」是 issue #50 提的**另一个选项**，本轮**未采纳**（它仍是有效的 `eth_chainId` 源，删除主网端点属运维取舍）。
 
 ---
 

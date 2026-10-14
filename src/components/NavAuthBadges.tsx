@@ -21,11 +21,11 @@ import {
   Coins,
 } from "lucide-react";
 import Image from "next/image";
-import { createPublicClient, http, fallback, formatEther } from "viem";
+import { createPublicClient, formatEther } from "viem";
 import { GOOGLE_CLIENT_ID } from "@/lib/authConfig";
 import { EditProfileModal, UserProfileData } from "@/components/EditProfileModal";
 import { TransferModal } from "@/components/TransferModal";
-import { monadTestnet, KOL_TOKEN_ADDRESS, KOL_TOKEN_ABI } from "@/lib/contract";
+import { monadTestnet, monadRpcTransport, KOL_TOKEN_ADDRESS, KOL_TOKEN_ABI } from "@/lib/contract";
 import { truncateAddress } from "@/lib/utils";
 import { useKolianceAuth } from "@/components/Providers";
 import { useKolianceAccount } from "@/components/KolianceAuthProvider";
@@ -180,10 +180,7 @@ export function NavAuthBadges({
       try {
         const client = createPublicClient({
           chain: monadTestnet,
-          transport: fallback([
-            http("https://monad-testnet.drpc.org"),
-            http("https://testnet-rpc.monad.xyz"),
-          ]),
+          transport: monadRpcTransport(),
         });
         const bal = await client.readContract({
           address: KOL_TOKEN_ADDRESS,
