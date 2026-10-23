@@ -51,8 +51,8 @@
 
 | 编号 | 缺什么 | 在哪补 | 实测依据 | 不补的后果 | 谁做 | 影响面 / 阻塞关系 |
 | --- | --- | --- | --- | --- | --- | --- |
-| **D-1** | `PRIVATE_KEY`（含 Monad 测试币） | 本地 `contracts/.env` | `contracts/hardhat.config.ts:24,30`、`deploy/README.md:45-48` | perp 栈与 `SessionKeyRegistry` 无法部署，阻塞 **GAP-26** 与 **GAP-45**；**[已补充]** 本地实测地址 `0x7C8C5E...` 余额 17.55 MON 充足，随时可执行部署 | 作者 | P0 最大单点，阻断全部链上交互（凭据已补充） |
-| **C-3** | Perp 四地址（`USDC` / `ORACLE` / `VAULT` / `POSITION_MANAGER`） | Vercel 面板 | `src/lib/perpConfig.ts:95-98`、`src/components/PositionPanel.tsx:409-417` | 前端拒绝渲染数字，页面常驻「Perp 模块未配置」 | 作者 | 阻断 Perp 前端交互，强依赖 D-1 |
+| **D-1** | `PRIVATE_KEY`（含 Monad 测试币） | 本地 `contracts/.env` | `contracts/hardhat.config.ts:24,30`、`deploy/README.md:45-48` | **[OK 已闭环]** Perp 栈与 `SessionKeyRegistry` 已全部在 Monad 测试网部署并完成做市初始化；2026-10-24 成功调用 `PositionManager.setSessionKeyRegistry(0xCb7f48F455a19778fC75afb0564aaA88b64FA004)`（TX: `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799`，Block 73582682）。**D-1 链上阻塞已消除** | 作者 | 否（已闭环） |
+| **C-3** | Perp 四地址（`USDC` / `ORACLE` / `VAULT` / `POSITION_MANAGER`） | Vercel 面板 | `src/lib/perpConfig.ts:95-98`、`src/components/PositionPanel.tsx:409-417` | 前端拒绝渲染数字，页面常驻「Perp 模块未配置」。**现已具备确切地址**（见 `.env.example`），待作者在 Vercel 录入并触发重新构建 | 作者 | **是**（待录入环境变量） |
 | **C-2** | 服务端密钥四项（含 `NEXT_PUBLIC_GO_BACKEND_URL`） | Vercel 面板 | `src/lib/api.ts:12`、`src/lib/supabaseServer.ts:11` | 前端请求回落至 `localhost:8080`，线上真数据联调全断（docs/changes/068 已加显式拦截并报 `gateway-unconfigured`） | 作者 | 阻断 Vercel 生产前后端联调 |
 | **B-2** | `KOLIANCE_API_TOKEN` | Render 面板（`render.yaml:44-45`） | `backend/internal/config/config.go:67-71` | Operator 端点全部 503 拒决（`batch-settle` 等无法执行） | 作者 | 阻断演示运营与算力结算路径 |
 | **C-4** | `NEXT_PUBLIC_OAUTH_RELAY_ORIGINS` | Vercel 面板（`.env.example:25`） | `src/lib/oauthState.ts:22-27,38-40` | 若 Vercel 生产域名不在默认 4 个白名单内，OAuth 回跳被拒 | 作者 | 阻断非标域名下的 OAuth 登录 |
@@ -109,7 +109,7 @@
 
 | 编号 | 缺什么 | 在哪补 | 实测依据 | 不补的后果 | 谁做 | 阻塞 |
 | --- | --- | --- | --- | --- | --- | --- |
-| **D-1** | `PRIVATE_KEY`（**该地址还需有 Monad 测试币**） | 本地 `contracts/.env`（模板 `contracts/.env.example:1`） | `contracts/hardhat.config.ts:24,30` 用 `configVariable("PRIVATE_KEY")`；`deploy/README.md:45-48` 明写「这是 GAP-26 唯一剩余的阻塞」；`docs/GAP台账.md:185` 同判 | perp 栈与 `SessionKeyRegistry` **一个都没部署**；连带 **GAP-26**（perp 未部署）、**GAP-45**（清算大屏无数据源）、§C-3（前端四地址无从取值）；`/perp` 永久显示「未配置」。**[实测已补充]**：本地 `contracts/.env` 已注入私钥，链上实测地址 `0x7C8C5E...` 余额 17.55 MON，具备随时部署条件 | 作者 | **是**（P0，最大单点；本地凭据已补充） |
+| **D-1** | `PRIVATE_KEY`（**该地址还需有 Monad 测试币**） | 本地 `contracts/.env`（模板 `contracts/.env.example:1`） | `contracts/hardhat.config.ts:24,30` 用 `configVariable("PRIVATE_KEY")`；`deploy/README.md:45-48`；`docs/GAP台账.md:185` | **[OK 已闭环]** 链上合约全部上线并完成做市初始化：`MockUSDC`（`0x8a50...`）、`DemoOracle`（`0x84e1...`）、`Vault`（`0x9c32...`）、`PositionManager`（`0x8204...`）、`SessionKeyRegistry`（`0xCb7f...`）。2026-10-24 成功执行 `contracts/scripts/wire-session-registry.ts`，调用 `PositionManager.setSessionKeyRegistry(0xCb7f48F455a19778fC75afb0564aaA88b64FA004)`，TX: `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799`，验证链上一致。**GAP-26 / D-1 链上阻塞全面解除** | 作者 | **否**（已闭环） |
 | **D-2** | `ETHERSCAN_API_KEY` | 本地 `contracts/.env`（模板 `contracts/.env.example:2`） | `contracts/hardhat.config.ts:40`（`verify.etherscan.enabled: true`，`:38`） | 合约**验证**这一步不可用。`hardhat.config.ts:17-33`（`networks`）与 `:34-46`（`verify`）是两段独立配置；本文件**只断言 verify 需要该 key**，**不断言 ignition 部署是否受影响**——二者关系**未实测**，[未能验证] | 作者 | 否 |
 
 ### E. 凭证轮换（GAP-12）—— 纯外部后台操作，AI 无法代办

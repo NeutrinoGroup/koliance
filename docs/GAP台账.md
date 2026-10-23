@@ -7,7 +7,9 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：**2026-10-12** · 分支 `docs/error-handling-adr` @ `22fa845`（= `upstream/main`）
+> **最后更新**：**2026-10-24** · 主干同步（PR #37~#51，90 提交）· 新开 **GAP-79**（§5.17，`docs/changes/073`）
+> —— 完成 Monad 测试网 PositionManager 与 SessionKeyRegistry 链上绑定（TX: `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799`，Block 73582682），补齐 `.env.example` 13 项关键配置与合约地址。三道 CI/CD 门禁全绿（前端 327 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
+> **上一轮更新**：**2026-10-12** · 分支 `docs/error-handling-adr` @ `22fa845`（= `upstream/main`）
 > —— **ADR-006 轮**（issue **#33** + 用户裁定）：新开 **GAP-74**（§5.12），设计环交付
 > `docs/adr/ADR-006-统一报错处理体系.md`。**本轮只登记与设计，未改任何代码、未跑任何构建/测试命令**。
 > **取号实测见 §1 表后注**（32 个 ref 并集最大 `GAP-73`；`GAP-74` / `GAP-75` 均零命中）。
@@ -189,7 +191,7 @@
 | GAP-23 | RFC 架构与仓库分层不兼容 + 4 处内部矛盾 | 🔴 P0 | ⬜ | 设计决策 |
 | GAP-24 | 三套 Session Key 模型互不兼容 | 🟠 P1 | 🟠 | **链上闭环**（`013`+`014`）；Go 侧仍用 `sk_sess_` |
 | GAP-25 | 全局锁串行化 vs 10,000 TPS 目标 | 🟠 P1 | 🟠 | **保留、不阻塞**；须先写基准测试量化（`ADR-004`，见 §3.7） |
-| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | 🟠 | 部分：接链层 + 价格层 + **Bot 装配** + **观测端点**已落地（`022`+`023`+`024`+`025`）；见 §3 |
+| GAP-26 | perp 未部署 / 未接线 / 无 Bot | 🔴 P0 | ✅ | 链上部署、做市初始化与 SessionKeyRegistry 绑定已闭环（`073`）；见 §3 |
 | GAP-27 | 逐块资金费率未实现（赛道靶心） | 🟠 P1 | ✅ | 本分支 |
 | GAP-28 | 双 lockfile，`npm ci` 装过期树 | 🟡 P2 | ✅ | 前提已消失（`docs/changes/020`） |
 | GAP-29 | 缺 `deploy/` 目录 | 🟡 P2 | ✅ | `docs/changes/019` |
@@ -451,7 +453,7 @@ Test-Path .github/workflows/ci.yml    # 期望 True
 | Pyth 拉取式预言机 | ✅ `PythOracleAdapter` 已实现；**美股 feed 在 Monad 上不可用**（`执行方案-后端与合约.md:29-46` 实测） | 外部事实，非缺陷 |
 | 前端交易面板 | ✅ `/perp` 页面 + `PositionPanel`，读链不读 mock | — |
 | **Go 清算 Bot** | 🟠 **核心已做**（`internal/perp/{position,nonce}`）；**接链层已做**（`internal/chain`，`022`）；**价格层已做**（`internal/oracle`，`023`）；**交易发送 + `cmd/liquidator` 装配已做**（`internal/liquidator`，16 测试 `-race` 通过，`024`） | ⛔ **端到端回执**需本地链集成（GAP-40）+ 已部署的 `PositionManager` 地址 |
-| **链上部署** | 🔴 **未做** | ⛔ **需要 `PRIVATE_KEY` + Monad 测试币** |
+| **链上部署** | ✅ **已完成** | `MockUSDC`, `DemoOracle`, `Vault`, `PositionManager`, `SessionKeyRegistry` 全部在 Monad 测试网在线，已完成 SessionKeyRegistry 链上绑定与做市初始化（`docs/changes/073`） |
 | `GET /api/v1/liquidations` | ✅ 已做（`docs/changes/025`） | — |
 
 **为什么接链部分没写**：写了也无法验证，只会变成"看起来完成了"的代码。
@@ -1830,6 +1832,29 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
   它们用的是**单个 URL 而非 fallback 列表**，语义不同，**未合并**进 SSOT —— 属重构，不在本次修缺陷范围。
 - 判据**不验证** drpc 未来是否恢复 `eth_call`（若恢复，顺序仍应为 `testnet-rpc` 在前，无理由改）。
 - 「干脆删掉 drpc」是 issue #50 提的**另一个选项**，本轮**未采纳**（它仍是有效的 `eth_chainId` 源，删除主网端点属运维取舍）。
+
+---
+
+### 5.17 PositionManager 与 SessionKeyRegistry 链上绑定及配置同步（2026-10-24，GAP-79）
+
+> **来源**：线上部署核验、Issue #32 / #49 与 PR #46 移除兜底后配置收敛需求。
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-78`**，`GAP-79` 在全部 ref 上**零命中**（实测），故取 **79**；
+> `docs/changes/073` 亦零命中（`docs/changes/` 并集最大 `072`）。
+> **完整记录见 `docs/changes/073`。**
+
+#### GAP-79 · PositionManager 与 SessionKeyRegistry 链上互认断联及环境变量示例脱节（[OK] 已关闭）
+
+| 事实 | 证据（实测） |
+| --- | --- |
+| 链上合约部署就绪但未绑定 | `PositionManager(0x8204...).sessionKeyRegistry()` 读数为 `0x0000...`，尚未关联已部署的 `SessionKeyRegistry(0xCb7f...)` |
+| 编写绑定脚本并广播事务 | `contracts/scripts/wire-session-registry.ts` 调用 `setSessionKeyRegistry`，TX: `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799`，Block `73582682` 成功确认 |
+| 链上回读验证 | `PositionManager.sessionKeyRegistry()` 确认为 `0xCb7f48F455a19778fC75afb0564aaA88b64FA004` [OK] |
+| `.env.example` 补齐 | 注入 Monad 测试网 6 个合约地址，补全 PR #46 要求的 7 项服务端凭据与安全跨域模板 |
+| CI/CD 待办更新 | `docs/CICD-待完成.md` D-1 与 C-3 状态闭环，标明 Vercel 录入参数 |
+
+**残余（未做，登记备查）**：
+- `SessionKeyRegistry.spendConsumer` 由所有者 `0xe0EF754161f38F9595780238FDfA11029b172d59` 掌管，如需启用 `openPositionFor` 模块级自动划扣，需由该 Owner 钱包执行授权。
+- 外部部署平台（Vercel / Render）需人工在面板填入对应配置以触发生产生效。
 
 ---
 
