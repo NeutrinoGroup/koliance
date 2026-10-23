@@ -13,42 +13,46 @@
 
 1. **链上绑定脚本与执行** (`contracts/scripts/wire-session-registry.ts`):
    - 编写链上自动核验与绑定工具，支持状态探测、权限甄别与双向授权验证。
+   - 增加 `--check` 只读验证模式，在无私钥时输出完备的链上绑定诊断，并在 CI/验证场景提供确定性退出码。
    - 使用部署者钱包（`0x7C8C5E295E00d3169A49874b439Fb3F85A2535Dc`）向 Monad 测试网广播事务：
      - 调用 `PositionManager(0x82040c06da6efc60e9505f2efee0099e909b15c5).setSessionKeyRegistry(0xCb7f48F455a19778fC75afb0564aaA88b64FA004)`。
      - **上链交易哈希**: `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799`。
      - **确认区块高度**: `73582682`。
      - **链上核验读数**: `PositionManager.sessionKeyRegistry()` 成功返回 `0xCb7f48F455a19778fC75afb0564aaA88b64FA004`。
-2. **环境变量规范模板** (`.env.example`):
-   - 填入 Monad 测试网权威部署合约地址：`NEXT_PUBLIC_KOLIANCE_ADDRESS`、`NEXT_PUBLIC_KOL_TOKEN_ADDRESS`、`NEXT_PUBLIC_PERP_USDC`、`NEXT_PUBLIC_PERP_ORACLE`、`NEXT_PUBLIC_PERP_VAULT`、`NEXT_PUBLIC_PERP_POSITION_MANAGER`。
+2. **环境变量规范模板** (`.env.example`、`backend/.env.example`、`contracts/.env.example`):
+   - 填入 Monad 测试网权威部署合约地址：`NEXT_PUBLIC_KOLIANCE_ADDRESS`、`NEXT_PUBLIC_KOL_TOKEN_ADDRESS`、`NEXT_PUBLIC_PERP_USDC`、`NEXT_PUBLIC_PERP_ORACLE`、`NEXT_PUBLIC_PERP_VAULT`、`NEXT_PUBLIC_PERP_POSITION_MANAGER`、`SESSION_KEY_REGISTRY`。
    - 补齐 PR #46 要求的全部服务端凭据与安全跨域模板（`KOLIANCE_SESSION_SECRET`、`KOLIANCE_ALLOWED_ORIGINS`、`NEXT_PUBLIC_SITE_URL`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`GITHUB_CLIENT_SECRET`、`GOOGLE_CLIENT_SECRET`）。
-3. **CI/CD 待完成清单核实** (`docs/CICD-待完成.md`):
+   - 同步补齐 `backend/.env.example`（`KOLIANCE_API_TOKEN`、`CORS_ALLOWED_ORIGINS`、`LIQUIDATOR_*`）与 `contracts/.env.example`（`RPC_URL`、`CHAIN_ID`、`POSITION_MANAGER`、`SESSION_KEY_REGISTRY`）。
+3. **配置防漂移回归守卫** (`tests/env-parity.test.ts`):
+   - 新增 4 项自动化判据，断言 Monad 测试网合约地址、PR #46 必需凭证及后端/合约环境模板严丝合缝，阻断配置静默漂移。
+4. **CI/CD 待完成清单核实** (`docs/CICD-待完成.md`):
    - 更新 `D-1` 状态为 `[OK 已闭环]`，明确链上部署与绑定事务已完成，消解阻断。
    - 更新 `C-3` 项说明，明确前端需要的 4 个 Perp 地址已明确收敛至 `.env.example`，等待 Vercel 控制台录入。
-4. **质量缺口台账** (`docs/GAP台账.md`):
-   - 登记 `GAP-79`（§5.17），收口链上合约绑定与配置同步；更新 `GAP-26` 链上部署状态。
+5. **质量缺口台账** (`docs/GAP台账.md`):
+   - 在 §1 状态总表补齐 `GAP-79`，并登记 §5.17，收口链上合约绑定与配置同步；更新 `GAP-26` 链上部署状态。
 
 ---
 
 ## 3. 验证记录 (Verification Record)
 
 ### 3.1 链上事务执行与核对
-- 执行命令: `cd contracts && npx tsx scripts/wire-session-registry.ts`
+- 执行命令: `cd contracts && npx tsx scripts/wire-session-registry.ts --check`
 - 结果:
   - PositionManager Owner: `0x7C8C5E295E00d3169A49874b439Fb3F85A2535Dc` (匹配)
-  - 交易已确认: Block 73582682 (Status: success)
-  - 回读验证: `PositionManager.sessionKeyRegistry == 0xCb7f48F455a19778fC75afb0564aaA88b64FA004` [OK]
+  - 链上核验读数: `PositionManager.sessionKeyRegistry == 0xCb7f48F455a19778fC75afb0564aaA88b64FA004` [OK]
+  - Check 模式退出码: 0
 
 ### 3.2 工业化三道质量门禁验证 (AGENTS.md §4)
 - **Gate 1 (前端全量类型、代码风格、单测与生产构建)**:
   - `pnpm type:lint`: exit 0
-  - `pnpm test`: 27 个测试文件全绿，327/327 用例通过 (0 regressions)
+  - `pnpm test`: 28 个测试文件全绿，331/331 用例通过 (0 regressions)
   - `pnpm build`: 成功输出 21 个静态与动态路由（含 `/perp`、`/market`、`/console` 等）
 - **Gate 2 (智能合约类型检查、单元测试与行覆盖率门禁)**:
   - `cd contracts && npx tsc --noEmit`: exit 0
   - `cd contracts && npx hardhat test --coverage && npx tsx scripts/check-coverage.ts`: 209/209 通过，覆盖率 91.23%（高于 88% 地板门禁）
 - **Gate 3 (高并发 Go 后端检查与竞态测试)**:
   - `cd backend && go vet ./...`: exit 0
-  - `cd backend && go test -race ./...`: 全部 package 通过，0 race warning
+  - `cd backend && go test -count=1 -race ./...`: 全部 23 个 package 通过，0 race warning
 
 ---
 

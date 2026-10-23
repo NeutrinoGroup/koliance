@@ -99,9 +99,47 @@ async function main() {
   console.log(`[INFO] SessionKeyRegistry Owner:     ${regOwner}`);
   console.log(`[INFO] SessionKeyRegistry Consumer:  ${currentSpendConsumer}`);
 
+  const isPmLinked = currentPmRegistry.toLowerCase() === REG_ADDRESS.toLowerCase();
+  const isConsumerLinked = currentSpendConsumer.toLowerCase() === PM_ADDRESS.toLowerCase();
+  const isCheckMode = process.argv.includes("--check");
+
+  if (isPmLinked) {
+    console.log(`[OK] PositionManager already wired to SessionKeyRegistry: ${currentPmRegistry}`);
+  }
+  if (isConsumerLinked) {
+    console.log(`[OK] SessionKeyRegistry already has spendConsumer set to PositionManager: ${currentSpendConsumer}`);
+  }
+
+  if (isCheckMode) {
+    console.log("[INFO] --------------------------------------------------");
+    console.log("[INFO] Check Mode Verification Summary:");
+    console.log(`[INFO] PositionManager.sessionKeyRegistry: ${currentPmRegistry} (${isPmLinked ? "[OK]" : "[PENDING]"})`);
+    console.log(`[INFO] SessionKeyRegistry.spendConsumer:  ${currentSpendConsumer} (${isConsumerLinked ? "[OK]" : "[PENDING]"})`);
+    if (!isPmLinked) {
+      console.error("[ERROR] Check failed: PositionManager is not wired to SessionKeyRegistry.");
+      process.exit(1);
+    }
+    console.log("[OK] PositionManager -> SessionKeyRegistry link verified on chain.");
+    return;
+  }
+
   const rawKey = process.env.PRIVATE_KEY;
   if (!rawKey) {
     console.log("[WARN] No PRIVATE_KEY configured in environment. Read-only inspection complete.");
+    console.log("[INFO] --------------------------------------------------");
+    console.log("[INFO] Current On-Chain Linkage Status:");
+    console.log(`[INFO] PositionManager.sessionKeyRegistry: ${currentPmRegistry} (${isPmLinked ? "[OK]" : "[PENDING]"})`);
+    console.log(`[INFO] SessionKeyRegistry.spendConsumer:  ${currentSpendConsumer} (${isConsumerLinked ? "[OK]" : "[PENDING]"})`);
+    if (isPmLinked) {
+      console.log("[OK] PositionManager -> SessionKeyRegistry is successfully linked!");
+    } else {
+      console.log("[WARN] PositionManager -> SessionKeyRegistry link is still pending.");
+    }
+    return;
+  }
+
+  if (isPmLinked && isConsumerLinked) {
+    console.log("[OK] Both PositionManager and SessionKeyRegistry are already linked. No transactions needed.");
     return;
   }
 
@@ -119,9 +157,7 @@ async function main() {
   });
 
   // 2. Wire PositionManager -> SessionKeyRegistry
-  if (currentPmRegistry.toLowerCase() === REG_ADDRESS.toLowerCase()) {
-    console.log(`[OK] PositionManager already wired to SessionKeyRegistry: ${currentPmRegistry}`);
-  } else {
+  if (!isPmLinked) {
     if (signerAddress.toLowerCase() !== pmOwner.toLowerCase()) {
       console.log(
         `[WARN] Signer ${signerAddress} is NOT PositionManager owner (${pmOwner}). Skipping setSessionKeyRegistry.`
@@ -144,9 +180,7 @@ async function main() {
   }
 
   // 3. Wire SessionKeyRegistry -> PositionManager spendConsumer
-  if (currentSpendConsumer.toLowerCase() === PM_ADDRESS.toLowerCase()) {
-    console.log(`[OK] SessionKeyRegistry already has spendConsumer set to PositionManager: ${currentSpendConsumer}`);
-  } else {
+  if (!isConsumerLinked) {
     if (signerAddress.toLowerCase() !== regOwner.toLowerCase()) {
       console.log(
         `[WARN] Signer ${signerAddress} is NOT SessionKeyRegistry owner (${regOwner}). Skipping setSpendConsumer.`
