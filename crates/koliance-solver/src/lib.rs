@@ -9,11 +9,13 @@ pub mod types;
 pub mod liquidation;
 pub mod funding;
 pub mod eip712;
+pub mod im_engine;
 
 pub use types::*;
 pub use liquidation::*;
 pub use funding::*;
 pub use eip712::*;
+pub use im_engine::*;
 
 pub fn solver_version() -> &'static str {
     env!("CARGO_PKG_VERSION")

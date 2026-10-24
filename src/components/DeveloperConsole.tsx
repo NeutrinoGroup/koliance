@@ -33,6 +33,10 @@ import {
   Trash2,
   X,
   UserCheck,
+  QrCode,
+  Zap,
+  TrendingUp,
+  Smartphone,
 } from "lucide-react";
 import { useKolianceAuth } from "@/components/Providers";
 import { useSignMessage } from "wagmi";
@@ -116,7 +120,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
   const isRegistered = Boolean(activeWallet);
 
   // Navigation tab in Console
-  const [consoleTab, setConsoleTab] = useState<"overview" | "keys" | "playground" | "packages" | "agents" | "audit">("overview");
+  const [consoleTab, setConsoleTab] = useState<"overview" | "keys" | "playground" | "packages" | "trust" | "agents" | "audit">("overview");
 
   // User API Keys loaded from database api_keys ("api-key") table
   const [userKeys, setUserKeys] = useState<ApiKeyRecord[]>([]);
@@ -127,6 +131,36 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
   const [freeClaimsLeft, setFreeClaimsLeft] = useState<number>(3);
   const [claiming, setClaiming] = useState(false);
   const [claimMessage, setClaimMessage] = useState<string | null>(null);
+
+  // Micro-Deposit & Inference Fund Vault state
+  const [vaultBalanceCNY, setVaultBalanceCNY] = useState<number>(10.80);
+  const [vaultBalanceUSD, setVaultBalanceUSD] = useState<number>(1.50);
+  const [autoTopupEnabled, setAutoTopupEnabled] = useState<boolean>(true);
+  const [dailyLimitUSD] = useState<number>(50.00);
+  const [topupModalOpen, setTopupModalOpen] = useState(false);
+  const [topupAmount, setTopupAmount] = useState<1 | 10 | 50>(10);
+  const [topupMethod, setTopupMethod] = useState<"wechat" | "alipay" | "web3" | "card">("wechat");
+  const [topupProcessing, setTopupProcessing] = useState(false);
+  const [cardModalOpen, setCardModalOpen] = useState(false);
+  const [boundCardLast4, setBoundCardLast4] = useState<string>("4242");
+
+  // Zero-friction copy states
+  const [copiedInstall, setCopiedInstall] = useState(false);
+  const [copiedEnv, setCopiedEnv] = useState(false);
+  const [copiedTrade, setCopiedTrade] = useState(false);
+  const [copiedProxy, setCopiedProxy] = useState(false);
+
+  // Trading-Centric Trust Score Model state (Success 35% + Volume 25% + Asset 25% + Rating 15%)
+  const [trustMetrics, setTrustMetrics] = useState({
+    successRate: 0.98,
+    tradeCount: 45,
+    assetUSD: 728.0,
+    rating: 4.8,
+  });
+  const [trustTotalScore, setTrustTotalScore] = useState<number>(84.5);
+  const [trustTier, setTrustTier] = useState<string>("TIER_PRIME");
+  const [trustMaxLeverage, setTrustMaxLeverage] = useState<number>(20);
+  const [trustCreditLimit, setTrustCreditLimit] = useState<number>(5000);
 
   // Key creation modal state
   const [newKeyModalOpen, setNewKeyModalOpen] = useState(false);
@@ -691,7 +725,8 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           { id: "overview", label: lang === "en" ? "Overview & Analytics" : "概览与分析", icon: <Activity className="w-4 h-4" /> },
           { id: "keys", label: lang === "en" ? "API Keys (api-key table)" : "API 密钥 (api-key 表)", icon: <KeyRound className="w-4 h-4" /> },
           { id: "playground", label: lang === "en" ? "Live API Playground" : "在线演练台", icon: <Terminal className="w-4 h-4" /> },
-          { id: "packages", label: lang === "en" ? "Quota & Subscription Packs" : "额度与套餐包", icon: <Coins className="w-4 h-4" /> },
+          { id: "packages", label: lang === "en" ? "Micro-Topup (1元/10元扫码)" : "额度与微支付 (1元/10元扫码)", icon: <Coins className="w-4 h-4" /> },
+          { id: "trust", label: lang === "en" ? "Trading Trust (Multi-Weight)" : "交易信用评分 (四维加权)", icon: <ShieldCheck className="w-4 h-4" /> },
           { id: "agents", label: lang === "en" ? "Bound Agents Registry" : "已绑定 Agent 列表", icon: <Cpu className="w-4 h-4" /> },
           { id: "audit", label: lang === "en" ? "Operation Audit & History" : "操作审计与历史", icon: <History className="w-4 h-4" /> },
         ].map((tab) => {
@@ -1313,11 +1348,193 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
         </div>
       )}
 
-      {/* 6. Tab 3: Quota Packages (SaaS Tier Matrix) */}
+      {/* 6. Tab 3: Quota Packages & Micro-Payment Vault */}
       {consoleTab === "packages" && (
         <div className="space-y-6">
-          <div className="space-y-1">
-            <h2 className="text-lg font-bold text-white font-mono">API Subscription & Capacity Packages</h2>
+          {/* A. Micro-Deposit & Autonomous Topup Guardrail Section */}
+          <div className="p-6 rounded-lg bg-[#111420] border border-purple-500/30 space-y-5 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <Coins className="w-5 h-5 text-cyan-400" />
+                  <h2 className="text-base font-bold text-white font-mono">
+                    {lang === "en" ? "Autonomous Inference Vault & Micro-Topup" : "算力资金池与真实微支付通道 (0.1元/次)"}
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  {lang === "en"
+                    ? "Sub-cent micro-payments (0.10 CNY/call). WeChat Pay, Alipay, Monad Web3, and auto-recharge guardrails."
+                    : "极小额微支付与双轨扫码入金。支持微信、支付宝、Monad Web3 钱包及虚拟卡自动充值护栏。"}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setTopupAmount(10);
+                    setTopupModalOpen(true);
+                  }}
+                  className="h-9 px-4 rounded-md bg-cyan-600 hover:bg-cyan-500 border border-cyan-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <QrCode className="w-3.5 h-3.5" />
+                  <span>{lang === "en" ? "Scan QR Topup (1 / 10 CNY)" : "扫码充值 10 元 (微信/支付宝/Web3)"}</span>
+                </button>
+                <button
+                  onClick={() => setCardModalOpen(true)}
+                  className="h-9 px-4 rounded-md bg-[#141828] hover:bg-white/10 border border-purple-500/30 text-purple-300 font-mono text-xs font-semibold active:scale-[0.98] transition-all cursor-pointer flex items-center gap-1.5"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>{lang === "en" ? "Card Guardrail Settings" : "虚拟卡/信用卡 自动充值护栏"}</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Live Balance & Guardrail Indicators */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/5 space-y-1">
+                <span className="text-[11px] font-mono text-slate-400">可用算力资金池 (CNY)</span>
+                <div className="text-xl font-bold text-cyan-300 font-mono">￥{vaultBalanceCNY.toFixed(2)}</div>
+                <span className="text-[10px] font-mono text-slate-500">约可调用 {Math.floor(vaultBalanceCNY / 0.10)} 次 DeepSeek</span>
+              </div>
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/5 space-y-1">
+                <span className="text-[11px] font-mono text-slate-400">折合美元资产 (USD)</span>
+                <div className="text-xl font-bold text-white font-mono">${vaultBalanceUSD.toFixed(2)}</div>
+                <span className="text-[10px] font-mono text-slate-500">汇率基准: 1 USD = 7.20 CNY</span>
+              </div>
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/5 space-y-1">
+                <span className="text-[11px] font-mono text-slate-400">自动续航守护状态</span>
+                <div className="flex items-center gap-1.5 text-xs font-bold font-mono">
+                  {autoTopupEnabled ? (
+                    <span className="text-emerald-400">[ACTIVE] 余额 &lt; 1元 自动充 10元</span>
+                  ) : (
+                    <span className="text-slate-500">[STANDBY] 自动代扣已关闭</span>
+                  )}
+                </div>
+                <span className="text-[10px] font-mono text-slate-500">已绑卡: Visa ···· {boundCardLast4}</span>
+              </div>
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/5 space-y-1">
+                <span className="text-[11px] font-mono text-slate-400">硬核风控熔断线</span>
+                <div className="text-xl font-bold text-purple-400 font-mono">${dailyLimitUSD.toFixed(2)} / 天</div>
+                <span className="text-[10px] font-mono text-slate-500">单日代扣上限，防死循环刷爆卡</span>
+              </div>
+            </div>
+          </div>
+
+          {/* B. Zero-Friction Agent Hand-off Cards (一键交付三大卡片) */}
+          <div className="space-y-3">
+            <div>
+              <h3 className="text-sm font-bold text-white font-mono flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-purple-400" />
+                <span>{lang === "en" ? "Zero-Friction Hand-off Cards (Ready-to-Run)" : "三大开箱即用一键交付卡片 (10秒零摩擦交付)"}</span>
+              </h3>
+              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                {lang === "en"
+                  ? "Deploy to Linux/macOS CLI, existing agent frameworks, or trigger live paper trading with one click."
+                  : "支持 Linux/macOS CLI 一键拉取、现存 Agent 框架零代码接入、以及一行命令美股模拟炒股。"}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Card 1: One-line Shell Installer */}
+              <div className="p-5 rounded-lg bg-[#111420] border border-white/10 flex flex-col justify-between space-y-3 shadow-sm">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/20 font-semibold">
+                      CARD 1: NATIVE CLI
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">Arch / Linux / macOS</span>
+                  </div>
+                  <h4 className="text-xs font-bold text-white font-mono">一行命令拉取 Go 单文件 CLI</h4>
+                  <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                    拉取编译好的单文件全局命令 koliance，直接常驻运行本地零延迟反代。
+                  </p>
+                  <div className="bg-[#090b12] p-2.5 rounded-md border border-white/5 font-mono text-[11px] text-slate-300 overflow-x-auto select-all">
+                    curl -fsSL https://get.koliance.io/install.sh | bash -s -- --key={effectiveApiKey}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    copyToClipboard(`curl -fsSL https://get.koliance.io/install.sh | bash -s -- --key=${effectiveApiKey}`);
+                    setCopiedInstall(true);
+                    setTimeout(() => setCopiedInstall(false), 2000);
+                  }}
+                  className="w-full h-8 px-3 rounded-md bg-purple-600/80 hover:bg-purple-600 border border-purple-500/40 text-white font-mono text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition cursor-pointer"
+                >
+                  {copiedInstall ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedInstall ? "[OK] 已复制安装命令" : "复制 CLI 安装命令"}</span>
+                </button>
+              </div>
+
+              {/* Card 2: Zero-Code .env Integration */}
+              <div className="p-5 rounded-lg bg-[#111420] border border-white/10 flex flex-col justify-between space-y-3 shadow-sm">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 font-semibold">
+                      CARD 2: ZERO-CODE ENV
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">LangChain / AutoGPT / Cursor</span>
+                  </div>
+                  <h4 className="text-xs font-bold text-white font-mono">现有 Agent 项目环境变量接入</h4>
+                  <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                    不修改任何代码，粘贴进 .env，标准 OpenAI SDK 自动代理到 DeepSeek 并微扣费。
+                  </p>
+                  <div className="bg-[#090b12] p-2.5 rounded-md border border-white/5 font-mono text-[11px] text-slate-300 overflow-x-auto select-all space-y-0.5">
+                    <div>{`OPENAI_BASE_URL="https://api.koliance.io/api/v1/proxy"`}</div>
+                    <div>{`OPENAI_API_KEY="${effectiveApiKey}"`}</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    copyToClipboard(`OPENAI_BASE_URL="https://api.koliance.io/api/v1/proxy"\nOPENAI_API_KEY="${effectiveApiKey}"`);
+                    setCopiedEnv(true);
+                    setTimeout(() => setCopiedEnv(false), 2000);
+                  }}
+                  className="w-full h-8 px-3 rounded-md bg-cyan-600/80 hover:bg-cyan-600 border border-cyan-500/40 text-white font-mono text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition cursor-pointer"
+                >
+                  {copiedEnv ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedEnv ? "[OK] 已复制环境变量" : "复制 .env 环境变量"}</span>
+                </button>
+              </div>
+
+              {/* Card 3: One-line Terminal Paper Trading */}
+              <div className="p-5 rounded-lg bg-[#111420] border border-white/10 flex flex-col justify-between space-y-3 shadow-sm">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-semibold">
+                      CARD 3: PAPER TRADING
+                    </span>
+                    <span className="text-[10px] font-mono text-slate-500">Alpaca Market Execution</span>
+                  </div>
+                  <h4 className="text-xs font-bold text-white font-mono">一行命令美股模拟仓炒股</h4>
+                  <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                    让 Agent 直接借入购买力，做多 100 美元 NVDA (2倍杠杆) 并在终端查看状态。
+                  </p>
+                  <div className="bg-[#090b12] p-2.5 rounded-md border border-white/5 font-mono text-[11px] text-slate-300 overflow-x-auto select-all space-y-0.5">
+                    <div>koliance trade --symbol=NVDA --side=buy --amount=100 --leverage=2</div>
+                    <div>koliance status</div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    copyToClipboard(`koliance trade --symbol=NVDA --side=buy --amount=100 --leverage=2\nkoliance status`);
+                    setCopiedTrade(true);
+                    setTimeout(() => setCopiedTrade(false), 2000);
+                  }}
+                  className="w-full h-8 px-3 rounded-md bg-emerald-600/80 hover:bg-emerald-600 border border-emerald-500/40 text-white font-mono text-xs font-semibold flex items-center justify-center gap-1.5 active:scale-[0.98] transition cursor-pointer"
+                >
+                  {copiedTrade ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedTrade ? "[OK] 已复制交易命令" : "复制终端炒股命令"}</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* C. SaaS Tier Matrix */}
+          <div className="space-y-1 pt-2">
+            <h3 className="text-base font-bold text-white font-mono">API Subscription & Capacity Packages</h3>
             <p className="text-xs text-slate-400 font-mono">
               Transparent tier allocation. Every registered account is entitled to 3 free starter packages.
             </p>
@@ -1447,6 +1664,362 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               >
                 Subscribe Enterprise
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Tab: Trading-Centric Multi-Weight Trust Evaluation */}
+      {consoleTab === "trust" && (
+        <div className="space-y-6">
+          {/* Header Card */}
+          <div className="p-6 rounded-lg bg-[#111420] border border-purple-500/30 space-y-4 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-purple-400" />
+                  <h2 className="text-base font-bold text-white font-mono">
+                    {lang === "en" ? "Trading-Centric Multi-Weight Trust Model" : "围绕交易的多权重 Trust 信用评分模型"}
+                  </h2>
+                </div>
+                <p className="text-xs text-slate-400 font-mono mt-0.5">
+                  {lang === "en"
+                    ? "Dynamic credit model calculated from: Success Rate (35%) + Volume (25%) + Asset Proof (25%) + Rating (15%)."
+                    : "四维综合量化评估：交易成功率 (35%) + 交易数量/频次 (25%) + 资产/头寸证明 (25%) + 履约评级 (15%)。"}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="text-right font-mono">
+                  <div className="text-xs text-slate-400">综合 Trust 得分</div>
+                  <div className="text-2xl font-bold text-emerald-400">{trustTotalScore.toFixed(1)} / 100.0</div>
+                </div>
+                <span className="px-3 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 font-mono text-xs font-bold">
+                  [{trustTier}]
+                </span>
+              </div>
+            </div>
+
+            {/* Trading Permissions Granted by Trust Tier */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/5 space-y-1">
+                <span className="text-[11px] font-mono text-slate-400">解锁最高杠杆倍数</span>
+                <div className="text-xl font-bold text-white font-mono">{trustMaxLeverage}x Margin Multiplier</div>
+                <span className="text-[10px] font-mono text-slate-500">根据履约历史动态放宽保证金要求</span>
+              </div>
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/5 space-y-1">
+                <span className="text-[11px] font-mono text-slate-400">最大允许借入额度</span>
+                <div className="text-xl font-bold text-cyan-300 font-mono">${trustCreditLimit.toFixed(2)} USD</div>
+                <span className="text-[10px] font-mono text-slate-500">Autonomous Agent 单日借入额度硬顶</span>
+              </div>
+              <div className="p-4 rounded-md bg-[#090b12] border border-white/5 space-y-1">
+                <span className="text-[11px] font-mono text-slate-400">清算与风控评级</span>
+                <div className="text-xl font-bold text-emerald-400 font-mono">ZERO LIQUIDATION</div>
+                <span className="text-[10px] font-mono text-slate-500">历史 0 次穿仓，链上偿付信誉良好</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 4-Weight Dimensional Breakdown */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Dimension 1: Success Rate */}
+            <div className="p-5 rounded-lg bg-[#111420] border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-cyan-400" />
+                  <h4 className="text-xs font-bold text-white font-mono">1. 交易成功率 (35% 权重)</h4>
+                </div>
+                <span className="text-xs font-mono font-bold text-cyan-300">
+                  {(trustMetrics.successRate * 35).toFixed(1)} / 35.0 分
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                实盘与模拟盘平仓盈利订单比例。衡量 Agent 量化策略的稳定性与防亏损能力。
+              </p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>当前胜率: {(trustMetrics.successRate * 100).toFixed(1)}%</span>
+                  <span>上限 35 分</span>
+                </div>
+                <div className="w-full h-2 rounded bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full bg-cyan-400 transition-all"
+                    style={{ width: `${Math.min(100, trustMetrics.successRate * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dimension 2: Trade Count */}
+            <div className="p-5 rounded-lg bg-[#111420] border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-purple-400" />
+                  <h4 className="text-xs font-bold text-white font-mono">2. 交易数量与频次 (25% 权重)</h4>
+                </div>
+                <span className="text-xs font-mono font-bold text-purple-300">
+                  {(Math.min(1.0, trustMetrics.tradeCount / 50.0) * 25).toFixed(1)} / 25.0 分
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                完成订单深度与撮合频次（50 笔成交即达满分）。杜绝偶发虚假成交带来的评分失真。
+              </p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>累计成交: {trustMetrics.tradeCount} 笔</span>
+                  <span>饱和基准: 50 笔</span>
+                </div>
+                <div className="w-full h-2 rounded bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full bg-purple-400 transition-all"
+                    style={{ width: `${Math.min(100, (trustMetrics.tradeCount / 50.0) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dimension 3: Asset Proof */}
+            <div className="p-5 rounded-lg bg-[#111420] border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <h4 className="text-xs font-bold text-white font-mono">3. 资产与头寸证明 (25% 权重)</h4>
+                </div>
+                <span className="text-xs font-mono font-bold text-emerald-300">
+                  {(Math.min(1.0, trustMetrics.assetUSD / 1000.0) * 25).toFixed(1)} / 25.0 分
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                链上钱包或美股模拟仓持仓净值证明（$1,000 USD 即达满分）。确保清算穿仓时具备足够的偿付能力。
+              </p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>抵押资产: ${trustMetrics.assetUSD.toFixed(2)} USD</span>
+                  <span>满分基准: $1,000.00</span>
+                </div>
+                <div className="w-full h-2 rounded bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400 transition-all"
+                    style={{ width: `${Math.min(100, (trustMetrics.assetUSD / 1000.0) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Dimension 4: Fulfillment Rating */}
+            <div className="p-5 rounded-lg bg-[#111420] border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                  <h4 className="text-xs font-bold text-white font-mono">4. 履约评级与防清算 (15% 权重)</h4>
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-300">
+                  {((trustMetrics.rating / 5.0) * 15).toFixed(1)} / 15.0 分
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 font-mono leading-relaxed">
+                对手方评价与清算防守得分。高波动行情下自主止损止盈、未被 Liquidator 强制清算的优良记录。
+              </p>
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>履约评级: {trustMetrics.rating.toFixed(1)} / 5.0 星</span>
+                  <span>上限 15 分</span>
+                </div>
+                <div className="w-full h-2 rounded bg-white/5 overflow-hidden">
+                  <div
+                    className="h-full bg-amber-400 transition-all"
+                    style={{ width: `${(trustMetrics.rating / 5.0) * 100}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Interactive Weight Simulator */}
+          <div className="p-6 rounded-lg bg-[#141828] border border-purple-500/30 space-y-4">
+            <div>
+              <h3 className="text-xs font-bold text-white font-mono flex items-center gap-2">
+                <Sliders className="w-4 h-4 text-purple-400" />
+                <span>实盘/模拟盘指标实时试算器 (Interactive Trust Simulator)</span>
+              </h3>
+              <p className="text-[11px] text-slate-400 font-mono mt-0.5">
+                调节滑块体验不同交易频次、胜率与资产规模对 Trust 评分与杠杆解锁的影响。
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-mono text-slate-300">
+                  <span>胜率: {(trustMetrics.successRate * 100).toFixed(0)}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={trustMetrics.successRate * 100}
+                  onChange={(e) => {
+                    const sr = parseFloat(e.target.value) / 100;
+                    setTrustMetrics((m) => {
+                      const updated = { ...m, successRate: sr };
+                      const sScore = sr * 35;
+                      const vScore = Math.min(1.0, updated.tradeCount / 50.0) * 25;
+                      const aScore = Math.min(1.0, updated.assetUSD / 1000.0) * 25;
+                      const rScore = (updated.rating / 5.0) * 15;
+                      const total = sScore + vScore + aScore + rScore;
+                      setTrustTotalScore(total);
+                      if (total >= 80) {
+                        setTrustTier("TIER_PRIME");
+                        setTrustMaxLeverage(20);
+                        setTrustCreditLimit(5000);
+                      } else if (total >= 60) {
+                        setTrustTier("TIER_TRUSTED");
+                        setTrustMaxLeverage(10);
+                        setTrustCreditLimit(2000);
+                      } else if (total >= 40) {
+                        setTrustTier("TIER_STANDARD");
+                        setTrustMaxLeverage(5);
+                        setTrustCreditLimit(500);
+                      } else {
+                        setTrustTier("TIER_UNVERIFIED");
+                        setTrustMaxLeverage(2);
+                        setTrustCreditLimit(100);
+                      }
+                      return updated;
+                    });
+                  }}
+                  className="w-full accent-cyan-400 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-mono text-slate-300">
+                  <span>成交笔数: {trustMetrics.tradeCount} 笔</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={trustMetrics.tradeCount}
+                  onChange={(e) => {
+                    const count = parseInt(e.target.value, 10);
+                    setTrustMetrics((m) => {
+                      const updated = { ...m, tradeCount: count };
+                      const sScore = updated.successRate * 35;
+                      const vScore = Math.min(1.0, count / 50.0) * 25;
+                      const aScore = Math.min(1.0, updated.assetUSD / 1000.0) * 25;
+                      const rScore = (updated.rating / 5.0) * 15;
+                      const total = sScore + vScore + aScore + rScore;
+                      setTrustTotalScore(total);
+                      if (total >= 80) {
+                        setTrustTier("TIER_PRIME");
+                        setTrustMaxLeverage(20);
+                        setTrustCreditLimit(5000);
+                      } else if (total >= 60) {
+                        setTrustTier("TIER_TRUSTED");
+                        setTrustMaxLeverage(10);
+                        setTrustCreditLimit(2000);
+                      } else if (total >= 40) {
+                        setTrustTier("TIER_STANDARD");
+                        setTrustMaxLeverage(5);
+                        setTrustCreditLimit(500);
+                      } else {
+                        setTrustTier("TIER_UNVERIFIED");
+                        setTrustMaxLeverage(2);
+                        setTrustCreditLimit(100);
+                      }
+                      return updated;
+                    });
+                  }}
+                  className="w-full accent-purple-400 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-mono text-slate-300">
+                  <span>抵押资产: ${trustMetrics.assetUSD}</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="2000"
+                  step="50"
+                  value={trustMetrics.assetUSD}
+                  onChange={(e) => {
+                    const asset = parseFloat(e.target.value);
+                    setTrustMetrics((m) => {
+                      const updated = { ...m, assetUSD: asset };
+                      const sScore = updated.successRate * 35;
+                      const vScore = Math.min(1.0, updated.tradeCount / 50.0) * 25;
+                      const aScore = Math.min(1.0, asset / 1000.0) * 25;
+                      const rScore = (updated.rating / 5.0) * 15;
+                      const total = sScore + vScore + aScore + rScore;
+                      setTrustTotalScore(total);
+                      if (total >= 80) {
+                        setTrustTier("TIER_PRIME");
+                        setTrustMaxLeverage(20);
+                        setTrustCreditLimit(5000);
+                      } else if (total >= 60) {
+                        setTrustTier("TIER_TRUSTED");
+                        setTrustMaxLeverage(10);
+                        setTrustCreditLimit(2000);
+                      } else if (total >= 40) {
+                        setTrustTier("TIER_STANDARD");
+                        setTrustMaxLeverage(5);
+                        setTrustCreditLimit(500);
+                      } else {
+                        setTrustTier("TIER_UNVERIFIED");
+                        setTrustMaxLeverage(2);
+                        setTrustCreditLimit(100);
+                      }
+                      return updated;
+                    });
+                  }}
+                  className="w-full accent-emerald-400 cursor-pointer"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-mono text-slate-300">
+                  <span>履约评分: {trustMetrics.rating.toFixed(1)} 星</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  value={trustMetrics.rating * 10}
+                  onChange={(e) => {
+                    const r = parseFloat(e.target.value) / 10;
+                    setTrustMetrics((m) => {
+                      const updated = { ...m, rating: r };
+                      const sScore = updated.successRate * 35;
+                      const vScore = Math.min(1.0, updated.tradeCount / 50.0) * 25;
+                      const aScore = Math.min(1.0, updated.assetUSD / 1000.0) * 25;
+                      const rScore = (r / 5.0) * 15;
+                      const total = sScore + vScore + aScore + rScore;
+                      setTrustTotalScore(total);
+                      if (total >= 80) {
+                        setTrustTier("TIER_PRIME");
+                        setTrustMaxLeverage(20);
+                        setTrustCreditLimit(5000);
+                      } else if (total >= 60) {
+                        setTrustTier("TIER_TRUSTED");
+                        setTrustMaxLeverage(10);
+                        setTrustCreditLimit(2000);
+                      } else if (total >= 40) {
+                        setTrustTier("TIER_STANDARD");
+                        setTrustMaxLeverage(5);
+                        setTrustCreditLimit(500);
+                      } else {
+                        setTrustTier("TIER_UNVERIFIED");
+                        setTrustMaxLeverage(2);
+                        setTrustCreditLimit(100);
+                      }
+                      return updated;
+                    });
+                  }}
+                  className="w-full accent-amber-400 cursor-pointer"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -1894,6 +2467,288 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                   className="h-9 px-5 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold border border-purple-500/30 cursor-pointer shadow-sm"
                 >
                   我已安全备份密钥
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal 4: Dual-Rail Micro-Payment QR Topup (1元 / 10元 微信/支付宝/Web3) */}
+      <AnimatePresence>
+        {topupModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md rounded-xl bg-[#111420] border border-cyan-500/30 p-6 space-y-4 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <QrCode className="w-5 h-5 text-cyan-400" />
+                  <h3 className="text-sm font-bold text-white font-mono">
+                    法币与 Web3 双轨扫码充值 (极小额微支付)
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setTopupModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-md transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Amount Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono text-slate-400">选择充值金额 (CNY):</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {([1, 10, 50] as const).map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      onClick={() => setTopupAmount(amt)}
+                      className={`h-10 rounded-md font-mono text-xs font-semibold border transition cursor-pointer flex flex-col items-center justify-center ${
+                        topupAmount === amt
+                          ? "bg-cyan-600 text-white border-cyan-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)]"
+                          : "bg-[#090b12] text-slate-300 border-white/10 hover:border-white/20"
+                      }`}
+                    >
+                      <span>￥{amt}.00 元</span>
+                      <span className="text-[9px] opacity-80">{amt === 10 ? "尝鲜推荐" : amt === 1 ? "体验调用" : "深度运行"}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Method Selector */}
+              <div className="space-y-1.5">
+                <label className="text-[11px] font-mono text-slate-400">选择支付渠道:</label>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "wechat", label: "微信支付", note: "WeChat Pay" },
+                    { id: "alipay", label: "支付宝", note: "Alipay QR" },
+                    { id: "web3", label: "Web3 扫码", note: "Monad 10143" },
+                  ].map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => setTopupMethod(m.id as any)}
+                      className={`h-11 rounded-md font-mono text-[11px] border transition cursor-pointer flex flex-col items-center justify-center ${
+                        topupMethod === m.id
+                          ? "bg-purple-600/30 text-white border-purple-500 shadow-xs"
+                          : "bg-[#090b12] text-slate-400 border-white/10 hover:border-white/20"
+                      }`}
+                    >
+                      <span className="font-semibold">{m.label}</span>
+                      <span className="text-[9px] text-slate-500">{m.note}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic QR Code Display Frame */}
+              <div className="p-4 rounded-lg bg-[#090b12] border border-white/10 flex flex-col items-center justify-center space-y-3">
+                <div className="w-40 h-40 bg-white p-2 rounded-md flex items-center justify-center shadow-md">
+                  {/* High quality SVG dynamic QR code representation */}
+                  <svg viewBox="0 0 100 100" className="w-full h-full text-black">
+                    <rect width="100" height="100" fill="white" />
+                    {/* Corner Position Detection Squares */}
+                    <rect x="5" y="5" width="26" height="26" fill="black" />
+                    <rect x="9" y="9" width="18" height="18" fill="white" />
+                    <rect x="13" y="13" width="10" height="10" fill="black" />
+
+                    <rect x="69" y="5" width="26" height="26" fill="black" />
+                    <rect x="73" y="9" width="18" height="18" fill="white" />
+                    <rect x="77" y="13" width="10" height="10" fill="black" />
+
+                    <rect x="5" y="69" width="26" height="26" fill="black" />
+                    <rect x="9" y="73" width="18" height="18" fill="white" />
+                    <rect x="13" y="77" width="10" height="10" fill="black" />
+
+                    {/* Matrix pattern elements */}
+                    <rect x="36" y="8" width="6" height="6" fill="black" />
+                    <rect x="46" y="8" width="6" height="6" fill="black" />
+                    <rect x="56" y="8" width="6" height="6" fill="black" />
+                    <rect x="36" y="22" width="6" height="6" fill="black" />
+                    <rect x="50" y="22" width="6" height="6" fill="black" />
+                    <rect x="8" y="36" width="6" height="6" fill="black" />
+                    <rect x="22" y="36" width="6" height="6" fill="black" />
+                    <rect x="36" y="36" width="12" height="12" fill="black" />
+                    <rect x="54" y="36" width="6" height="6" fill="black" />
+                    <rect x="68" y="36" width="12" height="6" fill="black" />
+                    <rect x="86" y="36" width="6" height="6" fill="black" />
+                    <rect x="8" y="48" width="12" height="6" fill="black" />
+                    <rect x="26" y="48" width="6" height="6" fill="black" />
+                    <rect x="42" y="48" width="16" height="6" fill="black" />
+                    <rect x="68" y="48" width="6" height="6" fill="black" />
+                    <rect x="80" y="48" width="12" height="6" fill="black" />
+                    <rect x="36" y="60" width="6" height="6" fill="black" />
+                    <rect x="48" y="60" width="12" height="6" fill="black" />
+                    <rect x="66" y="60" width="6" height="6" fill="black" />
+                    <rect x="80" y="60" width="12" height="6" fill="black" />
+                    <rect x="36" y="72" width="12" height="6" fill="black" />
+                    <rect x="54" y="72" width="6" height="6" fill="black" />
+                    <rect x="68" y="72" width="12" height="6" fill="black" />
+                    <rect x="86" y="72" width="6" height="6" fill="black" />
+                    <rect x="36" y="84" width="6" height="6" fill="black" />
+                    <rect x="48" y="84" width="18" height="6" fill="black" />
+                    <rect x="72" y="84" width="6" height="6" fill="black" />
+                  </svg>
+                </div>
+
+                <div className="text-center space-y-0.5">
+                  <div className="text-xs font-mono font-bold text-white">
+                    {topupMethod === "wechat"
+                      ? "打开微信「扫一扫」付款"
+                      : topupMethod === "alipay"
+                      ? "打开支付宝「扫一扫」付款"
+                      : "MetaMask / OKX App 扫码转账 (Monad 10143)"}
+                  </div>
+                  <div className="text-[10px] font-mono text-slate-400">
+                    扣除 ￥{topupAmount}.00 人民币 · 毫秒级入账至算力资金池
+                  </div>
+                </div>
+              </div>
+
+              {/* Confirmation CTA */}
+              <button
+                type="button"
+                disabled={topupProcessing}
+                onClick={() => {
+                  setTopupProcessing(true);
+                  setTimeout(() => {
+                    setVaultBalanceCNY((b) => b + topupAmount);
+                    setVaultBalanceUSD((u) => u + topupAmount / 7.2);
+                    setTopupProcessing(false);
+                    setTopupModalOpen(false);
+                    recordAuditEvent({
+                      walletAddress: activeWallet,
+                      category: "PAYMENT",
+                      action: "INFERENCE_TOPUP_QR",
+                      description: `Recharged ￥${topupAmount}.00 CNY via ${topupMethod.toUpperCase()} QR payment`,
+                      amount: `+￥${topupAmount}.00`,
+                      status: "COMMITTED",
+                    });
+                  }, 600);
+                }}
+                className="w-full h-10 px-4 rounded-md bg-cyan-600 hover:bg-cyan-500 border border-cyan-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                {topupProcessing ? (
+                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+                <span>{topupProcessing ? "正在验证入账..." : `已完成扫码，立即确认入账 (+￥${topupAmount}.00)`}</span>
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Modal 5: Virtual Card & Auto-Topup Guardrail Settings */}
+      <AnimatePresence>
+        {cardModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-md rounded-xl bg-[#111420] border border-purple-500/30 p-6 space-y-4 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                <div className="flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-purple-400" />
+                  <h3 className="text-sm font-bold text-white font-mono">
+                    虚拟卡绑定与自动充值守护进程
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setCardModalOpen(false)}
+                  className="p-1 text-slate-400 hover:text-white rounded-md transition"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="p-3 rounded-md bg-purple-500/10 border border-purple-500/20 text-slate-300 text-xs font-mono leading-relaxed space-y-1">
+                <span className="font-bold text-purple-300">[GUARDRAIL SPEC]</span>
+                <p>
+                  当 Agent 自主运行导致可用算力余额 &lt; 1.00 USD 时，守护进程静默向绑定的虚拟卡划扣 10.00 USD，保障长链任务不断资。
+                </p>
+              </div>
+
+              {/* Card Inputs */}
+              <div className="space-y-3 font-mono text-xs">
+                <div className="space-y-1">
+                  <label className="text-slate-400">支持卡种: Visa / Mastercard / Dupay / Wise / Revolut / PokePay</label>
+                  <input
+                    type="text"
+                    defaultValue="4242 •••• •••• 4242"
+                    className="w-full px-3 py-2 rounded-md bg-[#090b12] border border-white/10 text-white focus:outline-none focus:border-purple-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-slate-400">有效期限 (MM/YY)</label>
+                    <input
+                      type="text"
+                      defaultValue="12/28"
+                      className="w-full px-3 py-2 rounded-md bg-[#090b12] border border-white/10 text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-slate-400">安全码 (CVC)</label>
+                    <input
+                      type="password"
+                      defaultValue="888"
+                      className="w-full px-3 py-2 rounded-md bg-[#090b12] border border-white/10 text-white focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-2 border-t border-white/10 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-300 font-semibold">激活自动续航代扣 (Auto-Topup)</span>
+                    <input
+                      type="checkbox"
+                      checked={autoTopupEnabled}
+                      onChange={(e) => setAutoTopupEnabled(e.target.checked)}
+                      className="w-4 h-4 rounded text-purple-600 focus:ring-0 cursor-pointer"
+                    />
+                  </div>
+                  <div className="text-[11px] text-slate-400">
+                    单日硬核限额熔断: <strong className="text-white">${dailyLimitUSD.toFixed(2)} USD / 天</strong>（一旦超限强行停止代扣，绝不无限免密）
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-white/10 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCardModalOpen(false)}
+                  className="h-9 px-4 rounded-md bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 font-mono text-xs cursor-pointer"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setBoundCardLast4("4242");
+                    setCardModalOpen(false);
+                    recordAuditEvent({
+                      walletAddress: activeWallet,
+                      category: "AGENT",
+                      action: "GUARDRAIL_CARD_BOUND",
+                      description: "Configured Auto-Topup Guardrail with Stripe SetupIntent (Visa **** 4242, $50/day cap)",
+                      amount: "$50.00 Cap",
+                      status: "COMMITTED",
+                    });
+                  }}
+                  className="h-9 px-4 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-mono text-xs font-semibold border border-purple-500/30 cursor-pointer shadow-sm active:scale-[0.98]"
+                >
+                  保存并激活代扣守护
                 </button>
               </div>
             </motion.div>

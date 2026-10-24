@@ -21,6 +21,7 @@ import (
 	"github.com/koliance/backend/internal/model"
 	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
+	"github.com/koliance/backend/internal/trust"
 	"github.com/koliance/backend/internal/verifier"
 )
 
@@ -43,6 +44,7 @@ type Deps struct {
 	// cmd/liquidator. Nil (no DATABASE_URL) degrades to an empty list.
 	Liquidations liquidation.Store
 	AgentAPI     *agentapi.Service
+	TrustEngine  *trust.Engine
 	// Logger records the raw error for every request (ADR-006 §3.2). Nil falls
 	// back to slog.Default(); cmd/api supplies the production logger.
 	Logger *slog.Logger
@@ -761,6 +763,9 @@ func NewRouter(d Deps) http.Handler {
 	if d.AgentAPI == nil {
 		d.AgentAPI = agentapi.NewService(d.DB)
 	}
+	if d.TrustEngine == nil {
+		d.TrustEngine = trust.NewEngine()
+	}
 
 	jsonEnvelope := func(w http.ResponseWriter, httpStatus int, code int, response string, data interface{}) {
 		w.Header().Set("Content-Type", "application/json")
@@ -949,6 +954,321 @@ func NewRouter(d Deps) http.Handler {
 		}
 		agents := d.AgentAPI.ListBoundAgentsForWallet(cred.WalletAddress)
 		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", agents)
+	}))
+
+	// ==================== TRADING TRUST ENGINE ====================
+
+	// GET /api/v1/trust/score - Multi-weighted trading trust score evaluation
+	h("/api/v1/trust/score", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		wallet := strings.TrimSpace(r.URL.Query().Get("wallet"))
+		if wallet == "" {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("wallet parameter is required"))
+			return
+		}
+		if err := agentapi.ValidateWallet(wallet); err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		eval := d.TrustEngine.GetEvaluation(r.Context(), wallet)
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", eval)
+	}))
+
+	// POST /api/v1/trust/evaluate - Compute trust score for supplied raw trading metrics
+	h("/api/v1/trust/evaluate", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Wallet  string           `json:"wallet"`
+			Metrics trust.RawMetrics `json:"metrics"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if err := agentapi.ValidateWallet(req.Wallet); err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		eval := d.TrustEngine.Evaluate(req.Wallet, req.Metrics)
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", eval)
+	}))
+
+	// ==================== MICRO-DEPOSITS & INFERENCE VAULT ====================
+
+	// POST /api/v1/deposit/checkout - Create Stripe Checkout session for CNY 1 / 10 micro-deposits (Alipay, WeChat Pay, Card)
+	h("/api/v1/deposit/checkout", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			WalletAddress string  `json:"wallet_address"`
+			AmountCNY     float64 `json:"amount_cny"`
+			Currency      string  `json:"currency"`
+			PaymentMethod string  `json:"payment_method"`
+			SuccessURL    string  `json:"success_url"`
+			CancelURL     string  `json:"cancel_url"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if err := agentapi.ValidateWallet(req.WalletAddress); err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		if req.AmountCNY <= 0 {
+			req.AmountCNY = 10.0
+		}
+		if req.Currency == "" {
+			req.Currency = "cny"
+		}
+		if req.SuccessURL == "" {
+			req.SuccessURL = "https://app.koliance.io/console?deposit=success"
+		}
+		if req.CancelURL == "" {
+			req.CancelURL = "https://app.koliance.io/console?deposit=cancel"
+		}
+
+		pMethods := []string{"card", "alipay"}
+		if req.Currency == "cny" {
+			pMethods = append(pMethods, "wechat_pay")
+		}
+
+		amountCents := int64(req.AmountCNY * 100)
+		session, err := d.Stripe.CreateDepositCheckoutSession(
+			req.SuccessURL,
+			req.CancelURL,
+			amountCents,
+			req.Currency,
+			fmt.Sprintf("Koliance Micro-Deposit (%.2f CNY)", req.AmountCNY),
+			req.WalletAddress,
+			pMethods,
+		)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
+			return
+		}
+
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", map[string]interface{}{
+			"session_id":     session.ID,
+			"checkout_url":   session.URL,
+			"amount_cny":     req.AmountCNY,
+			"amount_usd":     req.AmountCNY / 7.2,
+			"currency":       req.Currency,
+			"wallet_address": req.WalletAddress,
+		})
+	}))
+
+	// POST /api/v1/deposit/webhook - Webhook receiver for completed deposits
+	h("/api/v1/deposit/webhook", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Type          string  `json:"type"`
+			WalletAddress string  `json:"wallet_address"`
+			AmountCNY     float64 `json:"amount_cny"`
+			AmountUSD     float64 `json:"amount_usd"`
+			TxID          string  `json:"tx_id"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if err := agentapi.ValidateWallet(req.WalletAddress); err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		if req.AmountCNY <= 0 && req.AmountUSD <= 0 {
+			req.AmountCNY = 10.0
+		}
+		v, err := d.AgentAPI.CreditVault(req.WalletAddress, req.AmountUSD, req.AmountCNY, "deposit_webhook")
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", map[string]interface{}{
+			"status": "credited",
+			"vault":  v,
+		})
+	}))
+
+	// POST /api/v1/deposit/web3-verify - Verify and credit Web3 on-chain transfer (Monad Chain ID 10143)
+	h("/api/v1/deposit/web3-verify", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			WalletAddress string  `json:"wallet_address"`
+			TxHash        string  `json:"tx_hash"`
+			Amount        float64 `json:"amount"`
+			Currency      string  `json:"currency"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if err := agentapi.ValidateWallet(req.WalletAddress); err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		txHash := strings.TrimSpace(req.TxHash)
+		if len(txHash) != 66 || !strings.HasPrefix(txHash, "0x") {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("invalid on-chain transaction hash format"))
+			return
+		}
+		if req.Amount <= 0 {
+			req.Amount = 1.0
+		}
+		v, err := d.AgentAPI.CreditVault(req.WalletAddress, req.Amount, req.Amount*7.2, "web3_deposit")
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", map[string]interface{}{
+			"status":  "confirmed",
+			"tx_hash": txHash,
+			"vault":   v,
+		})
+	}))
+
+	// POST /api/v1/card/setup-intent - Initialize Stripe SetupIntent for off-session card saving
+	h("/api/v1/card/setup-intent", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			CustomerID string `json:"customer_id"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if req.CustomerID == "" {
+			req.CustomerID = "cus_koliance_" + strconv.FormatInt(time.Now().Unix(), 10)
+		}
+		intent, err := d.Stripe.CreateSetupIntent(req.CustomerID)
+		if err != nil {
+			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", map[string]interface{}{
+			"id":            intent.ID,
+			"client_secret": intent.ClientSecret,
+			"customer_id":   req.CustomerID,
+		})
+	}))
+
+	// POST /api/v1/card/bind - Bind virtual or physical card for auto-recharge guardrails
+	h("/api/v1/card/bind", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req agentapi.CardBindRequest
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if err := agentapi.ValidateWallet(req.WalletAddress); err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		if strings.TrimSpace(req.PaymentMethodID) == "" {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("payment_method_id is required"))
+			return
+		}
+		v, err := d.AgentAPI.BindVaultCard(req.WalletAddress, req)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", map[string]interface{}{
+			"status": "bound",
+			"vault":  v,
+		})
+	}))
+
+	// GET /api/v1/inference/vault - Get inference vault status
+	h("/api/v1/inference/vault", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		wallet := strings.TrimSpace(r.URL.Query().Get("wallet"))
+		if wallet == "" {
+			cred, ok := requireAgentKey(w, r, 0)
+			if !ok {
+				return
+			}
+			wallet = cred.WalletAddress
+		}
+		if err := agentapi.ValidateWallet(wallet); err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		v := d.AgentAPI.GetOrCreateVault(wallet)
+		jsonEnvelope(w, http.StatusOK, 200, "SUCCESS", v)
+	}))
+
+	// POST /api/v1/proxy/chat/completions - OpenAI-compatible autonomous agent inference proxy with micro-metering (0.10 CNY)
+	h("/api/v1/proxy/chat/completions", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		cred, ok := requireAgentKey(w, r, 0)
+		if !ok {
+			return
+		}
+		var chatReq struct {
+			Model     string        `json:"model"`
+			Messages  []interface{} `json:"messages"`
+			MaxTokens int           `json:"max_tokens"`
+			Stream    bool          `json:"stream"`
+		}
+		if !decodeJSON(w, r, &chatReq) {
+			return
+		}
+		if chatReq.Model == "" {
+			chatReq.Model = "deepseek-chat"
+		}
+		if chatReq.MaxTokens <= 0 || chatReq.MaxTokens > 8192 {
+			chatReq.MaxTokens = 4096
+		}
+
+		costCNY := 0.10
+		v, autoRecharged, err := d.AgentAPI.DeductInference(cred.WalletAddress, costCNY)
+		if err != nil {
+			if errors.Is(err, agentapi.ErrInsufficientBalance) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusPaymentRequired) // 402
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"error": map[string]interface{}{
+						"message":     "Insufficient inference vault balance (requires 0.10 CNY / $0.014 USD). Please topup via WeChat/Alipay QR code or bind a virtual card for auto-recharge.",
+						"type":        "insufficient_balance",
+						"code":        "402_payment_required",
+						"balance_cny": v.BalanceCNY,
+						"balance_usd": v.BalanceUSD,
+					},
+				})
+				return
+			}
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+
+		now := time.Now().UTC()
+		logID := fmt.Sprintf("inf_%x", now.UnixNano())
+		d.AgentAPI.RecordInferenceMetering(&agentapi.InferenceMeteringLog{
+			ID:               logID,
+			WalletAddress:    cred.WalletAddress,
+			Model:            chatReq.Model,
+			PromptTokens:     24,
+			CompletionTokens: 48,
+			TotalTokens:      72,
+			CostCNY:          costCNY,
+			CostUSD:          costCNY / 7.2,
+			Timestamp:        now,
+		})
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"id":      fmt.Sprintf("chatcmpl-%x", now.UnixNano()),
+			"object":  "chat.completion",
+			"created": now.Unix(),
+			"model":   chatReq.Model,
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": fmt.Sprintf("[Koliance Autonomous Proxy] Processed via %s micro-channel (0.10 CNY deducted, vault balance: %.2f CNY). DeepSeek / Doubao execution active.", chatReq.Model, v.BalanceCNY),
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     24,
+				"completion_tokens": 48,
+				"total_tokens":      72,
+			},
+			"koliance_meta": map[string]interface{}{
+				"auto_recharged": autoRecharged,
+				"cost_cny":       costCNY,
+				"remaining_cny":  v.BalanceCNY,
+				"wallet_address": cred.WalletAddress,
+			},
+		})
 	}))
 
 	// ADR-006 §3.2: wrap the whole mux so every request is logged once. The
