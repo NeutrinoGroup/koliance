@@ -160,6 +160,10 @@ All user-facing workflows must maintain complete audit transparency:
    - Full visibility into autonomous payment streams, including Order Hash, on-chain TX Hash, Monad testnet consensus state, and receipt links.
    - All records must persist per user account (syncing local state with backend telemetry).
 
+## 禁止模版卡片放无意义文本和霓虹色彩配色 需要思考审美
+
+
+
 
 ## 对于并行任务可以创建worktree，任务完成可以关闭worktree
 ## subagent将问题进行拆分，并行子agent处理任务，代码需要模块化，职责独立

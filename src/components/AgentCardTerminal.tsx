@@ -81,7 +81,12 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
     currentAccount || "0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7"
   );
   const [searchInput, setSearchInput] = useState("");
-  const [cardFrozen, setCardFrozen] = useState(false);
+  const [cardFrozen, setCardFrozen] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("koliance_agentcard_frozen") === "true";
+    }
+    return false;
+  });
   const [creditLimit, setCreditLimit] = useState(10000);
   const [creditUsed, setCreditUsed] = useState(1248.52);
 
@@ -192,6 +197,10 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
           .then((verification) => {
             setSteamLoading(false);
             if (verification.valid && verification.steamId) {
+              if (verification.synthetic) {
+                setSteamNotice("Steam 演示账号已载入（测试沙箱模式，不分配真实链上信用额度）。");
+                return;
+              }
               writeAccountState("steam", verification.steamId);
               loadSteamProfile(verification.steamId);
               setSteamNotice("Steam 官方 OpenID 签名验证通过！已绑定您的真实玩家身份。");
@@ -341,7 +350,39 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
   const [micropayLoading, setMicropayLoading] = useState(false);
   const [micropayNotice, setMicropayNotice] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
+  const handleToggleFreeze = async () => {
+    const nextState = !cardFrozen;
+    setCardFrozen(nextState);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("koliance_agentcard_frozen", String(nextState));
+      } catch {
+        // ignore quota error
+      }
+    }
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_GO_BACKEND_URL || "";
+      if (backendUrl) {
+        await fetch(`${backendUrl}/api/v1/agentcard/freeze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ keyHex: "sk_sess_a1b1d073a99fdd2e432fe26f8d0a250da1c27e205bc39019" }),
+        }).catch(() => {});
+      }
+    } catch {
+      // ignore network errors
+    }
+  };
+
   const handleSimulateMicropayment = async (amount: number, merchant: string, mcc: string) => {
+    if (cardFrozen) {
+      setMicropayNotice({
+        msg: "卡片已被紧急熔断冻结，拒绝所有消费授权请求 [代码 57 - FROZEN]",
+        type: "error",
+      });
+      return;
+    }
+
     setMicropayLoading(true);
     setMicropayNotice(null);
     try {
@@ -773,7 +814,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
               </button>
 
               <button
-                onClick={() => setCardFrozen(!cardFrozen)}
+                onClick={handleToggleFreeze}
                 className={`h-10 flex items-center justify-center gap-2 rounded-md text-xs font-mono font-semibold transition border ${
                   cardFrozen
                     ? "bg-red-500/20 text-red-300 border-red-500/40"

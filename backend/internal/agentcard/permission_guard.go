@@ -17,6 +17,7 @@ type SessionKey struct {
 	MaxPerTxUSD   float64   `json:"maxPerTxUSD"`
 	DailyLimitUSD float64   `json:"dailyLimitUSD"`
 	SpentTodayUSD float64   `json:"spentTodayUSD"`
+	WindowStart   time.Time `json:"windowStart"`
 	AllowedMCCs   []string  `json:"allowedMCCs"` // e.g. ["7999", "5814", "5734"] (Games, Dining, Digital goods)
 	ExpiresAt     time.Time `json:"expiresAt"`
 	IsFrozen      bool      `json:"isFrozen"`
@@ -49,6 +50,7 @@ func (g *PermissionGuard) IssueSessionKey(cardID, agentID string, maxPerTx, dail
 		ttlHours = 24
 	}
 
+	now := time.Now().UTC()
 	sk := &SessionKey{
 		KeyHex:        keyHex,
 		CardID:        cardID,
@@ -56,20 +58,25 @@ func (g *PermissionGuard) IssueSessionKey(cardID, agentID string, maxPerTx, dail
 		MaxPerTxUSD:   maxPerTx,
 		DailyLimitUSD: dailyLimit,
 		SpentTodayUSD: 0,
+		WindowStart:   now,
 		AllowedMCCs:   allowedMCCs,
-		ExpiresAt:     time.Now().Add(time.Duration(ttlHours) * time.Hour),
+		ExpiresAt:     now.Add(time.Duration(ttlHours) * time.Hour),
 		IsFrozen:      false,
-		CreatedAt:     time.Now().UTC(),
+		CreatedAt:     now,
 	}
 
 	g.sessionKeys[keyHex] = sk
 	return sk
 }
 
-// VerifyAndDeduct verifies permission rules and updates daily consumption atomically
-// The key must have been issued for cardID: a key for card A cannot charge
-// card B.
+// VerifyAndDeduct verifies permission rules and updates daily consumption atomically.
+// Follows on-chain SessionKeyRegistry.sol 24-hour rolling window model.
 func (g *PermissionGuard) VerifyAndDeduct(keyHex, cardID string, amountUSD float64, mcc string) error {
+	return g.VerifyAndDeductWithTime(keyHex, cardID, amountUSD, mcc, time.Now().UTC())
+}
+
+// VerifyAndDeductWithTime allows deterministic time-injected verification of the rolling 24-hour window.
+func (g *PermissionGuard) VerifyAndDeductWithTime(keyHex, cardID string, amountUSD float64, mcc string, now time.Time) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
@@ -86,8 +93,14 @@ func (g *PermissionGuard) VerifyAndDeduct(keyHex, cardID string, amountUSD float
 		return errors.New("session key is frozen by circuit breaker")
 	}
 
-	if time.Now().After(sk.ExpiresAt) {
+	if now.After(sk.ExpiresAt) {
 		return errors.New("session key has expired")
+	}
+
+	// 24-hour rolling window check (matches on-chain SessionKeyRegistry.sol windowStart logic)
+	if now.Sub(sk.WindowStart) >= 24*time.Hour {
+		sk.SpentTodayUSD = 0
+		sk.WindowStart = now
 	}
 
 	if amountUSD > sk.MaxPerTxUSD {
@@ -115,11 +128,38 @@ func (g *PermissionGuard) VerifyAndDeduct(keyHex, cardID string, amountUSD float
 	return nil
 }
 
-// FreezeSessionKey disables the session key in case of anomaly
+// FreezeSessionKey disables the session key in case of anomaly (circuit breaker)
 func (g *PermissionGuard) FreezeSessionKey(keyHex string) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if sk, ok := g.sessionKeys[keyHex]; ok {
 		sk.IsFrozen = true
 	}
+}
+
+// UnfreezeSessionKey restores a frozen session key
+func (g *PermissionGuard) UnfreezeSessionKey(keyHex string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if sk, ok := g.sessionKeys[keyHex]; ok {
+		sk.IsFrozen = false
+	}
+}
+
+// RevokeSessionKey permanently revokes and deletes a delegated session key
+func (g *PermissionGuard) RevokeSessionKey(keyHex string) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	delete(g.sessionKeys, keyHex)
+}
+
+// GetSessionKey returns a copy of the session key, or nil if not found
+func (g *PermissionGuard) GetSessionKey(keyHex string) *SessionKey {
+	g.mu.RLock()
+	defer g.mu.RUnlock()
+	if sk, ok := g.sessionKeys[keyHex]; ok {
+		copy := *sk
+		return &copy
+	}
+	return nil
 }

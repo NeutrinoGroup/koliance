@@ -333,6 +333,24 @@ pnpm dev
 
 ---
 
+## Developer API Pricing & Free Quota
+
+Koliance provides 100% transparent, upfront SaaS tier allocations with zero hidden fees. Quotas are enforced at the gateway layer and can be replenished via native MON, KOL token, or Stripe credit card.
+
+| Plan Tier | Price (USD) | Quota Volume | Peak Concurrency | Key Capabilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **Starter Free Trial** | **$0.00** | **300 Calls Free** (3 claims x 100 calls) | 60 RPM | Free sandbox trial, EIP-712 testnet delegation, zero credit card required |
+| **Growth Pro** | **$19.90** | **10,000 Calls** | 300 RPM | 99.9% SLA, 15% discount when paying via KOL token, real-time market feeds |
+| **Enterprise Scale** | **$149.00** | **100,000 Calls** | 1,200 RPM | Dedicated execution lanes, custom SLA guarantees, enterprise invoice billing |
+
+### Pricing & Quota Policies
+- **Free Sandbox Claim**: Any connected EVM wallet on Monad Testnet can claim 100 free calls per batch (up to 3 claims / 300 calls total) at [https://koliance.vercel.app/pricing](https://koliance.vercel.app/pricing).
+- **Native Token Discount**: Settling API package invoices with the KOL governance token automatically applies a **15% discount** across all tiers.
+- **Refund Policy (14-Day Window)**: Unspent API package quotas can be refunded on a pro-rata basis within 14 calendar days of purchase by contacting `developer@koliance.io`. See [Refund Policy](https://koliance.vercel.app/refund).
+- **Official Documentation**: Full API reference, code examples, and sandbox manuals: [https://koliance.vercel.app/docs](https://koliance.vercel.app/docs).
+
+---
+
 ## Git History & Release Milestones
 
 | Commit Hash | Description | Subsystem Scope |

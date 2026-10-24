@@ -79,4 +79,22 @@ describe("Steam OpenID Server-Side Verification", () => {
     expect(data.synthetic).toBe(true);
     expect(data.dataCaveat).toMatch(/0 credit allocation/);
   });
+
+  it("strictly blocks demo requests in production environment without explicit allow flag", async () => {
+    const origEnv = process.env.NODE_ENV;
+    const origFlag = process.env.ALLOW_STEAM_DEMO;
+    try {
+      (process.env as any).NODE_ENV = "production";
+      delete process.env.ALLOW_STEAM_DEMO;
+
+      const res = await POST(req({ demo: true, steamId: "76561198034202275" }));
+      expect(res.status).toBe(403);
+      const data = await res.json();
+      expect(data.valid).toBe(false);
+      expect(data.error).toMatch(/Demo authentication disabled in production/);
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+      if (origFlag) process.env.ALLOW_STEAM_DEMO = origFlag;
+    }
+  });
 });

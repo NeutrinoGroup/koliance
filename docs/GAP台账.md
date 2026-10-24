@@ -1959,6 +1959,7 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 | 16 大主流 AI 检索爬虫白名单与抓取放行 | `src/app/robots.ts` 显式放行 GPTBot、ChatGPT-User、OAI-SearchBot、ClaudeBot、anthropic-ai、Claude-Web、PerplexityBot、Google-Extended、GoogleOther、Applebot-Extended、cohere-ai、Meta-ExternalAgent、FacebookBot、DuckAssistBot、Amazonbot、Bytespider 等，并直接暴露 `/llms.txt`、`/llms-full.txt` 与 `sitemap.xml` |
 | 知识图谱实体定义与 FAQPage 扩充 | `src/app/layout.tsx` Schema.org 注入 `DefinedTermSet`（定义 Agent Card / Monad Parallel EVM / EIP-712 Session Key / KOL Token）、`Dataset`（实时期权与验证数据集）、`contactPoint` 与 7 个高权重权威 FAQ 直接解答；并在 `<noscript>` 语义回退层预置完整标价与合约清单 |
 | 全球 Anycast 边缘缓存与跨域 CORS | `next.config.ts` 为 `/(llms.txt|llms-full.txt|sitemap.xml|robots.txt)` 注入 `Cache-Control: public, s-maxage=86400, stale-while-revalidate=86400` 与 `Access-Control-Allow-Origin: *`，极大降低全球不同区域大模型抓取延迟 |
+| GitHub 根目录 README 定价表与会话熔断加固 | 在双语根目录 `README.md` 与 `README_zh.md` 首屏直接嵌入《开发者 API 定价与免费额度》明细表，使 Bing/Googlebot 爬取 GitHub 首页时直接收录定价数据；后端与合约层对齐 24 小时滚动重置与熔断冻结控制（见 `docs/changes/084`） |
 | 自动化守卫用例 | 新增 `tests/geo-optimization.test.ts`（6 项断言覆盖 Answer.AI 规范、llms-full.txt 关键字段、robots.ts 爬虫白名单、layout 关联标记与 edge 缓存头配置），毫秒级全部通过 |
 
 ---

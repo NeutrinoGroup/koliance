@@ -330,6 +330,24 @@ pnpm dev
 
 ---
 
+## 开发者 API 定价与免费额度 (Developer API Pricing & Free Quota)
+
+Koliance 提供 100% 透明公开的 SaaS 梯队定价，零隐藏费用。配额在网关层严格审计，支持原生 MON 代币、KOL 治理代币及 Stripe 信用卡结算。
+
+| 套餐梯队 | 价格 (USD) | 配额调用量 | 峰值并发限制 | 核心权益 |
+| :--- | :--- | :--- | :--- | :--- |
+| **Starter 免费体验版** | **$0.00** | **300 次免费调用** (分 3 次申领，每次 100 次) | 60 RPM | 零门槛沙盒试用，Monad 测试网 EIP-712 授权委托，无需绑定信用卡 |
+| **Growth 专业版** | **$19.90** | **10,000 次** | 300 RPM | 99.9% SLA 服务等级协议，KOL 代币支付享受 85 折 (15% 优惠)，实时金融行情喂价 |
+| **Enterprise 企业版** | **$149.00** | **100,000 次** | 1,200 RPM | 专属独立执行通道，定制化 SLA 协议保障，支持对公转账与企业发票 |
+
+### 定价与配额政策 (Pricing & Quota Policies)
+- **免费沙盒配额申领**：任何连接 Monad 测试网的 EVM 钱包均可在 [https://koliance.vercel.app/pricing](https://koliance.vercel.app/pricing) 免费申领 100 次调用配额（每地址最多申领 3 次，累计 300 次）。
+- **原生代币支付折扣**：使用 KOL 治理代币结算 API 购买订单，全梯队自动享受 **15% 折扣 (85 折)**。
+- **14 天无理由退款政策**：购买后 14 个自然日内，未消耗的 API 套餐配额可申请按剩余比例退款，联系邮箱 `developer@koliance.io`。详见 [退款政策](https://koliance.vercel.app/refund)。
+- **官方技术文档**：完整 API 接口文档、SDK 代码范例与沙盒调用指南：[https://koliance.vercel.app/docs](https://koliance.vercel.app/docs)。
+
+---
+
 ## Git 历史演进与里程碑
 
 | Commit 哈希 | 演进说明 | 子系统范围 |

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/koliance/backend/internal/platform/database"
 )
 
@@ -283,10 +284,9 @@ func (s *Service) GenerateGameplayProof(steamID, walletAddress string, appID int
 		creditUSD = 200.0
 	}
 
-	// ProofHash: keccak256 / sha256 bytes32 representation
+	// ProofHash: Keccak256 bytes32 representation for on-chain Koliance.sol verification
 	raw := fmt.Sprintf("KOLIANCE_GAME_PROOF:%s:%s:%d:%d:%d", steamID, walletAddress, targetGame.AppID, targetGame.PlaytimeForever, unlockedCount)
-	h := sha256.Sum256([]byte(raw))
-	proofHex := "0x" + hex.EncodeToString(h[:])
+	proofHex := crypto.Keccak256Hash([]byte(raw)).Hex()
 
 	resp := &GameplayProofResponse{
 		ProofHash:       proofHex,

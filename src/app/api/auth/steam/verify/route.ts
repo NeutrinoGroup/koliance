@@ -14,9 +14,18 @@ export async function POST(request: NextRequest) {
   try {
     const params = await request.json();
 
-    // Check for demo mock request
+    // Check for demo mock request (strictly forbidden in production unless ALLOW_STEAM_DEMO is explicitly enabled)
     if (params.demo === true || params["openid.mode"] === "demo") {
-      const demoId = params.steamId || "76561198034202275";
+      const isAllowed = process.env.NODE_ENV !== "production" || process.env.ALLOW_STEAM_DEMO === "true";
+      if (!isAllowed) {
+        return NextResponse.json(
+          { valid: false, error: "Demo authentication disabled in production environment" },
+          { status: 403, headers: corsHeaders }
+        );
+      }
+
+      const rawSteamId = typeof params.steamId === "string" ? params.steamId : "";
+      const demoId = /^\d{17}$/.test(rawSteamId) ? rawSteamId : "76561198034202275";
       return NextResponse.json(
         {
           valid: true,

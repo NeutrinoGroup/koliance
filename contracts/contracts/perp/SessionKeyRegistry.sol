@@ -519,6 +519,35 @@ contract SessionKeyRegistry is Ownable {
         emit SessionKeyUnfrozen(sessionKey, msg.sender);
     }
 
+    /// @notice Aliases for SDK and documentation compatibility (Issue #69)
+    function revokeSessionKey(address sessionKey) external {
+        Delegation storage d = _delegations[sessionKey];
+        if (!d.exists) revert NoSuchDelegation(sessionKey);
+        if (d.user != msg.sender) revert NotAuthorizedCaller(msg.sender);
+
+        d.revoked = true;
+        userNonce[msg.sender]++;
+        emit DelegationRevoked(msg.sender, sessionKey);
+    }
+
+    function freezeSessionKey(address sessionKey) external {
+        Delegation storage d = _delegations[sessionKey];
+        if (!d.exists) revert NoSuchDelegation(sessionKey);
+        if (d.user != msg.sender && msg.sender != owner) revert NotAuthorizedCaller(msg.sender);
+
+        d.frozen = true;
+        emit SessionKeyFrozen(sessionKey, msg.sender);
+    }
+
+    function unfreezeSessionKey(address sessionKey) external {
+        Delegation storage d = _delegations[sessionKey];
+        if (!d.exists) revert NoSuchDelegation(sessionKey);
+        if (d.user != msg.sender && msg.sender != owner) revert NotAuthorizedCaller(msg.sender);
+
+        d.frozen = false;
+        emit SessionKeyUnfrozen(sessionKey, msg.sender);
+    }
+
     // ---------------------------------------------------------------------
     // Views
     // ---------------------------------------------------------------------

@@ -1,13 +1,13 @@
 package developer
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type GitHubClient struct {
@@ -220,10 +220,9 @@ func (s *Service) GenerateBUIDLProof(username, targetWallet string) (*DeveloperP
 		targetWallet = "0x0000000000000000000000000000000000000000"
 	}
 
-	// Compute Keccak-compatible cryptographic proof hash
+	// Compute authentic Keccak256 cryptographic proof hash for EVM / Monad contract verification
 	raw := fmt.Sprintf("KOLIANCE_GITHUB_BUIDL_PROOF:%s:%s:%d:%d:%s", stats.Username, targetWallet, stats.PublicRepos, stats.TotalStars, stats.BUIDLTier)
-	h := sha256.Sum256([]byte(raw))
-	proofHex := "0x" + hex.EncodeToString(h[:])
+	proofHex := crypto.Keccak256Hash([]byte(raw)).Hex()
 
 	return &DeveloperProofResponse{
 		ProofHash:       proofHex,

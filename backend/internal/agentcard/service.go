@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/koliance/backend/internal/platform/database"
 )
 
@@ -317,6 +318,21 @@ func (s *Service) IssueSessionKey(cardID, cardToken string, asOperator bool, age
 	return s.guard.IssueSessionKey(cardID, agentID, maxPerTx, dailyLimit, allowedMCCs, ttlHours), nil
 }
 
+// FreezeSessionKey disables the specified session key (circuit breaker)
+func (s *Service) FreezeSessionKey(keyHex string) {
+	s.guard.FreezeSessionKey(keyHex)
+}
+
+// RevokeSessionKey permanently revokes the session key
+func (s *Service) RevokeSessionKey(keyHex string) {
+	s.guard.RevokeSessionKey(keyHex)
+}
+
+// GetSessionKey retrieves session key details
+func (s *Service) GetSessionKey(keyHex string) *SessionKey {
+	return s.guard.GetSessionKey(keyHex)
+}
+
 // BatchSettle generates a cryptographic proof of settled micropayments for Monad
 func (s *Service) BatchSettle() (string, int, float64) {
 	s.mu.Lock()
@@ -337,8 +353,7 @@ func (s *Service) BatchSettle() (string, int, float64) {
 	}
 
 	raw := fmt.Sprintf("MONAD_BATCH_SETTLE:%d:%f:%d", unsettledCount, totalVolume, time.Now().Unix())
-	h := sha256.Sum256([]byte(raw))
-	batchHash := "0x" + hex.EncodeToString(h[:])
+	batchHash := crypto.Keccak256Hash([]byte(raw)).Hex()
 
 	for _, tx := range s.transactions {
 		if tx.Status == "APPROVED" && tx.MonadBatchHash == "" {

@@ -431,6 +431,53 @@ func NewRouter(d Deps) http.Handler {
 		})
 	}))))
 
+	type sessionKeyActionReq struct {
+		KeyHex     string `json:"keyHex"`
+		SessionKey string `json:"sessionKey"`
+	}
+
+	h("/api/v1/agentcard/freeze", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req sessionKeyActionReq
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		targetKey := req.KeyHex
+		if targetKey == "" {
+			targetKey = req.SessionKey
+		}
+		if targetKey == "" {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("keyHex or sessionKey is required"))
+			return
+		}
+		d.Cards.FreezeSessionKey(targetKey)
+		jsonResponse(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"keyHex":  targetKey,
+			"status":  "FROZEN",
+		})
+	}))
+
+	h("/api/v1/agentcard/revoke", methodOnly(http.MethodPost, func(w http.ResponseWriter, r *http.Request) {
+		var req sessionKeyActionReq
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		targetKey := req.KeyHex
+		if targetKey == "" {
+			targetKey = req.SessionKey
+		}
+		if targetKey == "" {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("keyHex or sessionKey is required"))
+			return
+		}
+		d.Cards.RevokeSessionKey(targetKey)
+		jsonResponse(w, http.StatusOK, map[string]interface{}{
+			"success": true,
+			"keyHex":  targetKey,
+			"status":  "REVOKED",
+		})
+	}))
+
 	// ==================== MARKET ====================
 
 	// Provenance of everything under /api/v1/market: real Alpaca data, or a
