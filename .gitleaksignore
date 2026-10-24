@@ -36,3 +36,12 @@ f41f8d815c5106f5d3952595c6e1e8ee4d67c7a8:src/components/DeveloperConsole.tsx:gen
 # credential -- but it must not be re-printed, and the value should be treated
 # as burnt regardless.
 be3adc2045c9937e81606eb98c21da50b37923dd:docs/changes/045-developer-keys的DB守卫与withDB注释收窄.md:generic-api-key:167
+# --- added 2026-10-24 (GAP-79 false positives on public Monad contract addresses) ---
+347898a4d5866bf6553292fe7abb438809402804:docs/changes/073-链上PositionManager与SessionKeyRegistry绑定与环境配置.md:generic-api-key:39
+347898a4d5866bf6553292fe7abb438809402804:contracts/scripts/wire-session-registry.ts:generic-api-key:46
+dd20ad3a5f87d7d785e859fbe2d6d117226c7ae8:docs/changes/073-链上PositionManager与SessionKeyRegistry绑定与环境配置.md:generic-api-key:42
+dd20ad3a5f87d7d785e859fbe2d6d117226c7ae8:.env.example:generic-api-key:12
+dd20ad3a5f87d7d785e859fbe2d6d117226c7ae8:contracts/.env.example:generic-api-key:11
+dd20ad3a5f87d7d785e859fbe2d6d117226c7ae8:tests/env-parity.test.ts:generic-api-key:29
+dd20ad3a5f87d7d785e859fbe2d6d117226c7ae8:tests/env-parity.test.ts:generic-api-key:34
+
