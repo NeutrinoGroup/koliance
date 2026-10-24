@@ -415,18 +415,18 @@ export function NavAuthBadges({
 
   return (
     <div className="relative flex items-center gap-1.5">
-      {/* Top Bar Direct IM & Contacts Shortcut Button (Always visible at login area) */}
+      {/* Top Bar Direct IM & Contacts Shortcut Button (Always visible at login area with gradient gray styling) */}
       <Link
         href="/im"
-        className={`relative flex items-center justify-center h-9 w-9 shrink-0 rounded-md transition-all shadow-md active:scale-95 cursor-pointer ${
+        className={`relative flex items-center justify-center h-9 w-9 shrink-0 rounded-md transition-all active:scale-95 cursor-pointer ${
           pathname === "/im"
-            ? "border border-[#00f2fe] bg-[#162035] text-[#00f2fe] shadow-[0_0_12px_rgba(0,242,254,0.35)]"
-            : "border border-white/20 hover:border-[#00f2fe]/60 bg-[#141824] hover:bg-[#1a2032] text-slate-300 hover:text-[#00f2fe]"
+            ? "bg-gradient-to-b from-[#22354c] via-[#18293e] to-[#101e30] border border-cyan-400 text-cyan-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_0_12px_rgba(0,242,254,0.4)]"
+            : "bg-gradient-to-b from-[#242c3d] via-[#1a2130] to-[#131824] hover:from-[#2e374c] hover:to-[#1b2334] border border-slate-600/50 hover:border-cyan-400/80 text-slate-200 hover:text-cyan-300 shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_2px_6px_rgba(0,0,0,0.3)] hover:shadow-[0_0_14px_rgba(0,242,254,0.3)]"
         }`}
         title="实时IM消息与通讯录 (Real-time IM Chat)"
       >
         <MessageSquare className="w-4 h-4" />
-        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-sm bg-[#00f2fe] animate-pulse pointer-events-none" />
+        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-sm bg-cyan-400 border border-[#131824] shadow-[0_0_6px_#00f2fe] animate-pulse pointer-events-none" />
       </Link>
 
       {/* Top-Right Account Button (Solid, 100% Opaque High-End Tech Dark) */}
@@ -544,15 +544,15 @@ export function NavAuthBadges({
                   )}
                 </div>
 
-                {/* Direct IM Chat Entry in Account Center (Always reachable in dropdown) */}
+                {/* Direct IM Chat Entry in Account Center (Always reachable in dropdown with gradient gray styling) */}
                 <Link
                   href="/im"
                   onClick={() => setDropdownOpen(false)}
-                  className="w-full py-1.5 px-2.5 rounded-md bg-[#162035] hover:bg-[#1f2d4a] border border-[#00f2fe]/40 text-[#00f2fe] text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                  className="w-full py-1.5 px-2.5 rounded-md bg-gradient-to-r from-[#202838] via-[#1a2130] to-[#141926] hover:from-[#293448] hover:to-[#1e2638] border border-slate-600/50 hover:border-cyan-400/60 text-cyan-300 text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] active:scale-95 cursor-pointer"
                 >
-                  <MessageSquare className="w-3.5 h-3.5 text-[#00f2fe]" />
+                  <MessageSquare className="w-3.5 h-3.5 text-cyan-400" />
                   <span>实时IM消息与通讯录</span>
-                  <span className="text-[9px] px-1 py-0.2 rounded-sm bg-[#00f2fe]/20 text-[#00f2fe] font-mono">
+                  <span className="text-[9px] px-1 py-0.2 rounded-sm bg-cyan-400/20 text-cyan-300 font-mono">
                     [OPEN]
                   </span>
                 </Link>

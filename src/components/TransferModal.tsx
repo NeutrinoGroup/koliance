@@ -300,17 +300,17 @@ export function TransferModal({
             className="absolute inset-0 bg-black/80 backdrop-blur-md"
           />
 
-          {/* Modal Window: Modern SaaS Rectangular micro-radii rounded-lg */}
+          {/* Modal Window: Modern SaaS Rectangular micro-radii rounded-lg with gradient gray styling */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 15 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 15 }}
-            className="relative w-full max-w-lg rounded-lg bg-[#0e1017] border border-white/15 p-6 shadow-2xl text-white z-10 space-y-4 font-mono"
+            className="relative w-full max-w-lg rounded-lg bg-gradient-to-b from-[#1e2538] via-[#151a27] to-[#0f131f] border border-slate-600/40 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.12)] text-white z-10 space-y-4 font-mono"
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-700/50 pb-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-md bg-[#836ef9]/20 border border-[#836ef9]/40 flex items-center justify-center text-[#836ef9]">
+                <div className="w-8 h-8 rounded-md bg-gradient-to-b from-[#2a2254] to-[#1c163a] border border-purple-400/50 flex items-center justify-center text-[#836ef9] shadow-[0_0_10px_rgba(131,110,249,0.25)]">
                   <Send className="w-4 h-4" />
                 </div>
                 <div>
@@ -324,14 +324,14 @@ export function TransferModal({
               </div>
               <button
                 onClick={onClose}
-                className="p-1 rounded-md hover:bg-white/10 text-slate-400 hover:text-white transition"
+                className="p-1 rounded-md hover:bg-white/10 text-slate-400 hover:text-white transition cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             {/* Resident Dual Balance Display Card */}
-            <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-white/[0.02] border border-white/10">
+            <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-gradient-to-b from-[#252d40] to-[#1a2130] border border-slate-600/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
               <div className="flex flex-col">
                 <span className="text-[10px] text-slate-400">KOL Token Balance:</span>
                 <span className="text-base font-bold text-[#836ef9]">

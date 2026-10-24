@@ -474,7 +474,10 @@ export default function ImPage() {
   });
 
   return (
-    <div className="min-h-screen flex flex-col justify-between selection:bg-purple-500 selection:text-white bg-[#0d1017] text-white relative">
+    <div className="min-h-screen flex flex-col justify-between selection:bg-purple-500 selection:text-white bg-gradient-to-b from-[#181d28] via-[#121620] to-[#0c0f16] text-white relative bg-digital-grid">
+      {/* Ambient Radial Depth Lighting (Luxury Slate/Gray Gradient) */}
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_80%_50%_at_50%_-10%,rgba(131,110,249,0.14),transparent_65%)]" />
+      <div className="fixed inset-0 pointer-events-none bg-[radial-gradient(ellipse_50%_40%_at_85%_25%,rgba(0,242,254,0.07),transparent_55%)]" />
       <CursorTrail />
 
       {/* Top Fixed Navigation */}
@@ -488,17 +491,17 @@ export default function ImPage() {
       />
 
       {/* Main Container */}
-      <main className="flex-1 w-full pt-18 sm:pt-20 max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col">
+      <main className="flex-1 w-full pt-18 sm:pt-20 max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col relative z-10">
         {/* Top Breadcrumb & Status Bar */}
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-1">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-[#162035] border border-[#00f2fe]/40 text-[#00f2fe] flex items-center justify-center shadow-[0_0_12px_rgba(0,242,254,0.25)]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-md bg-gradient-to-b from-[#242c3d] via-[#1b2232] to-[#141926] border border-cyan-400/50 text-cyan-300 flex items-center justify-center shadow-[inset_0_1px_0_rgba(255,255,255,0.12),0_0_14px_rgba(0,242,254,0.2)]">
               <MessageSquare className="w-4 h-4" />
             </div>
             <div>
               <div className="text-sm font-bold text-white flex items-center gap-2">
                 <span>实时通讯录与去中心化即时会话</span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#162035] border border-[#00f2fe]/40 text-[#00f2fe]">
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-gradient-to-r from-cyan-950/80 to-slate-900 border border-cyan-400/50 text-cyan-300 shadow-[inset_0_1px_0_rgba(0,242,254,0.15)]">
                   [LIVE · MONAD TESTNET]
                 </span>
               </div>
@@ -511,12 +514,12 @@ export default function ImPage() {
           {/* Quick Balance & Action Pills */}
           {activeAddress && (
             <div className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#141824] border border-white/10 text-xs font-mono">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gradient-to-b from-[#222838] to-[#161b26] border border-slate-600/40 text-xs font-mono shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                 <span className="text-slate-400">可用 KOL:</span>
                 <span className="text-purple-300 font-bold">{kolBalance}</span>
                 <Coins className="w-3.5 h-3.5 text-purple-400 ml-0.5" />
               </div>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#141824] border border-white/10 text-xs font-mono">
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-gradient-to-b from-[#222838] to-[#161b26] border border-slate-600/40 text-xs font-mono shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                 <span className="text-slate-400">MON:</span>
                 <span className="text-emerald-400 font-bold">{monBalance}</span>
               </div>
@@ -527,7 +530,7 @@ export default function ImPage() {
                   setTransferCurrency("KOL");
                   setTransferModalOpen(true);
                 }}
-                className="px-3 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-400/50 text-white text-xs font-mono font-semibold transition shadow-md active:scale-95 cursor-pointer flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded-md bg-gradient-to-b from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 border border-purple-400/60 text-white text-xs font-mono font-semibold transition shadow-[inset_0_1px_0_rgba(255,255,255,0.2),0_4px_12px_rgba(131,110,249,0.3)] active:scale-95 cursor-pointer flex items-center gap-1.5"
               >
                 <Send className="w-3.5 h-3.5 text-purple-200" />
                 <span>发起转账</span>
@@ -536,16 +539,16 @@ export default function ImPage() {
           )}
         </div>
 
-        {/* Main IM Console Body */}
-        <div className="w-full h-[740px] max-h-[80vh] flex rounded-xl border border-white/15 overflow-hidden shadow-2xl bg-[#0f131e]">
+        {/* Main IM Console Body (Gradient Gray Architectural Container) */}
+        <div className="w-full h-[740px] max-h-[80vh] flex rounded-xl border border-slate-600/40 overflow-hidden shadow-[0_20px_50px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.08)] bg-gradient-to-b from-[#1e2536] via-[#151a26] to-[#0f131f] backdrop-blur-md">
           {/* Left Column: Contacts & Friends Directory */}
           <div
-            className={`w-full md:w-80 lg:w-92 shrink-0 border-r border-white/10 flex flex-col bg-[#111522] ${
+            className={`w-full md:w-80 lg:w-92 shrink-0 border-r border-slate-700/50 flex flex-col bg-gradient-to-b from-[#1b212f] to-[#121622] ${
               selectedPeer ? "hidden md:flex" : "flex"
             }`}
           >
             {/* Contacts Header */}
-            <div className="p-3.5 border-b border-white/10 bg-[#141928] flex items-center justify-between">
+            <div className="p-3.5 border-b border-slate-700/50 bg-gradient-to-b from-[#242c3e] to-[#19202e] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4 text-cyan-400" />
                 <span className="text-xs font-bold text-white font-mono">
@@ -556,7 +559,7 @@ export default function ImPage() {
                 <button
                   type="button"
                   onClick={() => setShowAddFriend(!showAddFriend)}
-                  className="px-2.5 py-1 rounded-md bg-[#1a233a] hover:bg-[#232f4e] border border-cyan-400/40 text-cyan-300 text-xs font-mono font-medium transition flex items-center gap-1 cursor-pointer"
+                  className="px-2.5 py-1 rounded-md bg-gradient-to-b from-[#222a3d] to-[#171d2b] hover:from-[#2a344c] hover:to-[#1d2537] border border-cyan-400/40 text-cyan-300 text-xs font-mono font-medium transition flex items-center gap-1 cursor-pointer shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] active:scale-95"
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   <span>{showAddFriend ? "收起" : "添加"}</span>
@@ -568,7 +571,7 @@ export default function ImPage() {
             {showAddFriend && (
               <form
                 onSubmit={handleAddFriend}
-                className="p-3 border-b border-cyan-500/30 bg-[#162035]/80 space-y-2.5"
+                className="p-3 border-b border-cyan-500/30 bg-gradient-to-b from-[#1e273b] to-[#151c2a] space-y-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
               >
                 <div className="text-[11px] font-mono text-cyan-300 font-semibold flex items-center gap-1">
                   <UserPlus className="w-3 h-3" />
@@ -579,14 +582,14 @@ export default function ImPage() {
                   placeholder="0x 钱包地址 (42位)"
                   value={newFriendAddress}
                   onChange={(e) => setNewFriendAddress(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-md bg-[#0f1422] border border-white/20 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-gradient-to-b from-[#121622] to-[#0d101a] border border-slate-600/50 text-xs font-mono text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]"
                 />
                 <input
                   type="text"
                   placeholder="好友备注 / 昵称 (选填)"
                   value={newFriendName}
                   onChange={(e) => setNewFriendName(e.target.value)}
-                  className="w-full px-2.5 py-1.5 rounded-md bg-[#0f1422] border border-white/20 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400"
+                  className="w-full px-2.5 py-1.5 rounded-md bg-gradient-to-b from-[#121622] to-[#0d101a] border border-slate-600/50 text-xs font-mono text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]"
                 />
                 {friendError && (
                   <div className="text-[10px] text-red-300 font-mono bg-red-950/60 p-1.5 rounded-md border border-red-500/40">
@@ -600,14 +603,14 @@ export default function ImPage() {
                       setShowAddFriend(false);
                       setFriendError(null);
                     }}
-                    className="px-2.5 py-1 rounded-md bg-[#1e2538] text-slate-300 text-xs font-mono hover:text-white"
+                    className="px-2.5 py-1 rounded-md bg-gradient-to-b from-[#222938] to-[#171c26] text-slate-300 text-xs font-mono border border-slate-700/50 hover:text-white transition"
                   >
                     取消
                   </button>
                   <button
                     type="submit"
                     disabled={isAddingFriend}
-                    className="px-3 py-1 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-semibold transition disabled:opacity-50 flex items-center gap-1"
+                    className="px-3 py-1 rounded-md bg-gradient-to-b from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 text-xs font-mono font-bold transition disabled:opacity-50 flex items-center gap-1 border border-cyan-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.25)] active:scale-95"
                   >
                     {isAddingFriend ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
@@ -621,7 +624,7 @@ export default function ImPage() {
             )}
 
             {/* Search Filter Input */}
-            <div className="p-2.5 border-b border-white/10 bg-[#121624]">
+            <div className="p-2.5 border-b border-slate-700/50 bg-gradient-to-b from-[#1b212f] to-[#141926]">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -629,7 +632,7 @@ export default function ImPage() {
                   placeholder="搜索好友昵称或 0x 地址..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-2.5 py-1.5 rounded-md bg-[#0d111a] border border-white/10 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/60"
+                  className="w-full pl-8 pr-2.5 py-1.5 rounded-md bg-gradient-to-b from-[#111520] to-[#0c0f18] border border-slate-700/60 text-xs font-mono text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400/60 shadow-[inset_0_1px_2px_rgba(0,0,0,0.4)]"
                 />
                 {searchQuery && (
                   <button
@@ -644,7 +647,7 @@ export default function ImPage() {
             </div>
 
             {/* Contacts Scroll List */}
-            <div className="flex-1 overflow-y-auto divide-y divide-white/5">
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
               {!activeAddress ? (
                 <div className="p-6 text-center text-slate-400 space-y-3">
                   <Wallet className="w-8 h-8 text-purple-400 mx-auto opacity-70" />
@@ -681,16 +684,16 @@ export default function ImPage() {
                       onClick={() => setSelectedPeer(friend)}
                       className={`p-3 transition flex items-center justify-between cursor-pointer group ${
                         isSelected
-                          ? "bg-[#162035] border-l-2 border-[#00f2fe]"
-                          : "hover:bg-[#161b2c]"
+                          ? "bg-gradient-to-r from-[#222e44] via-[#1a2436] to-[#141c2b] border-l-2 border-cyan-400 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                          : "hover:bg-gradient-to-r hover:from-[#212838] hover:to-[#171d2a]"
                       }`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div
                           className={`w-8 h-8 rounded-md flex items-center justify-center font-bold text-xs shrink-0 ${
                             isSelected
-                              ? "bg-cyan-500/20 text-[#00f2fe] border border-cyan-400/50 shadow-[0_0_8px_rgba(0,242,254,0.3)]"
-                              : "bg-[#1e2538] text-slate-300 border border-white/10"
+                              ? "bg-gradient-to-b from-[#1b2d42] to-[#111f30] text-cyan-300 border border-cyan-400/60 shadow-[0_0_10px_rgba(0,242,254,0.3)]"
+                              : "bg-gradient-to-b from-[#262e3e] to-[#1a202c] text-slate-300 border border-slate-600/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
                           }`}
                         >
                           {friend.friend_name.slice(0, 1).toUpperCase()}
@@ -725,11 +728,11 @@ export default function ImPage() {
           </div>
 
           {/* Right Column: Live Conversation Window */}
-          <div className="flex-1 flex flex-col bg-[#0b0e17] relative min-w-0">
+          <div className="flex-1 flex flex-col bg-gradient-to-b from-[#161c28] via-[#111520] to-[#0c0f18] relative min-w-0">
             {selectedPeer ? (
               <>
                 {/* Active Chat Header */}
-                <div className="px-4 py-3 border-b border-white/10 bg-[#131725] flex items-center justify-between gap-3 shrink-0">
+                <div className="px-4 py-3 border-b border-slate-700/50 bg-gradient-to-b from-[#202738] to-[#171d2b] flex items-center justify-between gap-3 shrink-0 shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
                   <div className="flex items-center gap-2.5 min-w-0">
                     {/* Mobile Back Button */}
                     <button
@@ -740,7 +743,7 @@ export default function ImPage() {
                       <ArrowLeft className="w-4 h-4" />
                     </button>
 
-                    <div className="w-8 h-8 rounded-md bg-cyan-500/20 text-[#00f2fe] border border-cyan-400/50 flex items-center justify-center font-bold text-xs shrink-0">
+                    <div className="w-8 h-8 rounded-md bg-gradient-to-b from-[#1c2d42] to-[#121f30] text-cyan-300 border border-cyan-400/60 flex items-center justify-center font-bold text-xs shrink-0 shadow-[0_0_8px_rgba(0,242,254,0.25)]">
                       {selectedPeer.friend_name.slice(0, 1).toUpperCase()}
                     </div>
                     <div className="min-w-0">
@@ -755,7 +758,7 @@ export default function ImPage() {
                         <button
                           type="button"
                           onClick={() => handleCopy(selectedPeer.friend_wallet)}
-                          className="hover:text-cyan-300"
+                          className="hover:text-cyan-300 transition"
                           title="复制完整 0x 地址"
                         >
                           {copiedAddress === selectedPeer.friend_wallet ? (
@@ -768,7 +771,7 @@ export default function ImPage() {
                           href={`https://testnet.monadexplorer.com/address/${selectedPeer.friend_wallet}`}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="hover:text-cyan-300 flex items-center gap-0.5"
+                          className="hover:text-cyan-300 flex items-center gap-0.5 transition"
                           title="在 Monad 浏览器中查看"
                         >
                           <ExternalLink className="w-2.5 h-2.5" />
@@ -786,7 +789,7 @@ export default function ImPage() {
                         setTransferCurrency("KOL");
                         setTransferModalOpen(true);
                       }}
-                      className="px-2.5 py-1.5 rounded-md bg-purple-600/80 hover:bg-purple-600 border border-purple-400/40 text-white text-xs font-mono font-medium transition flex items-center gap-1 cursor-pointer active:scale-95"
+                      className="px-2.5 py-1.5 rounded-md bg-gradient-to-b from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 border border-purple-400/50 text-white text-xs font-mono font-medium transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
                     >
                       <Coins className="w-3.5 h-3.5 text-purple-200" />
                       <span className="hidden sm:inline">转账 KOL</span>
@@ -794,9 +797,9 @@ export default function ImPage() {
                     <button
                       type="button"
                       onClick={() => setShowGiftDrawer(!showGiftDrawer)}
-                      className="px-2.5 py-1.5 rounded-md bg-red-600/80 hover:bg-red-600 border border-red-400/40 text-white text-xs font-mono font-medium transition flex items-center gap-1 cursor-pointer active:scale-95"
+                      className="px-2.5 py-1.5 rounded-md bg-gradient-to-b from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 border border-rose-400/50 text-white text-xs font-mono font-medium transition flex items-center gap-1 cursor-pointer active:scale-95 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]"
                     >
-                      <Gift className="w-3.5 h-3.5 text-red-200" />
+                      <Gift className="w-3.5 h-3.5 text-rose-200" />
                       <span className="hidden sm:inline">发红包</span>
                     </button>
                   </div>
@@ -804,7 +807,7 @@ export default function ImPage() {
 
                 {/* Inline P2P Red Packet Gift Drawer */}
                 {showGiftDrawer && (
-                  <div className="p-3 border-b border-red-500/30 bg-[#25131a] flex flex-wrap items-center justify-between gap-3 animate-in fade-in">
+                  <div className="p-3 border-b border-rose-500/30 bg-gradient-to-b from-[#28151f] to-[#1c0e16] flex flex-wrap items-center justify-between gap-3 animate-in fade-in shadow-inner">
                     <div className="flex items-center gap-2">
                       <Gift className="w-4 h-4 text-red-400 shrink-0" />
                       <div>
@@ -825,8 +828,8 @@ export default function ImPage() {
                             onClick={() => setGiftAmountInput(preset)}
                             className={`px-2 py-0.5 rounded-md text-[11px] font-mono transition ${
                               giftAmountInput === preset
-                                ? "bg-red-600 text-white border border-red-400"
-                                : "bg-[#181016] text-slate-300 border border-white/10"
+                                ? "bg-rose-600 text-white border border-rose-400 shadow-[0_0_8px_rgba(225,29,72,0.4)]"
+                                : "bg-gradient-to-b from-[#20121a] to-[#150a10] text-slate-300 border border-slate-700/50 hover:text-white"
                             }`}
                           >
                             {preset}
@@ -839,20 +842,20 @@ export default function ImPage() {
                         max="500"
                         value={giftAmountInput}
                         onChange={(e) => setGiftAmountInput(e.target.value)}
-                        className="w-18 px-2 py-1 rounded-md bg-[#120a10] border border-white/20 text-xs font-mono text-white text-center focus:outline-none focus:border-red-400"
+                        className="w-18 px-2 py-1 rounded-md bg-gradient-to-b from-[#14080f] to-[#0c0409] border border-rose-500/40 text-xs font-mono text-white text-center focus:outline-none focus:border-rose-400 shadow-[inset_0_1px_2px_rgba(0,0,0,0.5)]"
                       />
                       <button
                         type="button"
                         onClick={handleSendGift}
                         disabled={isSendingGift}
-                        className="px-3 py-1 rounded-md bg-red-600 hover:bg-red-500 text-white text-xs font-mono font-semibold transition disabled:opacity-50"
+                        className="px-3 py-1 rounded-md bg-gradient-to-b from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white text-xs font-mono font-semibold transition disabled:opacity-50 border border-rose-400/50 shadow-[inset_0_1px_0_rgba(255,255,255,0.2)] active:scale-95"
                       >
                         {isSendingGift ? "发送中..." : "确认塞币"}
                       </button>
                       <button
                         type="button"
                         onClick={() => setShowGiftDrawer(false)}
-                        className="p-1 rounded-md text-slate-400 hover:text-white"
+                        className="p-1 rounded-md text-slate-400 hover:text-white transition"
                       >
                         <X className="w-4 h-4" />
                       </button>
@@ -864,11 +867,11 @@ export default function ImPage() {
                 <div className="flex-1 p-4 overflow-y-auto space-y-3">
                   {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center text-slate-400 space-y-2">
-                      <MessageSquare className="w-10 h-10 text-slate-600 opacity-60" />
+                      <MessageSquare className="w-10 h-10 text-slate-500 opacity-60" />
                       <div className="text-xs font-mono text-slate-300">
                         暂无会话记录，向 {selectedPeer.friend_name} 发送第一条打招呼消息吧
                       </div>
-                      <div className="text-[11px] text-slate-500 font-mono">
+                      <div className="text-[11px] text-slate-400 font-mono">
                         支持文本超链接高亮、截图粘贴、Canvas 压缩图文、转账凭据与社交红包
                       </div>
                     </div>
@@ -884,7 +887,7 @@ export default function ImPage() {
                           key={msg.id}
                           className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}
                         >
-                          <div className="text-[10px] font-mono text-slate-500 mb-1 px-1">
+                          <div className="text-[10px] font-mono text-slate-400 mb-1 px-1">
                             {isMe ? "我" : selectedPeer.friend_name} ·{" "}
                             {new Date(msg.created_at).toLocaleTimeString([], {
                               hour: "2-digit",
@@ -896,8 +899,8 @@ export default function ImPage() {
                           <div
                             className={`p-3 rounded-md text-xs font-sans max-w-[85%] sm:max-w-[70%] break-words shadow-md ${
                               isMe
-                                ? "bg-[#836ef9]/20 border border-[#836ef9]/40 text-slate-100"
-                                : "bg-[#182033] border border-white/10 text-slate-200"
+                                ? "bg-gradient-to-b from-[#382b6e] via-[#2a2055] to-[#201844] border border-purple-400/50 text-purple-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.15),0_2px_8px_rgba(131,110,249,0.25)]"
+                                : "bg-gradient-to-b from-[#242c3e] to-[#1a2130] border border-slate-600/50 text-slate-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_2px_8px_rgba(0,0,0,0.3)]"
                             }`}
                           >
                             {/* Render Text with Clickable Links */}
@@ -949,7 +952,7 @@ export default function ImPage() {
 
                             {/* Onchain Transfer Receipt Card */}
                             {msg.msg_type === "TRANSFER_RECEIPT" && (
-                              <div className="mt-2 p-2.5 rounded-md bg-[#111928] border border-emerald-500/40 space-y-1.5 font-mono text-[11px]">
+                              <div className="mt-2 p-2.5 rounded-md bg-gradient-to-b from-[#152322] to-[#0e1919] border border-emerald-500/50 space-y-1.5 font-mono text-[11px] shadow-[inset_0_1px_0_rgba(16,185,129,0.12)]">
                                 <div className="flex items-center justify-between text-emerald-400 font-bold">
                                   <span className="flex items-center gap-1">
                                     <Receipt className="w-3.5 h-3.5" />
@@ -985,7 +988,7 @@ export default function ImPage() {
 
                             {/* P2P KOL Red Packet Gift Card */}
                             {msg.msg_type === "GIFT" && (
-                              <div className="mt-2 p-2.5 rounded-md bg-gradient-to-br from-[#2a121d] to-[#1c0d16] border border-red-500/50 space-y-2 font-mono">
+                              <div className="mt-2 p-2.5 rounded-md bg-gradient-to-br from-[#301622] via-[#240f1a] to-[#180a11] border border-rose-500/50 space-y-2 font-mono shadow-[0_4px_14px_rgba(225,29,72,0.25)]">
                                 <div className="flex items-center justify-between text-red-300 font-bold text-xs">
                                   <span className="flex items-center gap-1.5">
                                     <Gift className="w-4 h-4 text-red-400" />
@@ -1006,7 +1009,7 @@ export default function ImPage() {
                                     className={`w-full py-1.5 rounded-md text-xs font-bold transition flex items-center justify-center gap-1 active:scale-95 cursor-pointer ${
                                       claimedGifts.has(msg.id)
                                         ? "bg-[#20151a] text-slate-500 border border-white/10"
-                                        : "bg-red-600 hover:bg-red-500 text-white shadow-[0_0_10px_rgba(239,68,68,0.4)]"
+                                        : "bg-gradient-to-b from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 text-white shadow-[0_0_12px_rgba(225,29,72,0.4)] border border-rose-400/50"
                                     }`}
                                   >
                                     <Sparkles className="w-3.5 h-3.5" />
@@ -1024,7 +1027,7 @@ export default function ImPage() {
                 </div>
 
                 {/* Bottom Input Area */}
-                <div className="p-3 border-t border-white/10 bg-[#121624]">
+                <div className="p-3 border-t border-slate-700/50 bg-gradient-to-b from-[#1c2232] to-[#141926] shadow-[0_-4px_16px_rgba(0,0,0,0.2)]">
                   {/* Selected Image Preview Pill */}
                   {imagePreview && (
                     <div className="mb-2 relative inline-block rounded-md overflow-hidden border border-cyan-400 max-h-24 bg-black">
@@ -1032,7 +1035,7 @@ export default function ImPage() {
                       <button
                         type="button"
                         onClick={() => setImagePreview(null)}
-                        className="absolute top-1 right-1 p-0.5 rounded-md bg-black/80 text-white hover:text-red-400"
+                        className="absolute top-1 right-1 p-0.5 rounded-md bg-black/80 text-white hover:text-red-400 transition"
                       >
                         <X className="w-3.5 h-3.5" />
                       </button>
@@ -1053,7 +1056,7 @@ export default function ImPage() {
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="p-2 rounded-md bg-[#182035] hover:bg-[#202b47] border border-white/15 text-slate-300 hover:text-cyan-300 transition"
+                      className="p-2 rounded-md bg-gradient-to-b from-[#242c3e] to-[#1a2130] hover:from-[#2c364c] hover:to-[#20283a] border border-slate-600/50 text-slate-200 hover:text-cyan-300 transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] cursor-pointer"
                       title="上传图片 (自动压缩 WebP <50KB)"
                     >
                       <ImageIcon className="w-4 h-4" />
@@ -1063,7 +1066,7 @@ export default function ImPage() {
                     <button
                       type="button"
                       onClick={() => setShowGiftDrawer(!showGiftDrawer)}
-                      className="p-2 rounded-md bg-[#251520] hover:bg-[#321c2c] border border-red-500/30 text-red-300 hover:text-red-200 transition"
+                      className="p-2 rounded-md bg-gradient-to-b from-[#281522] to-[#1e0e18] hover:from-[#341b2c] hover:to-[#251220] border border-rose-500/40 text-rose-300 hover:text-rose-200 transition shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] cursor-pointer"
                       title="发送红包"
                     >
                       <Gift className="w-4 h-4" />
@@ -1076,14 +1079,14 @@ export default function ImPage() {
                       value={inputContent}
                       onChange={(e) => setInputContent(e.target.value)}
                       onPaste={handlePaste}
-                      className="flex-1 px-3 py-2 rounded-md bg-[#0d101a] border border-white/15 text-xs font-sans text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400/80"
+                      className="flex-1 px-3 py-2 rounded-md bg-gradient-to-b from-[#111522] to-[#0c0f18] border border-slate-600/50 text-xs font-sans text-white placeholder-slate-400 focus:outline-none focus:border-cyan-400 shadow-[inset_0_1px_3px_rgba(0,0,0,0.4)]"
                     />
 
                     {/* Send Button */}
                     <button
                       type="submit"
                       disabled={isSending || (!inputContent.trim() && !imagePreview)}
-                      className="px-4 py-2 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-semibold transition disabled:opacity-40 flex items-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                      className="px-4 py-2 rounded-md bg-gradient-to-b from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 text-xs font-mono font-bold transition disabled:opacity-40 flex items-center gap-1.5 border border-cyan-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_2px_8px_rgba(0,242,254,0.35)] active:scale-95 cursor-pointer"
                     >
                       {isSending ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1098,7 +1101,7 @@ export default function ImPage() {
             ) : (
               /* No Peer Selected or Guest State */
               <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
-                <div className="w-14 h-14 rounded-xl bg-[#141a2c] border border-cyan-400/40 text-cyan-400 flex items-center justify-center shadow-[0_0_20px_rgba(0,242,254,0.2)]">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-b from-[#242f44] to-[#171f2e] border border-cyan-400/50 text-cyan-300 flex items-center justify-center shadow-[0_0_24px_rgba(0,242,254,0.25),inset_0_1px_0_rgba(255,255,255,0.15)]">
                   <MessageSquare className="w-7 h-7" />
                 </div>
                 <div className="space-y-1 max-w-md">
@@ -1115,7 +1118,7 @@ export default function ImPage() {
                     <button
                       type="button"
                       onClick={() => login()}
-                      className="px-5 py-2.5 rounded-md bg-purple-600 hover:bg-purple-500 border border-purple-400/50 text-white text-xs font-mono font-bold transition shadow-lg active:scale-95 flex items-center gap-2 cursor-pointer"
+                      className="px-5 py-2.5 rounded-md bg-gradient-to-b from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 border border-purple-400/50 text-white text-xs font-mono font-bold transition shadow-lg active:scale-95 flex items-center gap-2 cursor-pointer"
                     >
                       <LogIn className="w-4 h-4" />
                       <span>连接 Monad 钱包 / 登录</span>
@@ -1126,7 +1129,7 @@ export default function ImPage() {
                     <button
                       type="button"
                       onClick={() => setShowAddFriend(true)}
-                      className="px-4 py-2 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-mono font-semibold transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      className="px-4 py-2 rounded-md bg-gradient-to-b from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 text-xs font-mono font-bold transition flex items-center gap-1.5 cursor-pointer active:scale-95 border border-cyan-300/60 shadow-[inset_0_1px_0_rgba(255,255,255,0.3),0_2px_8px_rgba(0,242,254,0.35)]"
                     >
                       <UserPlus className="w-4 h-4" />
                       <span>添加常用联系人</span>
@@ -1137,7 +1140,7 @@ export default function ImPage() {
                         setTransferCurrency("KOL");
                         setTransferModalOpen(true);
                       }}
-                      className="px-4 py-2 rounded-md bg-[#182035] hover:bg-[#222d4a] border border-white/20 text-slate-200 text-xs font-mono font-semibold transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                      className="px-4 py-2 rounded-md bg-gradient-to-b from-[#242c3e] to-[#192130] hover:from-[#2d374d] hover:to-[#1f283a] border border-slate-600/50 text-slate-200 text-xs font-mono font-semibold transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
                     >
                       <Send className="w-4 h-4 text-purple-400" />
                       <span>发起快速转账</span>
@@ -1186,7 +1189,7 @@ export default function ImPage() {
           onClick={() => setSelectedExpandedImage(null)}
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 animate-in fade-in"
         >
-          <div className="relative max-w-3xl max-h-[90vh] rounded-lg overflow-hidden border border-white/20 bg-[#0d1017]">
+          <div className="relative max-w-3xl max-h-[90vh] rounded-lg overflow-hidden border border-slate-600/50 bg-gradient-to-b from-[#1d2332] to-[#10141e] shadow-2xl">
             <img
               src={selectedExpandedImage}
               alt="Expanded preview"

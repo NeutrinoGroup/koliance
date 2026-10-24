@@ -322,15 +322,15 @@ export function DirectMessageModal({
           className="fixed inset-0 bg-black/80 backdrop-blur-sm"
         />
 
-        {/* Modal Window */}
+        {/* Modal Window: Modern Gradient Gray Aesthetic */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
-          className="relative w-full max-w-lg h-[600px] flex flex-col rounded-xl border border-purple-500/30 bg-[#0c0d14] shadow-2xl z-10 overflow-hidden font-mono"
+          className="relative w-full max-w-lg h-[600px] flex flex-col rounded-xl border border-slate-600/40 bg-gradient-to-b from-[#1e2538] via-[#151a27] to-[#0f131f] shadow-[0_20px_50px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.12)] z-10 overflow-hidden font-mono"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 bg-white/[0.02]">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 bg-gradient-to-b from-[#242c3e] to-[#1a2130]">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-md bg-[#836ef9]/20 border border-[#836ef9]/40 flex items-center justify-center text-[#836ef9]">
                 <User className="w-4 h-4" />
