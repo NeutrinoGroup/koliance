@@ -13,7 +13,7 @@ import {
   Coins,
   UserPlus,
   Users,
-  MessageSquare,
+  MessagesSquare,
   Sparkles,
   ShieldCheck,
 } from "lucide-react";
@@ -374,7 +374,7 @@ export function TransferModal({
                       }
                       className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-[#836ef9]/20 border border-purple-500/40 text-purple-200 text-xs font-medium transition hover:bg-[#836ef9]/30"
                     >
-                      <MessageSquare className="w-3.5 h-3.5 text-[#00f2fe]" />
+                      <MessagesSquare className="w-3.5 h-3.5 text-purple-300" />
                       <span>查看聊天凭据</span>
                     </button>
                   )}
@@ -488,10 +488,10 @@ export function TransferModal({
                                   name: f.friend_name,
                                 });
                               }}
-                              className="p-1 rounded-sm bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-300 transition"
+                              className="p-1 rounded-sm bg-blue-500/15 hover:bg-blue-500/30 text-blue-300 transition"
                               title="发起IM消息"
                             >
-                              <MessageSquare className="w-3 h-3" />
+                              <MessagesSquare className="w-3 h-3" />
                             </button>
                           </div>
                         );
@@ -519,9 +519,9 @@ export function TransferModal({
                               name: selectedFriend?.friend_name,
                             })
                           }
-                          className="text-[10px] text-[#00f2fe] hover:underline flex items-center gap-1"
+                          className="text-[10px] text-blue-400 hover:underline flex items-center gap-1"
                         >
-                          <MessageSquare className="w-2.5 h-2.5" />
+                          <MessagesSquare className="w-2.5 h-2.5" />
                           <span>发起消息</span>
                         </button>
 
