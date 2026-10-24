@@ -25,6 +25,17 @@ describe("Data Layer Tests: Friends, Direct Messages & User Rewards", () => {
       expect(friends[0].friend_wallet).toBe(friendWallet.toLowerCase());
     });
 
+    it("adds a friend by email address and lists it", async () => {
+      const email = "bob.dev@koliance.com";
+      const res = await addFriend(userId, email, "Bob");
+      expect(res.success).toBe(true);
+      expect(res.friend?.friend_name).toBe("Bob");
+      expect(res.friend?.friend_wallet).toBe(email.toLowerCase());
+
+      const friends = await listFriends(userId);
+      expect(friends.some((f) => f.friend_wallet === email.toLowerCase())).toBe(true);
+    });
+
     it("rejects invalid wallet address", async () => {
       const res = await addFriend(userId, "invalid_address");
       expect(res.success).toBe(false);

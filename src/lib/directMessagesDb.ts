@@ -23,6 +23,22 @@ export function resetDirectMessagesDbForTests(): void {
 
 const SAFE_ID_REGEX = /^[a-zA-Z0-9_.:\-@]{1,128}$/;
 
+export function userAliases(id: string): string[] {
+  const norm = id.toLowerCase().trim();
+  const set = new Set<string>([norm]);
+  if (norm.startsWith("did:koliance:email:")) {
+    set.add(norm.replace("did:koliance:email:", ""));
+  } else if (norm.includes("@") && !norm.startsWith("did:")) {
+    set.add(`did:koliance:email:${norm}`);
+  }
+  if (norm.startsWith("did:koliance:wallet:")) {
+    set.add(norm.replace("did:koliance:wallet:", ""));
+  } else if (norm.startsWith("0x") && !norm.startsWith("did:")) {
+    set.add(`did:koliance:wallet:${norm}`);
+  }
+  return Array.from(set);
+}
+
 /**
  * List conversation messages between two users / peers
  */
@@ -33,23 +49,31 @@ export async function listDirectMessages(
 ): Promise<DirectMessageRecord[]> {
   if (!userId1 || !userId2) return [];
 
-  const norm1 = userId1.toLowerCase().trim();
-  const norm2 = userId2.toLowerCase().trim();
+  const aliases1 = userAliases(userId1);
+  const aliases2 = userAliases(userId2);
 
   // Security Gate (Prevent PostgREST filter string injection via peer identifier)
-  if (!SAFE_ID_REGEX.test(norm1) || !SAFE_ID_REGEX.test(norm2)) {
-    console.warn("[DirectMessagesDb] Rejected conversation query with invalid peer ID pattern.");
-    return [];
+  for (const a of [...aliases1, ...aliases2]) {
+    if (!SAFE_ID_REGEX.test(a)) {
+      console.warn("[DirectMessagesDb] Rejected conversation query with invalid peer ID pattern.");
+      return [];
+    }
   }
 
   try {
-    // Check messages where (sender = norm1 AND recipient = norm2) OR (sender = norm2 AND recipient = norm1)
+    // Generate or conditions across aliases
+    const orConditions: string[] = [];
+    for (const a1 of aliases1) {
+      for (const a2 of aliases2) {
+        orConditions.push(`and(sender_id.eq.${a1},recipient_id.eq.${a2})`);
+        orConditions.push(`and(sender_id.eq.${a2},recipient_id.eq.${a1})`);
+      }
+    }
+
     const { data, error } = await supabaseServer()
       .from("direct_messages")
       .select("*")
-      .or(
-        `and(sender_id.eq.${norm1},recipient_id.eq.${norm2}),and(sender_id.eq.${norm2},recipient_id.eq.${norm1})`
-      )
+      .or(orConditions.join(","))
       .order("created_at", { ascending: true })
       .limit(limit);
 
@@ -61,11 +85,14 @@ export async function listDirectMessages(
   }
 
   // Memory fallback
+  const set1 = new Set(aliases1);
+  const set2 = new Set(aliases2);
   const results: DirectMessageRecord[] = [];
+
   memoryMessages.forEach((rec) => {
     const s = rec.sender_id.toLowerCase();
     const r = rec.recipient_id.toLowerCase();
-    if ((s === norm1 && r === norm2) || (s === norm2 && r === norm1)) {
+    if ((set1.has(s) && set2.has(r)) || (set2.has(s) && set1.has(r))) {
       results.push(rec);
     }
   });

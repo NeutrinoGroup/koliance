@@ -4,9 +4,12 @@ import { createSessionToken } from "@/lib/session";
 import { GET as friendsGET, POST as friendsPOST, DELETE as friendsDELETE } from "@/app/api/user/friends/route";
 import { GET as messagesGET, POST as messagesPOST } from "@/app/api/user/messages/route";
 import { GET as rewardsGET, POST as rewardsPOST } from "@/app/api/user/rewards/route";
+import { GET as searchGET } from "@/app/api/user/search/route";
+import { POST as emailAuthPOST } from "@/app/api/auth/email/route";
 import { resetFriendsDbForTests } from "@/lib/friendsDb";
 import { resetDirectMessagesDbForTests } from "@/lib/directMessagesDb";
 import { resetRewardsDbForTests } from "@/lib/rewardsDb";
+import { resetMemoryUsersForTests } from "@/lib/db";
 
 describe("User API Routes: Friends, Messages & Rewards", () => {
   const testWallet = "0x89205a3a3b2a69de6dbf7f01ed13b2108b2c43e7";
@@ -18,10 +21,11 @@ describe("User API Routes: Friends, Messages & Rewards", () => {
 
   const authHeader = { Authorization: `Bearer ${sessionToken}` };
 
-  beforeEach(() => {
+    beforeEach(() => {
     resetFriendsDbForTests();
     resetDirectMessagesDbForTests();
     resetRewardsDbForTests();
+    resetMemoryUsersForTests();
   });
 
   describe("/api/user/friends", () => {
@@ -262,6 +266,66 @@ describe("User API Routes: Friends, Messages & Rewards", () => {
       expect(res.status).toBe(400);
       const data = await res.json();
       expect(data.error).toContain("Cannot send a direct message to yourself");
+    });
+  });
+
+  describe("/api/auth/email & /api/user/search", () => {
+    it("registers/logs in user via email and returns valid session token", async () => {
+      const emailReq = new NextRequest("http://localhost/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "tester.charlie@monad.xyz", name: "Charlie" }),
+      });
+      const res = await emailAuthPOST(emailReq);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.sessionToken).toBeDefined();
+      expect(data.profile.email).toBe("tester.charlie@monad.xyz");
+      expect(data.profile.name).toBe("Charlie");
+    });
+
+    it("rejects invalid email in email auth", async () => {
+      const badReq = new NextRequest("http://localhost/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "invalid-email" }),
+      });
+      const res = await emailAuthPOST(badReq);
+      expect(res.status).toBe(400);
+    });
+
+    it("searches registered users by username and email", async () => {
+      // First create two users via emailAuthPOST
+      await emailAuthPOST(new NextRequest("http://localhost/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "alice.search@example.com", name: "Alice Searcher" }),
+      }));
+      await emailAuthPOST(new NextRequest("http://localhost/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "bob.dev@example.com", name: "Bob Developer" }),
+      }));
+
+      // Search by name "Searcher"
+      const searchReq1 = new NextRequest("http://localhost/api/user/search?q=Searcher", {
+        headers: authHeader,
+      });
+      const res1 = await searchGET(searchReq1);
+      expect(res1.status).toBe(200);
+      const data1 = await res1.json();
+      expect(data1.success).toBe(true);
+      expect(data1.users.some((u: { email: string }) => u.email === "alice.search@example.com")).toBe(true);
+
+      // Search by email "bob.dev"
+      const searchReq2 = new NextRequest("http://localhost/api/user/search?q=bob.dev", {
+        headers: authHeader,
+      });
+      const res2 = await searchGET(searchReq2);
+      expect(res2.status).toBe(200);
+      const data2 = await res2.json();
+      expect(data2.users.some((u: { email: string }) => u.email === "bob.dev@example.com")).toBe(true);
     });
   });
 });

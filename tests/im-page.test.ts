@@ -63,6 +63,22 @@ describe("GAP-83 Real-time IM Chat Page & Login Area Entry Icon", () => {
     expect(emojiRegex.test(imPageContent)).toBe(false);
   });
 
+  it("verifies zero neon colors directive: no neon cyan (#00f2fe) or glowing dropshadows in /im", () => {
+    const imPageContent = readFileSync(imPagePath, "utf-8");
+    expect(imPageContent).not.toContain("#00f2fe");
+    expect(imPageContent).not.toContain("border-cyan-400");
+    expect(imPageContent).not.toContain("text-cyan-300");
+    expect(imPageContent).not.toContain("shadow-[0_0_");
+  });
+
+  it("verifies support for user search by username/email and quick email login in /im", () => {
+    const imPageContent = readFileSync(imPagePath, "utf-8");
+    expect(imPageContent).toContain("/api/user/search");
+    expect(imPageContent).toContain("/api/auth/email");
+    expect(imPageContent).toContain("searchResults");
+    expect(imPageContent).toContain("handleQuickEmailLogin");
+  });
+
   it("verifies geometric compliance: strictly rounded-md on buttons and no rounded-full on cards/buttons", () => {
     const imPageContent = readFileSync(imPagePath, "utf-8");
     // Check that buttons do not have rounded-full

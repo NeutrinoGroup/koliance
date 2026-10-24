@@ -48,7 +48,7 @@ export async function listFriends(userId: string): Promise<FriendRecord[]> {
 }
 
 /**
- * Add a friend to user's address book
+ * Add a friend to user's address book (supports 0x EVM address, email, or user identifier)
  */
 export async function addFriend(
   userId: string,
@@ -58,16 +58,34 @@ export async function addFriend(
   if (!userId) {
     return { success: false, error: "Missing user ID" };
   }
-  if (!isValidWalletAddress(friendWallet)) {
-    return { success: false, error: "Invalid 0x EVM wallet address" };
+
+  const raw = (friendWallet || "").trim();
+  const isWallet = isValidWalletAddress(raw);
+  const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(raw);
+  const isDid = raw.startsWith("did:");
+
+  if (!isWallet && !isEmail && !isDid) {
+    return { success: false, error: "Invalid 0x EVM wallet address, email, or user identifier" };
   }
 
-  const normalizedWallet = friendWallet.toLowerCase();
+  const normalizedWallet = raw.toLowerCase();
   const normalizedUser = userId.toLowerCase();
-  if (normalizedUser === normalizedWallet || normalizedUser.endsWith(`:${normalizedWallet}`)) {
+  if (
+    normalizedUser === normalizedWallet ||
+    normalizedUser.endsWith(`:${normalizedWallet}`) ||
+    (normalizedUser.startsWith("did:koliance:") && normalizedUser.includes(normalizedWallet))
+  ) {
     return { success: false, error: "Cannot add your own wallet address as a friend" };
   }
-  const name = (friendName && friendName.trim()) || `Friend-${normalizedWallet.slice(2, 6)}`;
+
+  let defaultName = `Friend-${normalizedWallet.slice(2, 6)}`;
+  if (isEmail) {
+    defaultName = normalizedWallet.split("@")[0];
+  } else if (isDid) {
+    defaultName = normalizedWallet.split(":").pop() || "User";
+  }
+
+  const name = (friendName && friendName.trim()) || defaultName;
   const id = `fr_${crypto.randomBytes(12).toString("hex")}`;
   const now = new Date().toISOString();
 

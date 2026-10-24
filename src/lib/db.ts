@@ -17,6 +17,23 @@ export interface DbUserRecord {
   updated_at?: string;
 }
 
+export interface PublicUserSearchResult {
+  id: string;
+  name: string;
+  email: string;
+  picture: string | null;
+  wallet_address: string | null;
+  trust_tier: string;
+  github_username?: string | null;
+}
+
+// In-memory user cache for local environments and offline tests
+const memoryUsers = new Map<string, DbUserRecord>();
+
+export function resetMemoryUsersForTests(): void {
+  memoryUsers.clear();
+}
+
 /**
  * Upsert user profile to database using server-side service role client.
  *
@@ -47,7 +64,7 @@ export async function syncUserToDatabase(
       }
     }
 
-    const payload = {
+    const payload: DbUserRecord = {
       id: user.id,
       email: user.email,
       name: user.name,
@@ -60,6 +77,8 @@ export async function syncUserToDatabase(
       github_username: user.github_username || null,
       updated_at: new Date().toISOString(),
     };
+
+    memoryUsers.set(payload.id, payload);
 
     const { data, error } = await supabaseServer()
       .from("users")
@@ -76,6 +95,73 @@ export async function syncUserToDatabase(
     console.warn("[Database] Exception during syncUserToDatabase:", err);
     return user;
   }
+}
+
+/**
+ * Search registered public users by username, email, or wallet address.
+ * Only returns safe public fields (id, name, email, picture, wallet_address, trust_tier).
+ */
+export async function searchPublicUsers(
+  query: string,
+  excludeUserId?: string
+): Promise<PublicUserSearchResult[]> {
+  const clean = query.trim().replace(/[%,()]/g, "");
+  if (clean.length < 2) return [];
+
+  const lowerQ = clean.toLowerCase();
+  const excludeNorm = (excludeUserId || "").toLowerCase();
+
+  try {
+    const { data, error } = await supabaseServer()
+      .from("users")
+      .select("id, name, email, picture, wallet_address, trust_tier, github_username")
+      .or(`name.ilike.%${clean}%,email.ilike.%${clean}%,wallet_address.ilike.%${clean}%,github_username.ilike.%${clean}%`)
+      .limit(20);
+
+    if (!error && Array.isArray(data)) {
+      return (data as PublicUserSearchResult[]).filter((u) => {
+        const uid = (u.id || "").toLowerCase();
+        const uemail = (u.email || "").toLowerCase();
+        const uwallet = (u.wallet_address || "").toLowerCase();
+        return uid !== excludeNorm && uemail !== excludeNorm && uwallet !== excludeNorm;
+      });
+    }
+  } catch (err) {
+    console.warn("[Database] Supabase user search notice (falling back to memory):", err);
+  }
+
+  // Fallback to in-memory users
+  const matches: PublicUserSearchResult[] = [];
+  memoryUsers.forEach((u) => {
+    const uid = (u.id || "").toLowerCase();
+    const uemail = (u.email || "").toLowerCase();
+    const uwallet = (u.wallet_address || "").toLowerCase();
+    const uname = (u.name || "").toLowerCase();
+    const ugh = (u.github_username || "").toLowerCase();
+
+    if (uid === excludeNorm || uemail === excludeNorm || uwallet === excludeNorm) {
+      return;
+    }
+
+    if (
+      uname.includes(lowerQ) ||
+      uemail.includes(lowerQ) ||
+      uwallet.includes(lowerQ) ||
+      ugh.includes(lowerQ)
+    ) {
+      matches.push({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        picture: u.picture || null,
+        wallet_address: u.wallet_address || null,
+        trust_tier: u.trust_tier,
+        github_username: u.github_username || null,
+      });
+    }
+  });
+
+  return matches.slice(0, 20);
 }
 
 /**
