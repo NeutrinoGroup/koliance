@@ -57,7 +57,6 @@ export function Navbar({
     { id: "PRODUCT", label: t("nav.product"), icon: <Shield className="w-3.5 h-3.5" /> },
     { id: "MARKET", label: t("nav.market"), icon: <TrendingUp className="w-3.5 h-3.5" />, badge: "LIVE" },
     { id: "PERP", label: t("nav.perp"), icon: <Activity className="w-3.5 h-3.5" />, badge: "ONCHAIN" },
-    { id: "AGENTCARD", label: t("nav.agentcard"), icon: <CreditCard className="w-3.5 h-3.5" />, badge: "AI" },
   ];
 
   return (

@@ -423,7 +423,7 @@ export function NavAuthBadges({
       {/* Top Bar Direct IM & Contacts Shortcut Button (Always visible at login area) */}
       <Link
         href="/im"
-        className={`relative flex items-center justify-center w-8 h-8 rounded-md transition-all shadow-md active:scale-95 cursor-pointer ${
+        className={`relative flex items-center justify-center h-9 w-9 shrink-0 rounded-md transition-all shadow-md active:scale-95 cursor-pointer ${
           pathname === "/im"
             ? "border border-[#00f2fe] bg-[#162035] text-[#00f2fe] shadow-[0_0_12px_rgba(0,242,254,0.35)]"
             : "border border-white/20 hover:border-[#00f2fe]/60 bg-[#141824] hover:bg-[#1a2032] text-slate-300 hover:text-[#00f2fe]"
@@ -548,6 +548,19 @@ export function NavAuthBadges({
                     </button>
                   )}
                 </div>
+
+                {/* Direct IM Chat Entry in Account Center (Always reachable in dropdown) */}
+                <Link
+                  href="/im"
+                  onClick={() => setDropdownOpen(false)}
+                  className="w-full py-1.5 px-2.5 rounded-md bg-[#162035] hover:bg-[#1f2d4a] border border-[#00f2fe]/40 text-[#00f2fe] text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-[#00f2fe]" />
+                  <span>实时IM消息与通讯录</span>
+                  <span className="text-[9px] px-1 py-0.2 rounded-sm bg-[#00f2fe]/20 text-[#00f2fe] font-mono">
+                    [OPEN]
+                  </span>
+                </Link>
 
                 {/* Sign Out: the counterpart to the Sign In button, and the only
                     control that clears every rail at once. */}

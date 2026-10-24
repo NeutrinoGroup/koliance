@@ -8,9 +8,14 @@ describe("GAP-83 Real-time IM Chat Page & Login Area Entry Icon", () => {
   const imPagePath = join(rootDir, "src/app/im/page.tsx");
   const navbarPath = join(rootDir, "src/components/Navbar.tsx");
 
-  it("verifies Navbar supports IM in NavView union", () => {
+  it("verifies Navbar supports IM in NavView union and removes duplicate AGENTCARD from top navItems", () => {
     const navbarContent = readFileSync(navbarPath, "utf-8");
     expect(navbarContent).toContain('"IM"');
+    // Verifies AGENTCARD is removed from top navItems (now showcased at bottom of index)
+    const navItemsMatch = navbarContent.match(/const navItems: Array<[\s\S]*?> = \[([\s\S]*?)\];/);
+    expect(navItemsMatch).not.toBeNull();
+    const navItemsBody = (navItemsMatch as RegExpMatchArray)[1];
+    expect(navItemsBody).not.toContain('id: "AGENTCARD"');
   });
 
   it("verifies NavAuthBadges permanently renders IM entry icon linking to /im", () => {

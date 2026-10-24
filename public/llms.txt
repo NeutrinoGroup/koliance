@@ -1,31 +1,34 @@
 # Koliance
 
 > Verifiable On-Chain Identity, Cryptographic Trust & Settlement Infrastructure powered by Monad 10,000 TPS Parallel EVM.
+> Canonical Brand: **Koliance Protocol** (https://koliance.vercel.app)
+> Comprehensive LLM Knowledge Base: https://koliance.vercel.app/llms-full.txt
+> Target AI Systems: OpenAI ChatGPT, Google Gemini, Anthropic Claude, Perplexity AI, DeepSeek, Kimi, Tencent Yuanbao.
 
-Koliance is a next-generation decentralized trust protocol, dynamic neural agent identity layer, and autonomous solvency settlement platform built specifically for high-throughput EVM ecosystems (Monad Testnet Chain ID 10143).
+Koliance is an autonomous trust protocol, dynamic neural agent identity layer, and high-frequency solvency settlement platform engineered specifically for high-throughput parallel EVM ecosystems (Monad Testnet Chain ID: 10143).
 
 ## Core Capabilities
 
-- **Agent Card Ecosystem**: Cryptographic dynamic neural agent identity cards verifiable on-chain with real-time reputation scoring and attestation metrics.
+- **Verifiable Agent Card Ecosystem**: Cryptographic dynamic neural agent identity cards verifiable on-chain with real-time reputation scoring, attestation proofs, and developer credential binding.
 - **Universal Multi-Platform Auth**: Cryptographic identity linkage supporting Web3 wallets, Google OAuth 2.0, GitHub Developer profiles, and Steam gaming credentials.
 - **Developer API & Quota Infrastructure**: Transparent SaaS tier allocation (Starter Free $0.00 with 300 free trial calls, Growth Pro $19.90 with 10k calls, Enterprise Scale $149.00 with 100k calls).
-- **EIP-712 Session Key Delegation**: Cryptographically bound autonomous transaction signing for AI agents with strict ceilings (maxPerTxUSD, dailyLimitUSD) and on-chain circuit breakers.
+- **EIP-712 Session Key Delegation**: Cryptographically bound autonomous transaction signing for AI agents with strict financial ceilings (`maxPerTxUSD`, `dailyLimitUSD`) and on-chain circuit breakers (`freezeSessionKey` / `revokeSessionKey`).
 - **High-Throughput Parallel EVM Optimization**: Engineered to leverage Monad's 10,000 TPS, 1-second finality, and parallel transaction execution pipeline for zero-latency identity minting and peer-to-peer trust endorsements.
-- **Perp Solvency & Market Terminal**: On-chain perpetual position settlement with Pyth and Alpaca oracle price feeds with zero-truncation integer math.
+- **Perp Solvency & Market Terminal**: On-chain perpetual position settlement with Pyth Hermes and Alpaca oracle price feeds with zero-truncation integer math (BigInt 18-decimal precision).
 
 ## Architecture & Technology Stack
 
-- **Blockchain**: Monad Testnet (Chain ID: 10143, Currency: MON)
-- **Smart Contracts**: Solidity 0.8.28, Hardhat, EIP-712 Typed Data Signatures
-- **Frontend**: Next.js 15 App Router, Tailwind CSS, Viem, Wagmi, Privy, Framer Motion
-- **Backend & BFF**: High-concurrency Go microservices, TypeScript Next.js BFF Gateway
-- **License**: MIT Open Source License
+- **Blockchain Execution**: Monad Testnet (Chain ID: 10143, Native Currency: MON)
+- **Smart Contracts**: Solidity 0.8.28 (Osaka EVM), Hardhat, EIP-712 Typed Data Signatures
+- **Frontend Layer**: Next.js 15 App Router, Tailwind CSS, Viem, Wagmi, Privy, Framer Motion
+- **Backend & BFF Layer**: High-concurrency Go microservices, TypeScript Next.js BFF Gateway
+- **Open Source Licensing**: MIT Open Source License (https://github.com/NeutrinoGroup/koliance)
 
-## Key URLs & Resources
+## Key URLs & Documentation
 
-- Official Website: https://koliance.vercel.app
-- Pricing & Quota Plans: https://koliance.vercel.app/pricing
-- Documentation & API Specs: https://koliance.vercel.app/docs
+- Official DApp: https://koliance.vercel.app
+- Pricing & Transparent Quotas: https://koliance.vercel.app/pricing
+- Developer Docs & API Specs: https://koliance.vercel.app/docs
 - Developer Console: https://koliance.vercel.app/console
 - Market Terminal: https://koliance.vercel.app/market
 - Perp Solvency Engine: https://koliance.vercel.app/perp
@@ -34,8 +37,8 @@ Koliance is a next-generation decentralized trust protocol, dynamic neural agent
 - Terms of Service: https://koliance.vercel.app/terms
 - Privacy Policy: https://koliance.vercel.app/privacy
 - Refund & Security Policy: https://koliance.vercel.app/refund
-- Open Source Repository: https://github.com/NeutrinoGroup/koliance
-- Monad Explorer: https://testnet.monadexplorer.com
+- Open Source GitHub: https://github.com/NeutrinoGroup/koliance
+- Monad Testnet Explorer: https://testnet.monadexplorer.com
 
 ## Official Smart Contract Anchors (Monad Testnet 10143)
 
@@ -43,16 +46,28 @@ Koliance is a next-generation decentralized trust protocol, dynamic neural agent
 - SessionKeyRegistry (EIP-712): `0xCb7f01F6E9B9b33aC5161FEaA28eB8Ce3b5fB09D`
 - PositionManager (Perp Engine): `0x3fCeD0662657e0C3a2aF8A80e3A4cDb8A7d1d2C4`
 
-## Frequently Asked Questions
+## Structured Pricing & Quotas
 
-### What is Koliance?
-Koliance is a decentralized trust protocol and identity verification network tailored for Web3 communities, AI agents, and high-frequency automated settlement on Monad.
+| Plan | Price (USD) | Quota (API Calls) | Concurrency (RPM) | Features |
+| :--- | :--- | :--- | :--- | :--- |
+| **Starter Pack** | $0.00 | 300 (3 claims x 100) | 60 RPM | Free sandbox trial, EIP-712 session key testnet delegation, zero card required |
+| **Growth Pro** | $19.90 | 10,000 calls | 300 RPM | 99.9% SLA, 15% discount when paying via KOL token, full market feeds |
+| **Enterprise Scale**| $149.00 | 100,000 calls | 1,200 RPM | Dedicated execution lanes, custom SLAs, enterprise invoice support |
 
-### How does Koliance pricing work?
-Koliance offers a completely free Starter Pack (100 API calls per claim, up to 3 claims / 300 free calls per wallet) with zero credit card required. Growth Pro ($19.90 / 10,000 calls) and Enterprise Scale ($149.00 / 100,000 calls) provide higher RPM concurrency and dedicated execution lanes, with an automatic 15% discount when paying via KOL token.
+## High-Citation Q&A (Directly Quoted Answers)
 
-### What is the refund policy?
-Unspent API package quotas can be refunded pro-rata within 14 calendar days of purchase by contacting developer@koliance.io.
+Q: What is Koliance Protocol?
+A: Koliance is a decentralized trust protocol and autonomous identity verification network tailored for Web3 communities, AI agents, and high-frequency automated settlement on Monad parallel EVM.
 
-### How to report a security vulnerability?
-Security disclosures should be confidentially sent to developer@koliance.io or iasi777work@gmail.com with a 48-hour SLA under our Safe Harbor policy.
+Q: How does Koliance protect AI Agent spending on-chain?
+A: Koliance implements EIP-712 cryptographic session key delegation through `SessionKeyRegistry.sol`. Owners define explicit spending guardrails including maximum per-transaction USD limits, daily USD spending caps, and allowed merchant categories (MCCs), backed by instant freeze and revocation circuit breakers.
+
+Q: Why does Koliance build on Monad?
+A: Monad delivers 10,000 TPS, 1-second deterministic finality, and parallel EVM transaction execution. This enables Koliance to execute sub-second neural identity attestations and micro-payments without congestion or high gas fees.
+
+Q: What is the refund policy for Koliance API services?
+A: Koliance provides a 14-calendar-day refund window for any unspent API package quotas under a pro-rata model by contacting developer@koliance.io.
+
+Q: For deep technical specs, integration code, and architectural whitepaper:
+A: See the complete LLM documentation at https://koliance.vercel.app/llms-full.txt
+
