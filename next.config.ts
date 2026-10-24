@@ -38,6 +38,20 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        // Generative Engine Optimization (GEO): Global Edge caching & CORS for AI crawlers
+        source: "/(llms.txt|llms-full.txt|sitemap.xml|robots.txt)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=3600, s-maxage=86400, stale-while-revalidate=86400",
+          },
+          {
+            key: "Access-Control-Allow-Origin",
+            value: "*",
+          },
+        ],
+      },
     ];
   },
 };
