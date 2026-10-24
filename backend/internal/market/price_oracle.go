@@ -185,7 +185,7 @@ func (p *PriceOracle) PriceChange(ctx context.Context, symbols []string) ([]Inst
 	}
 
 	limit := 2
-	if len(want) > 2 {
+	if len(want) > 1 {
 		limit = 100
 	}
 
@@ -207,8 +207,8 @@ func (p *PriceOracle) PriceChange(ctx context.Context, symbols []string) ([]Inst
 	allBars := make(map[string][]AlpacaBar)
 	pageToken := ""
 
-	// Page up to 3 times if Alpaca paginated and some requested symbols are still missing bars
-	for pageIdx := 0; pageIdx < 3; pageIdx++ {
+	// Page up to 5 times if Alpaca paginated and some requested symbols are still missing bars
+	for pageIdx := 0; pageIdx < 5; pageIdx++ {
 		if pageToken != "" {
 			q.Set("page_token", pageToken)
 		} else {

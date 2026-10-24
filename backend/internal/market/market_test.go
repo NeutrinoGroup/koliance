@@ -227,10 +227,10 @@ func TestPriceOracleDerivesChangeFromTwoDailyBars(t *testing.T) {
 		t.Fatalf("got %d changes, want 2", len(changes))
 	}
 
-	// The request must ask for two bars, sorted newest first: one bar cannot
+	// The request must ask for bars, sorted newest first: one bar cannot
 	// express a change, and the ordering is what makes "the last two" well
-	// defined.
-	for _, want := range []string{"timeframe=1Day", "limit=2", "sort=desc", "symbols=NVDA%2CAAPL"} {
+	// defined. Multi-symbol queries use limit=100 so all symbols get slots.
+	for _, want := range []string{"timeframe=1Day", "limit=100", "sort=desc", "symbols=NVDA%2CAAPL"} {
 		if !strings.Contains(gotQuery, want) {
 			t.Errorf("query %q missing %q", gotQuery, want)
 		}
@@ -263,16 +263,23 @@ func TestPriceOracleDerivesChangeFromTwoDailyBars(t *testing.T) {
 
 // TestPriceOracleLookbackWindowAndPagination asserts that PriceChange passes
 // a 7-day start window parameter (protecting weekend and holiday requests from
-// 0-bar empty sets) and follows upstream NextPageTokens to assemble multi-symbol bars.
+// 0-bar empty sets) and follows upstream NextPageTokens across multiple pages
+// (even when one symbol spans multiple pages before the second symbol appears).
 func TestPriceOracleLookbackWindowAndPagination(t *testing.T) {
 	page1 := `{"bars":{
 		"NVDA":[
 			{"t":"2026-10-23T04:00:00Z","c":210.0},
-			{"t":"2026-10-22T04:00:00Z","c":200.0}
+			{"t":"2026-10-22T04:00:00Z","c":205.0}
 		]
 	},"next_page_token":"token_page_2"}`
 
 	page2 := `{"bars":{
+		"NVDA":[
+			{"t":"2026-10-21T04:00:00Z","c":200.0}
+		]
+	},"next_page_token":"token_page_3"}`
+
+	page3 := `{"bars":{
 		"AAPL":[
 			{"t":"2026-10-23T04:00:00Z","c":350.0},
 			{"t":"2026-10-22T04:00:00Z","c":340.0}
@@ -290,8 +297,13 @@ func TestPriceOracleLookbackWindowAndPagination(t *testing.T) {
 			w.Write([]byte(page1))
 			return
 		}
+		if callCount == 2 {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(page2))
+			return
+		}
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(page2))
+		w.Write([]byte(page3))
 	}))
 	defer srv.Close()
 
@@ -304,8 +316,8 @@ func TestPriceOracleLookbackWindowAndPagination(t *testing.T) {
 		t.Fatalf("got %d changes, want 2", len(changes))
 	}
 
-	if len(requests) != 2 {
-		t.Fatalf("got %d upstream requests, want 2 pages", len(requests))
+	if len(requests) != 3 {
+		t.Fatalf("got %d upstream requests, want 3 pages", len(requests))
 	}
 
 	// First request must supply start window and symbols
@@ -318,10 +330,16 @@ func TestPriceOracleLookbackWindowAndPagination(t *testing.T) {
 		t.Errorf("request 1 start parameter mismatch, got %q, want %q", req1, expectedStart)
 	}
 
-	// Second request must include page_token
+	// Second request must include page_token=token_page_2
 	req2 := requests[1]
 	if !strings.Contains(req2, "page_token=token_page_2") {
 		t.Errorf("request 2 query %q missing page_token", req2)
+	}
+
+	// Third request must include page_token=token_page_3
+	req3 := requests[2]
+	if !strings.Contains(req3, "page_token=token_page_3") {
+		t.Errorf("request 3 query %q missing page_token", req3)
 	}
 
 	bySym := map[string]InstrumentChange{}
@@ -329,7 +347,8 @@ func TestPriceOracleLookbackWindowAndPagination(t *testing.T) {
 		bySym[c.Symbol] = c
 	}
 
-	if bySym["NVDA"].Price != 210.0 || bySym["NVDA"].PreviousClose != 200.0 {
+	// NVDA must pick the latest (210) and the previous close (205) from the merged bars
+	if bySym["NVDA"].Price != 210.0 || bySym["NVDA"].PreviousClose != 205.0 {
 		t.Errorf("NVDA prices incorrect: %+v", bySym["NVDA"])
 	}
 	if bySym["AAPL"].Price != 350.0 || bySym["AAPL"].PreviousClose != 340.0 {
