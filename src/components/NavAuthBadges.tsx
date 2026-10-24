@@ -20,6 +20,7 @@ import {
   Copy,
   Link2,
   Coins,
+  MessageSquare,
 } from "lucide-react";
 import Image from "next/image";
 import { createPublicClient, formatEther } from "viem";
@@ -415,7 +416,22 @@ export function NavAuthBadges({
   const effectiveWallet = effectiveWalletAddress(state, walletAddress);
 
   return (
-    <div className="relative">
+    <div className="relative flex items-center gap-1.5">
+      {/* Top Bar Direct IM & Contacts Shortcut Button */}
+      {(identity || effectiveWallet) && (
+        <button
+          type="button"
+          onClick={() => {
+            setTransferCurrency("KOL");
+            setTransferModalOpen(true);
+          }}
+          className="flex items-center justify-center w-8 h-8 rounded-md bg-[#141824] hover:bg-[#1a2032] border border-white/20 hover:border-cyan-400 text-slate-300 hover:text-[#00f2fe] transition-all shadow-md active:scale-95 cursor-pointer"
+          title="好友通讯录与IM聊天 (Contacts & Direct Chat)"
+        >
+          <MessageSquare className="w-4 h-4" />
+        </button>
+      )}
+
       {/* Top-Right Account Button (Solid, 100% Opaque High-End Tech Dark) */}
       <button
         onClick={() => setDropdownOpen(!dropdownOpen)}
@@ -605,8 +621,8 @@ export function NavAuthBadges({
                       </div>
                     </div>
 
-                    {/* Wallet Action Buttons: Transfer KOL, Transfer MON & Disconnect */}
-                    <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+                    {/* Wallet Action Buttons: Transfer KOL, Transfer MON, Friends & IM, Disconnect */}
+                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
                       <button
                         onClick={() => {
                           setTransferCurrency("KOL");
@@ -628,6 +644,19 @@ export function NavAuthBadges({
                       >
                         <Send className="w-3 h-3 text-emerald-200" />
                         <span>{t("auth.transfer_mon")}</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-1.5 pt-1">
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          setTransferModalOpen(true);
+                        }}
+                        className="py-1.5 px-2 rounded-md bg-[#162035] hover:bg-[#1f2d4a] border border-[#00f2fe]/40 text-[#00f2fe] text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 cursor-pointer"
+                      >
+                        <MessageSquare className="w-3 h-3 text-[#00f2fe]" />
+                        <span>好友与IM消息</span>
                       </button>
                       <button
                         onClick={() => {

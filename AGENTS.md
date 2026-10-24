@@ -161,6 +161,7 @@ All user-facing workflows must maintain complete audit transparency:
    - All records must persist per user account (syncing local state with backend telemetry).
 
 
+## 对于并行任务可以创建worktree，任务完成可以关闭worktree
 ## subagent将问题进行拆分，并行子agent处理任务，代码需要模块化，职责独立
 ## 接口测试，回归测试，端到端测试验证结果 
 ## 任务结束时review代码

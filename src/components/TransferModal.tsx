@@ -472,6 +472,22 @@ export function TransferModal({
                             <span className="text-[8px] px-1 py-0.2 rounded-sm bg-purple-500/20 text-purple-300 border border-purple-500/30">
                               [VERIFIED]
                             </span>
+
+                            {/* Direct IM Trigger button inside card */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setChatPeer({
+                                  address: f.friend_wallet,
+                                  name: f.friend_name,
+                                });
+                              }}
+                              className="p-1 rounded-sm bg-cyan-500/15 hover:bg-cyan-500/30 text-cyan-300 transition"
+                              title="发起IM消息"
+                            >
+                              <MessageSquare className="w-3 h-3" />
+                            </button>
                           </div>
                         );
                       })}
