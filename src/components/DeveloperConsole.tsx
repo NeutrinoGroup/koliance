@@ -378,6 +378,13 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           setCreatedSecretModalOpen(true);
           setNewKeyModalOpen(false);
           setNewKeyName("");
+
+          if (json.rewardGranted && typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("koliance:reward", { detail: json.rewardGranted })
+            );
+          }
+
           recordAuditEvent({
             walletAddress: activeWallet,
             category: "AGENT",
@@ -388,6 +395,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
           });
         }
       }
+
     } catch (err) {
       console.error("Create API key error:", err);
     } finally {

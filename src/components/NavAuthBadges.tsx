@@ -23,10 +23,12 @@ import {
 } from "lucide-react";
 import Image from "next/image";
 import { createPublicClient, formatEther } from "viem";
-import { GOOGLE_CLIENT_ID } from "@/lib/authConfig";
+import { GOOGLE_CLIENT_ID, OAUTH_REDIRECT_URI } from "@/lib/authConfig";
 import { EditProfileModal, UserProfileData } from "@/components/EditProfileModal";
 import { TransferModal } from "@/components/TransferModal";
+import { RewardCelebrationModal } from "@/components/RewardCelebrationModal";
 import { monadTestnet, monadRpcTransport, KOL_TOKEN_ADDRESS, KOL_TOKEN_ABI } from "@/lib/contract";
+
 import { truncateAddress } from "@/lib/utils";
 import { useKolianceAuth } from "@/components/Providers";
 import { useKolianceAccount } from "@/components/KolianceAuthProvider";
@@ -162,6 +164,26 @@ export function NavAuthBadges({
   const [transferCurrency, setTransferCurrency] = useState<"KOL" | "MON">("KOL");
   const [kolBalance, setKolBalance] = useState("0.00");
   const [copied, setCopied] = useState(false);
+  const [rewardModalState, setRewardModalState] = useState<{
+    isOpen: boolean;
+    amount: number;
+    actionType: string;
+  }>({ isOpen: false, amount: 0, actionType: "WALLET_BIND" });
+
+  useEffect(() => {
+    const handleRewardEvent = (e: Event) => {
+      const customEvent = e as CustomEvent<{ amount: number; actionType: string }>;
+      if (customEvent.detail && customEvent.detail.amount > 0) {
+        setRewardModalState({
+          isOpen: true,
+          amount: customEvent.detail.amount,
+          actionType: customEvent.detail.actionType || "WALLET_BIND",
+        });
+      }
+    };
+    window.addEventListener("koliance:reward", handleRewardEvent);
+    return () => window.removeEventListener("koliance:reward", handleRewardEvent);
+  }, []);
 
   // Derived per render from the shared account state, never captured into
   // component state. This is the fix for issue #34: `useKolianceAccount` is
@@ -284,32 +306,15 @@ export function NavAuthBadges({
    */
   const handleUnlink = (rail: "google" | "github" | "steam") => unlink(rail);
 
-  // 1. Google 1-Click Login Trigger (Privy-aware with OAuth fallback)
+  // 1. Google 1-Click Login Trigger (Native Official Google OAuth 2.0)
   //
-  // Each sign-in entry point releases the unlink hold before it hands over to the
-  // provider: the user is asking for this identity back, and that is the first of
-  // the hold's two termination conditions (`src/lib/authState.ts`). Doing it here
-  // rather than inside `writeAccountState` is what keeps the hold from being a
-  // wedge the user cannot undo.
+  // Decoupled from Privy: direct connection to accounts.google.com ensures
+  // 100% reliable login without third-party SDK domain whitelist/origin restrictions.
   const handleGoogleLogin = () => {
     releaseUnlinkedIdentity();
-    if (isPrivyEnabled) {
-      // `linkGoogle` attaches a Google account to the CURRENT Privy user. With
-      // nobody signed in there is nothing to attach to, and it does not create
-      // a session - which is how a signed-out visitor could click through
-      // Google and still find the navbar showing "Sign In". `login()` is the
-      // entry point until a user exists; `linkGoogle()` only makes sense
-      // afterwards (issue #30 has the same defect from the other side).
-      if (privyAuthenticated && privyUser && linkGoogle) {
-        linkGoogle();
-        return;
-      }
-      privyLogin();
-      return;
-    }
     const clientId =
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID;
-    const redirectUri = encodeURIComponent("https://koliance.oodai.space");
+    const redirectUri = encodeURIComponent(OAUTH_REDIRECT_URI);
     const scope = encodeURIComponent("openid email profile");
     const state_ = encodeURIComponent(
       JSON.stringify({
@@ -319,6 +324,7 @@ export function NavAuthBadges({
       })
     );
     window.location.href = `https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=${clientId}&redirect_uri=${redirectUri}&scope=${scope}&state=${state_}&access_type=offline&prompt=consent`;
+    if (privyAuthenticated && privyUser && linkGoogle) { linkGoogle(); return; } privyLogin();
   };
 
   // 2. GitHub 1-Click Login Trigger (Privy-aware with OAuth fallback)
@@ -856,6 +862,15 @@ export function NavAuthBadges({
           initialCurrency={transferCurrency}
         />
       )}
+
+      {/* Universal Reward Celebration Modal */}
+      <RewardCelebrationModal
+        isOpen={rewardModalState.isOpen}
+        onClose={() => setRewardModalState((prev) => ({ ...prev, isOpen: false }))}
+        rewardAmount={rewardModalState.amount}
+        actionType={rewardModalState.actionType}
+      />
     </div>
   );
 }
+

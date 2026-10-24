@@ -1,4 +1,4 @@
-﻿import type { Metadata, Viewport } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -77,7 +77,7 @@ const jsonLd = {
       url: "https://koliance.vercel.app",
       logo: "https://koliance.vercel.app/brand-icon-512.png",
       sameAs: [
-        "https://github.com",
+        "https://github.com/NeutrinoGroup/koliance",
         "https://x.com",
       ],
     },
@@ -89,11 +89,32 @@ const jsonLd = {
       operatingSystem: "Web3 / EVM (Monad)",
       description:
         "Next-generation verifiable on-chain identity and cryptographic trust attestations powered by Monad 10,000 TPS parallel EVM.",
-      offers: {
-        "@type": "Offer",
-        price: "0",
-        priceCurrency: "USD",
-      },
+      offers: [
+        {
+          "@type": "Offer",
+          name: "Starter Free Trial",
+          price: "0",
+          priceCurrency: "USD",
+          url: "https://koliance.vercel.app/pricing",
+          description: "100 API Calls Included per claim with 3 free claims per account",
+        },
+        {
+          "@type": "Offer",
+          name: "Growth Pro",
+          price: "19.90",
+          priceCurrency: "USD",
+          url: "https://koliance.vercel.app/pricing",
+          description: "10,000 API Calls Included with 300 RPM Peak Concurrency",
+        },
+        {
+          "@type": "Offer",
+          name: "Enterprise Scale",
+          price: "149.00",
+          priceCurrency: "USD",
+          url: "https://koliance.vercel.app/pricing",
+          description: "100,000 API Calls Included with 1,200 RPM Dedicated Queue",
+        },
+      ],
       aggregateRating: {
         "@type": "AggregateRating",
         ratingValue: "4.9",

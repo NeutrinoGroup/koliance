@@ -46,6 +46,7 @@ import { TrustAttestationCard } from "@/components/TrustAttestationCard";
 import { TrustStream } from "@/components/TrustStream";
 import { NetworkModal } from "@/components/NetworkModal";
 import { ContactModal } from "@/components/ContactModal";
+import { GlobalFooter } from "@/components/GlobalFooter";
 import { TokenStudio } from "@/components/TokenStudio";
 import { DeveloperConsole } from "@/components/DeveloperConsole";
 import { AgentNarrativeFlow } from "@/components/AgentNarrativeFlow";
@@ -547,59 +548,7 @@ function MainContent() {
 
       {/* Global Footer (shown when not in full-screen AGENTCARD scanner) */}
       {currentView !== "AGENTCARD" && (
-        <footer className="border-t border-white/10 py-6 px-4 sm:px-8 mt-12 bg-[#0d1017]/80 backdrop-blur-md">
-          <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-slate-400">
-            <div className="flex items-center gap-3">
-              <BrandIcon size={24} />
-              <span className="font-extrabold text-white tracking-wider">KOLIANCE</span>
-              <span className="text-white/20">|</span>
-              <span>&copy; {new Date().getFullYear()} Monad Ecosystem Trust Architecture.</span>
-            </div>
-
-            <div className="flex items-center gap-5">
-              <button onClick={() => setCurrentView("INDEX")} className="hover:text-white transition">
-                INDEX
-              </button>
-              <button onClick={() => setCurrentView("DETAIL")} className="hover:text-white transition">
-                DETAIL
-              </button>
-              <button onClick={() => setCurrentView("PRODUCT")} className="hover:text-white transition">
-                PRODUCT
-              </button>
-              <button onClick={() => setCurrentView("MARKET")} className="hover:text-white transition">
-                MARKET
-              </button>
-              <button onClick={() => setCurrentView("AGENTCARD")} className="text-cyan-400 hover:text-cyan-300 transition">
-                AGENTCARD
-              </button>
-              <a
-                href="https://docs.monad.xyz"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:text-white transition flex items-center gap-1"
-              >
-                <span>Docs</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-              <a
-                href="https://testnet.monadexplorer.com"
-                target="_blank"
-                rel="noreferrer"
-                className="hover:text-white transition flex items-center gap-1"
-              >
-                <span>Explorer</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-              <button
-                onClick={() => setContactModalOpen(true)}
-                className="hover:text-white transition flex items-center gap-1.5 text-slate-300 hover:text-cyan-300 cursor-pointer"
-              >
-                <Mail className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Contact</span>
-              </button>
-            </div>
-          </div>
-        </footer>
+        <GlobalFooter onOpenContact={() => setContactModalOpen(true)} />
       )}
 
       {/* Network Switch Modal */}

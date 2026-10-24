@@ -185,8 +185,10 @@ type AuthorizeResponse struct {
 	ResponseCode string       `json:"responseCode"`
 	Message      string       `json:"message"`
 	RemainingUSD float64      `json:"remainingUSD"`
+	CashbackKOL  float64      `json:"cashbackKol,omitempty"`
 	Transaction  *Transaction `json:"transaction"`
 }
+
 
 // AuthorizeMicropayment charges a card. The caller must hold a credential for
 // *this* card: either a session key issued for it (the agent path) or the card
@@ -272,15 +274,19 @@ func (s *Service) AuthorizeMicropayment(req AuthorizeRequest, cardToken string) 
 		})
 	}
 
+	cashback := math.Round(req.AmountUSD*0.10*10000) / 10000
+
 	return &AuthorizeResponse{
 		Success:      true,
 		AuthCode:     authCode,
 		ResponseCode: "00",
 		Message:      "Approved",
 		RemainingUSD: card.BalanceUSD,
+		CashbackKOL:  cashback,
 		Transaction:  tx,
 	}, nil
 }
+
 
 // IssueSessionKey lets the card owner delegate a bounded allowance to an
 // agent. Requires the card token (or the operator).

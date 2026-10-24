@@ -1,36 +1,58 @@
 # Koliance
 
-> Decentralized Identity & Cryptographic Trust Infrastructure powered by Monad 10,000 TPS Parallel EVM.
+> Verifiable On-Chain Identity, Cryptographic Trust & Settlement Infrastructure powered by Monad 10,000 TPS Parallel EVM.
 
-Koliance is a next-generation verifiable on-chain identity, social attestation, and cryptographic trust platform built specifically for high-throughput EVM ecosystems (Monad Testnet Chain ID 10143).
+Koliance is a next-generation decentralized trust protocol, dynamic neural agent identity layer, and autonomous solvency settlement platform built specifically for high-throughput EVM ecosystems (Monad Testnet Chain ID 10143).
 
 ## Core Capabilities
 
 - **Agent Card Ecosystem**: Cryptographic dynamic neural agent identity cards verifiable on-chain with real-time reputation scoring and attestation metrics.
 - **Universal Multi-Platform Auth**: Cryptographic identity linkage supporting Web3 wallets, Google OAuth 2.0, GitHub Developer profiles, and Steam gaming credentials.
-- **Developer Dev Wall**: On-chain verification of GitHub developer activity, repository stars, commit velocity, and open-source contributions.
-- **Steam Gaming Attestation**: Verifiable gamer badge metrics and achievements attested to decentralized identifiers.
+- **Developer API & Quota Infrastructure**: Transparent SaaS tier allocation (Starter Free $0.00 with 300 free trial calls, Growth Pro $19.90 with 10k calls, Enterprise Scale $149.00 with 100k calls).
+- **EIP-712 Session Key Delegation**: Cryptographically bound autonomous transaction signing for AI agents with strict ceilings (maxPerTxUSD, dailyLimitUSD) and on-chain circuit breakers.
 - **High-Throughput Parallel EVM Optimization**: Engineered to leverage Monad's 10,000 TPS, 1-second finality, and parallel transaction execution pipeline for zero-latency identity minting and peer-to-peer trust endorsements.
-- **Smart Contract Trust Anchors**: Decentralized trust registry smart contracts with transparent audit trails on Monad testnet explorer.
+- **Perp Solvency & Market Terminal**: On-chain perpetual position settlement with Pyth and Alpaca oracle price feeds with zero-truncation integer math.
 
 ## Architecture & Technology Stack
 
 - **Blockchain**: Monad Testnet (Chain ID: 10143, Currency: MON)
-- **Frontend**: Next.js 15 App Router, Tailwind CSS, Viem, Framer Motion
-- **Backend**: NestJS, TypeORM, PostgreSQL with composite index query optimization
-- **Attestation Engine**: Cryptographically signed EIP-712 / ECDSA credentials
+- **Smart Contracts**: Solidity 0.8.28, Hardhat, EIP-712 Typed Data Signatures
+- **Frontend**: Next.js 15 App Router, Tailwind CSS, Viem, Wagmi, Privy, Framer Motion
+- **Backend & BFF**: High-concurrency Go microservices, TypeScript Next.js BFF Gateway
+- **License**: MIT Open Source License
 
 ## Key URLs & Resources
 
 - Official Website: https://koliance.vercel.app
+- Pricing & Quota Plans: https://koliance.vercel.app/pricing
+- Documentation & API Specs: https://koliance.vercel.app/docs
+- Developer Console: https://koliance.vercel.app/console
 - Market Terminal: https://koliance.vercel.app/market
-- Agent Cards: https://koliance.vercel.app/agentcard
+- Perp Solvency Engine: https://koliance.vercel.app/perp
+- Agent Card Scanner: https://koliance.vercel.app/agentcard
+- Token & Staking: https://koliance.vercel.app/token
+- Terms of Service: https://koliance.vercel.app/terms
+- Privacy Policy: https://koliance.vercel.app/privacy
+- Refund & Security Policy: https://koliance.vercel.app/refund
+- Open Source Repository: https://github.com/NeutrinoGroup/koliance
 - Monad Explorer: https://testnet.monadexplorer.com
+
+## Official Smart Contract Anchors (Monad Testnet 10143)
+
+- Koliance Core Registry: `0x6291C790dbB41198c69781B2B7a01d674843b0C5`
+- SessionKeyRegistry (EIP-712): `0xCb7f01F6E9B9b33aC5161FEaA28eB8Ce3b5fB09D`
+- PositionManager (Perp Engine): `0x3fCeD0662657e0C3a2aF8A80e3A4cDb8A7d1d2C4`
 
 ## Frequently Asked Questions
 
 ### What is Koliance?
-Koliance is a decentralized trust protocol and identity verification network tailored for Web3 communities, AI agents, and developers on Monad.
+Koliance is a decentralized trust protocol and identity verification network tailored for Web3 communities, AI agents, and high-frequency automated settlement on Monad.
 
-### How does Koliance leverage Monad?
-Koliance utilizes Monad's parallel EVM execution and sub-second finality to enable instant, gas-efficient identity attestations and reputation querying at high volume.
+### How does Koliance pricing work?
+Koliance offers a completely free Starter Pack (100 API calls per claim, up to 3 claims / 300 free calls per wallet) with zero credit card required. Growth Pro ($19.90 / 10,000 calls) and Enterprise Scale ($149.00 / 100,000 calls) provide higher RPM concurrency and dedicated execution lanes, with an automatic 15% discount when paying via KOL token.
+
+### What is the refund policy?
+Unspent API package quotas can be refunded pro-rata within 14 calendar days of purchase by contacting developer@koliance.io.
+
+### How to report a security vulnerability?
+Security disclosures should be confidentially sent to developer@koliance.io or iasi777work@gmail.com with a 48-hour SLA under our Safe Harbor policy.
