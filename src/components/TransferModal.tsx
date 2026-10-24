@@ -519,17 +519,48 @@ export function TransferModal({
                     )}
                   </div>
 
-                  <input
-                    type="text"
-                    placeholder="0x..."
-                    value={recipient}
-                    onChange={(e) => {
-                      setRecipient(e.target.value);
-                      setSelectedFriend(null);
-                    }}
-                    className="w-full h-9 px-3 rounded-md bg-black/40 border border-white/15 focus:border-[#836ef9] focus:outline-none text-xs text-white placeholder-slate-500 transition-all"
-                    required
-                  />
+                  {selectedFriend ? (
+                    <div className="flex items-center justify-between p-2.5 rounded-md bg-[#836ef9]/15 border border-[#836ef9]/40 text-xs font-mono">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className="w-6 h-6 rounded-sm bg-[#836ef9]/30 border border-[#836ef9]/50 flex items-center justify-center text-[10px] font-bold text-[#00f2fe] shrink-0">
+                          {selectedFriend.friend_name.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white text-xs truncate">{selectedFriend.friend_name}</span>
+                            <span className="text-[9px] px-1.5 py-0.2 rounded-sm bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1 shrink-0">
+                              <ShieldCheck className="w-2.5 h-2.5 text-[#00f2fe]" />
+                              [LOCKED · 信用认证]
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 truncate">{selectedFriend.friend_wallet}</span>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedFriend(null);
+                          setRecipient("");
+                        }}
+                        className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-white/10 text-[10px] ml-2 shrink-0 transition"
+                        title="解除锁定并重新输入"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="0x..."
+                      value={recipient}
+                      onChange={(e) => {
+                        setRecipient(e.target.value);
+                        setSelectedFriend(null);
+                      }}
+                      className="w-full h-9 px-3 rounded-md bg-black/40 border border-white/15 focus:border-[#836ef9] focus:outline-none text-xs text-white placeholder-slate-500 transition-all"
+                      required
+                    />
+                  )}
 
                   {/* Add Friend Nickname Drawer */}
                   {showAddFriendInput && (

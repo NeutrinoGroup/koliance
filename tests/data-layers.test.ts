@@ -156,5 +156,71 @@ describe("Data Layer Tests: Friends, Direct Messages & User Rewards", () => {
       expect(updated.totalClaimableKol).toBe(0);
       expect(updated.totalEarnedKol).toBe(110);
     });
+
+    it("prevents arbitrary reward amount overrides on single-claim actions", async () => {
+      // Trying to claim 999999 KOL for WALLET_BIND must be clamped to official 100 KOL
+      const res = await recordUserReward(userId, "WALLET_BIND", 999999);
+      expect(res.reward?.amount_kol).toBe(100);
+    });
+
+    it("rejects NaN, Infinity and non-positive reward amounts", async () => {
+      const nanRes = await recordUserReward(userId, "CARD_CASHBACK_10", NaN);
+      expect(nanRes.reward).toBeNull();
+      expect(nanRes.error).toContain("must be a finite number greater than 0");
+
+      const infRes = await recordUserReward(userId, "CARD_CASHBACK_10", Infinity);
+      expect(infRes.reward).toBeNull();
+
+      const negRes = await recordUserReward(userId, "CARD_CASHBACK_10", -10);
+      expect(negRes.reward).toBeNull();
+    });
+
+    it("transfers P2P red packet gift with zero inflation and exact balance integrity", async () => {
+      const recipientId = "did:koliance:wallet:0x2222222222222222222222222222222222222222";
+      const { sendRewardGift } = await import("@/lib/rewardsDb");
+
+      // Give sender 100 KOL
+      await recordUserReward(userId, "WALLET_BIND"); // +100 KOL
+
+      // Attempt self-gift: must fail
+      const selfRes = await sendRewardGift(userId, userId, 20);
+      expect(selfRes.success).toBe(false);
+      expect(selfRes.error).toContain("Cannot send a gift to yourself");
+
+      // Attempt gift exceeding balance: must fail
+      const overRes = await sendRewardGift(userId, recipientId, 150);
+      expect(overRes.success).toBe(false);
+      expect(overRes.error).toContain("Insufficient claimable KOL balance");
+
+      // Valid gift of 25 KOL
+      const giftRes = await sendRewardGift(userId, recipientId, 25);
+      expect(giftRes.success).toBe(true);
+      expect(giftRes.giftRecord?.amount_kol).toBe(25);
+
+      // Verify sender's claimable is now 75
+      const senderSummary = await getUserRewards(userId);
+      expect(senderSummary.totalClaimableKol).toBe(75);
+
+      // Verify recipient's claimable is 25
+      const recipientSummary = await getUserRewards(recipientId);
+      expect(recipientSummary.totalClaimableKol).toBe(25);
+      expect(recipientSummary.totalEarnedKol).toBe(25);
+    });
+  });
+
+  describe("Self-Address Friend Guard & Image URL Extraction", () => {
+    it("rejects adding oneself as a friend", async () => {
+      const user = "0x1111111111111111111111111111111111111111";
+      const res = await addFriend(user, user);
+      expect(res.success).toBe(false);
+      expect(res.error).toContain("Cannot add your own wallet address as a friend");
+    });
+
+    it("correctly extracts external image URL for micro-preview", async () => {
+      const { getImageUrlFromContent } = await import("@/components/DirectMessageModal");
+      expect(getImageUrlFromContent("Check this: https://example.com/photo.png cool")).toBe("https://example.com/photo.png");
+      expect(getImageUrlFromContent("Visit https://monad.xyz today")).toBeNull();
+      expect(getImageUrlFromContent("")).toBeNull();
+    });
   });
 });

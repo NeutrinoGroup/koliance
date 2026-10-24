@@ -13,8 +13,10 @@ import {
   Loader2,
   Check,
   User,
+  Sparkles,
 } from "lucide-react";
 import type { DirectMessageRecord, DirectMessageType } from "@/lib/directMessagesDb";
+import { playCelebrationAudio } from "@/components/RewardCelebrationModal";
 
 export interface DirectMessageModalProps {
   isOpen: boolean;
@@ -28,6 +30,15 @@ export interface DirectMessageModalProps {
 
 // Regex to detect HTTP/HTTPS hyperlinks
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+
+/**
+ * Extract external image URL from text message content for thumbnail preview
+ */
+export function getImageUrlFromContent(content?: string): string | null {
+  if (!content) return null;
+  const match = content.match(/https?:\/\/[^\s]+\.(?:png|jpe?g|gif|webp|svg)(?:\?[^\s]*)?/i);
+  return match ? match[0] : null;
+}
 
 /**
  * Client-side Canvas Image Compression:
@@ -87,11 +98,87 @@ export function DirectMessageModal({
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [selectedExpandedImage, setSelectedExpandedImage] = useState<string | null>(null);
 
+  // P2P Red Packet / Token Gift state
+  const [showGiftDrawer, setShowGiftDrawer] = useState(false);
+  const [giftAmountInput, setGiftAmountInput] = useState("10");
+  const [isSendingGift, setIsSendingGift] = useState(false);
+  const [availableKol, setAvailableKol] = useState<number | null>(null);
+  const [claimedGifts, setClaimedGifts] = useState<Set<string>>(new Set());
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // Fetch available claimable KOL for gifting
+  const fetchAvailableKol = React.useCallback(async () => {
+    if (!authToken) return;
+    try {
+      const res = await fetch("/api/user/rewards", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof data.totalClaimableKol === "number") {
+          setAvailableKol(data.totalClaimableKol);
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch available rewards:", err);
+    }
+  }, [authToken]);
+
+  // Handle send P2P token gift / red packet
+  const handleSendGift = async () => {
+    const num = parseFloat(giftAmountInput);
+    if (!Number.isFinite(num) || num <= 0) return;
+    setIsSendingGift(true);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
+      const res = await fetch("/api/user/rewards", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          action: "SEND_GIFT",
+          recipient: peerAddress,
+          amount_kol: num,
+        }),
+      });
+      if (res.ok) {
+        setShowGiftDrawer(false);
+        setGiftAmountInput("10");
+        fetchMessages();
+        fetchAvailableKol();
+      }
+    } catch (err) {
+      console.error("Failed to send gift:", err);
+    } finally {
+      setIsSendingGift(false);
+    }
+  };
+
+  // Handle unwrap gift / red packet with dopamine celebration
+  const handleUnwrapGift = (msgId: string, amount: number) => {
+    playCelebrationAudio();
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      try {
+        navigator.vibrate([25, 40, 25]);
+      } catch {}
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("koliance:reward", {
+          detail: {
+            amount,
+            actionType: "GIFT",
+          },
+        })
+      );
+    }
+    setClaimedGifts((prev) => new Set(prev).add(msgId));
   };
 
   // Fetch messages between currentUser and peerAddress
@@ -313,15 +400,15 @@ export function DirectMessageModal({
                         : "bg-white/5 border border-white/10 text-slate-200"
                     }`}
                   >
-                    {/* Render Image Attachment */}
-                    {m.attachment_url && (
+                    {/* Render Image Attachment or External Image Preview */}
+                    {(m.attachment_url || getImageUrlFromContent(m.content)) && (
                       <div className="mb-2 overflow-hidden rounded-md border border-white/10 bg-black/40">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={m.attachment_url}
+                          src={m.attachment_url || getImageUrlFromContent(m.content)!}
                           alt="Attachment"
                           className="max-h-48 object-cover rounded-md cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => setSelectedExpandedImage(m.attachment_url || null)}
+                          onClick={() => setSelectedExpandedImage(m.attachment_url || getImageUrlFromContent(m.content)!)}
                         />
                       </div>
                     )}
@@ -349,17 +436,39 @@ export function DirectMessageModal({
 
                     {/* Render GIFT card */}
                     {m.msg_type === "GIFT" && (
-                      <div className="mb-2 p-2.5 rounded-md bg-purple-950/40 border border-purple-500/40 text-purple-200">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="font-semibold flex items-center gap-1 text-[11px]">
-                            <Gift className="w-3 h-3 text-[#00f2fe]" />
+                      <div className="mb-2 p-3 rounded-md bg-purple-950/40 border border-purple-500/40 text-purple-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold flex items-center gap-1.5 text-xs">
+                            <Gift className="w-3.5 h-3.5 text-[#00f2fe]" />
                             <span>KOL Red Packet</span>
                           </span>
                           <span className="text-[10px] text-[#00f2fe]">[TOKEN GIFT]</span>
                         </div>
-                        <div className="text-[10px] text-purple-300">
-                          P2P Gift Card for {String(m.metadata?.amount || "10")} KOL
+                        <div className="text-xs text-purple-200 font-bold">
+                          {String(m.metadata?.amount || "10")} KOL
                         </div>
+                        <div className="text-[10px] text-purple-300/80">
+                          {isMe ? "Sent to friend" : "Gifted by peer to your vault"}
+                        </div>
+                        {!isMe && (
+                          <div className="pt-1">
+                            {claimedGifts.has(m.id) ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-bold">
+                                <Check className="w-3 h-3" />
+                                <span>[CLAIMED & CREDITED]</span>
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleUnwrapGift(m.id, Number(m.metadata?.amount || 10))}
+                                className="h-7 px-3 rounded-md bg-gradient-to-r from-[#836ef9] to-[#00f2fe] hover:opacity-90 text-black text-[11px] font-bold flex items-center gap-1 shadow-md transition-all active:scale-[0.98]"
+                              >
+                                <Sparkles className="w-3 h-3" />
+                                <span>拆开红包 (Unwrap)</span>
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -414,6 +523,57 @@ export function DirectMessageModal({
             </div>
           )}
 
+          {/* Send Gift Drawer */}
+          {showGiftDrawer && (
+            <div className="p-3 bg-black/60 border-t border-purple-500/30 space-y-2 text-xs font-mono">
+              <div className="flex items-center justify-between text-slate-300">
+                <span className="flex items-center gap-1 font-bold text-white">
+                  <Gift className="w-3.5 h-3.5 text-[#00f2fe]" />
+                  <span>发送 KOL 红包 (Send Token Gift)</span>
+                </span>
+                {availableKol !== null && (
+                  <span className="text-[10px] text-slate-400">
+                    可用金库余额: <strong className="text-emerald-400">{availableKol} KOL</strong>
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {[5, 10, 25, 50].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => setGiftAmountInput(String(preset))}
+                    className={`h-7 px-2.5 rounded-md border text-[11px] font-bold transition ${
+                      giftAmountInput === String(preset)
+                        ? "bg-[#836ef9] border-[#836ef9] text-white"
+                        : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {preset} KOL
+                  </button>
+                ))}
+                <input
+                  type="number"
+                  min="0.0001"
+                  step="any"
+                  value={giftAmountInput}
+                  onChange={(e) => setGiftAmountInput(e.target.value)}
+                  placeholder="自定义"
+                  className="w-20 h-7 px-2 rounded-md bg-black/40 border border-white/15 text-white text-xs focus:outline-none focus:border-[#836ef9]"
+                />
+                <button
+                  type="button"
+                  onClick={handleSendGift}
+                  disabled={isSendingGift || !parseFloat(giftAmountInput) || parseFloat(giftAmountInput) <= 0}
+                  className="h-7 px-3 rounded-md bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white text-[11px] font-bold ml-auto flex items-center gap-1 transition active:scale-[0.98]"
+                >
+                  {isSendingGift ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                  <span>塞进红包并发送</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Footer Input Bar */}
           <form
             onSubmit={handleSendMessage}
@@ -430,10 +590,26 @@ export function DirectMessageModal({
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}
-              className="h-9 w-9 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all"
+              className="h-9 w-9 rounded-md border border-white/10 bg-white/5 hover:bg-white/10 flex items-center justify-center text-slate-400 hover:text-white transition-all shrink-0"
               title="Attach screenshot or image"
             >
               <ImageIcon className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowGiftDrawer(!showGiftDrawer);
+                if (!showGiftDrawer) fetchAvailableKol();
+              }}
+              className={`h-9 w-9 rounded-md border flex items-center justify-center transition-all shrink-0 ${
+                showGiftDrawer
+                  ? "border-[#836ef9] bg-[#836ef9]/25 text-[#00f2fe]"
+                  : "border-white/10 bg-white/5 hover:bg-white/10 text-purple-300 hover:text-white"
+              }`}
+              title="Send KOL Token Red Packet"
+            >
+              <Gift className="w-4 h-4" />
             </button>
 
             <input

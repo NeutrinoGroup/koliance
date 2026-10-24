@@ -195,6 +195,74 @@ describe("User API Routes: Friends, Messages & Rewards", () => {
         actionType: "FIRST_API_KEY",
       });
     });
+
+    it("rejects direct forgery of GIFT tokens via CLAIM_ACTION", async () => {
+      const fakeGiftReq = new NextRequest("http://localhost/api/user/rewards", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "CLAIM_ACTION",
+          action_type: "GIFT",
+          amount_kol: 500,
+        }),
+      });
+      const res = await rewardsPOST(fakeGiftReq);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("GIFT cannot be claimed directly");
+    });
+
+    it("executes SEND_GIFT via API and updates both users and message thread", async () => {
+      // First fund sender with FIRST_CARD (+150 KOL)
+      await rewardsPOST(new NextRequest("http://localhost/api/user/rewards", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "CLAIM_ACTION", action_type: "FIRST_CARD" }),
+      }));
+
+      // Send 30 KOL gift to peer
+      const sendGiftReq = new NextRequest("http://localhost/api/user/rewards", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "SEND_GIFT",
+          recipient: peerWallet,
+          amount_kol: 30,
+        }),
+      });
+      const sendRes = await rewardsPOST(sendGiftReq);
+      expect(sendRes.status).toBe(200);
+      const sendData = await sendRes.json();
+      expect(sendData.success).toBe(true);
+      expect(sendData.giftRecord.amount_kol).toBe(30);
+
+      // Verify sender now has 120 claimable
+      const senderSum = await rewardsGET(new NextRequest("http://localhost/api/user/rewards", { headers: authHeader }));
+      const sData = await senderSum.json();
+      expect(sData.totalClaimableKol).toBe(120);
+
+      // Verify direct message contains the GIFT card
+      const msgRes = await messagesGET(new NextRequest(`http://localhost/api/user/messages?peer=${peerWallet}`, { headers: authHeader }));
+      const mData = await msgRes.json();
+      const giftMsg = mData.messages.find((m: { msg_type: string }) => m.msg_type === "GIFT");
+      expect(giftMsg).toBeDefined();
+      expect(giftMsg.metadata.amount).toBe(30);
+    });
+
+    it("rejects sending message to oneself", async () => {
+      const selfReq = new NextRequest("http://localhost/api/user/messages", {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipient: testWallet,
+          content: "Hello me",
+        }),
+      });
+      const res = await messagesPOST(selfReq);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("Cannot send a direct message to yourself");
+    });
   });
 });
 

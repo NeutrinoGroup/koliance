@@ -94,14 +94,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "recipient is required" }, { status: 400, headers: cors });
     }
 
+    if (currentId.toLowerCase() === recipient.trim().toLowerCase()) {
+      return NextResponse.json({ error: "Cannot send a direct message to yourself" }, { status: 400, headers: cors });
+    }
+
     const validTypes = new Set(["TEXT", "IMAGE", "TRANSFER_RECEIPT", "GIFT"]);
     const resolvedType = typeof msg_type === "string" && validTypes.has(msg_type) ? (msg_type as DirectMessageType) : "TEXT";
 
-    // Image payload size check: maximum 200KB for Base64 WebP image payload
-    if (resolvedType === "IMAGE" && typeof attachment_url === "string") {
-      if (attachment_url.length > 200 * 1024) {
-        return NextResponse.json({ error: "Image attachment exceeds 200KB limit" }, { status: 400, headers: cors });
-      }
+    // Attachment payload size check: maximum 200KB for Base64 payload
+    if (typeof attachment_url === "string" && attachment_url.length > 200 * 1024) {
+      return NextResponse.json({ error: "Image attachment exceeds 200KB limit" }, { status: 400, headers: cors });
     }
 
     const res = await createDirectMessage({

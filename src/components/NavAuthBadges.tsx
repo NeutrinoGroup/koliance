@@ -421,8 +421,8 @@ export function NavAuthBadges({
         onClick={() => setDropdownOpen(!dropdownOpen)}
         className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-md bg-[#141824] hover:bg-[#1a2032] border border-white/20 hover:border-blue-400 text-xs font-mono text-white transition-all select-none shadow-lg active:scale-95 group"
       >
-        {/* User Avatar Circle */}
-        <div className="w-6 h-6 rounded-full overflow-hidden border border-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)] relative bg-[#1c2438] flex items-center justify-center shrink-0">
+        {/* User Avatar */}
+        <div className="w-6 h-6 rounded-md overflow-hidden border border-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)] relative bg-[#1c2438] flex items-center justify-center shrink-0">
           {identity?.picture ? (
             <Image
               src={identity.picture}
