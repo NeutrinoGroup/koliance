@@ -21,9 +21,32 @@ export const MONAD_RPC_URLS = [
  * call gets its own transport instance, so there is no cross-client state to
  * reason about. Prefer this over an inline `fallback([...])` so the endpoint set
  * and its order stay defined in exactly one place.
+ *
+ * Configured with resilient defaults: 10s per-call timeout, 3 automatic retries
+ * with exponential backoff, and JSON-RPC batching support.
  */
-export function monadRpcTransport() {
-  return fallback(MONAD_RPC_URLS.map((url) => http(url)));
+export function monadRpcTransport(options?: {
+  timeout?: number;
+  retryCount?: number;
+  retryDelay?: number;
+  batch?: boolean;
+}) {
+  const timeout = options?.timeout ?? 10_000;
+  const retryCount = options?.retryCount ?? 3;
+  const retryDelay = options?.retryDelay ?? 500;
+  const batch = options?.batch ?? true;
+
+  return fallback(
+    MONAD_RPC_URLS.map((url) =>
+      http(url, {
+        timeout,
+        retryCount,
+        retryDelay,
+        batch,
+      })
+    ),
+    { rank: false }
+  );
 }
 
 // Monad Testnet Chain Definition

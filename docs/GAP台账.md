@@ -7,7 +7,9 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：**2026-10-24** · 主干同步（PR #37~#51，90 提交）· 新开 **GAP-79**（§5.17，`docs/changes/073`）
+> **最后更新**：**2026-10-24** · 新开 **GAP-80**（§5.18，`docs/changes/075`）
+> —— 解决线上 Perp 模块 RPC 瞬时并发风暴与超时无降级、Alpaca 周末空日线致 404 降级与 Render 保活机制。三道 CI/CD 门禁全绿（前端 331 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
+> **上一轮更新**：**2026-10-24** · 主干同步（PR #37~#51，90 提交）· 新开 **GAP-79**（§5.17，`docs/changes/073`）
 > —— 完成 Monad 测试网 PositionManager 与 SessionKeyRegistry 链上绑定（TX: `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799`，Block 73582682），补齐 `.env.example` 13 项关键配置与合约地址。三道 CI/CD 门禁全绿（前端 327 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
 > **上一轮更新**：**2026-10-12** · 分支 `docs/error-handling-adr` @ `22fa845`（= `upstream/main`）
 > —— **ADR-006 轮**（issue **#33** + 用户裁定）：新开 **GAP-74**（§5.12），设计环交付
@@ -278,6 +280,7 @@
 | **GAP-77** | **Market 模块对 Go 网关失败状态文案混淆**：未区分「网关未配置（环境变量缺失/线上误指 localhost）」与「网关不可达（网络超时/服务未启动）」，且文案硬编码默认 localhost 误导线上运维 | 🟡 P2 | ✅ | 见 §5.14（issue **#31** 修复轮；关闭于 `docs/changes/068`）。`isGoBackendConfigured()` 显式区分环境与配置，`MarketFetchReason` 扩充 `gateway-unconfigured`，文案与代理路由 503 分流，动态插值网关地址 |
 | **GAP-78** | **Monad 读 RPC 端点表存在多份副本**，其中三份把 **`eth_call` 不可用的 `monad-testnet.drpc.org` 排在 `fallback` 首位** ⇒ 每次读合约先失败一次、控制台常驻 400（数值最终正确，因 `fallback` 退到第二个端点） | 🟡 P2 | ✅ | 见 §5.16（issue **#50** 修复轮；关闭于 `docs/changes/071`）。端点表提为 `contract.ts` 的 SSOT（`MONAD_RPC_URLS` + `monadRpcTransport()`），三处组件改调之；新增 `tests/monad-rpc-order.test.ts` 2 条（顺序 + **禁止 SSOT 外副本**），两条变异各自变红 |
 | **GAP-79** | **PositionManager 与 SessionKeyRegistry 链上互认断联及环境变量示例脱节**：PositionManager 未绑定 SessionKeyRegistry（阻断 Agent 委托开仓）；.env.example 缺失 Monad 测试网合约地址与服务端凭据 | 🔴 P0 | ✅ | 见 §5.17（关闭于 `docs/changes/073` 与 `docs/changes/074`）。`PositionManager.setSessionKeyRegistry(0xCb7f...)` 链上事务已确认；`.env.example` 全量补齐，新增 `tests/env-parity.test.ts`（4 tests pass）与 `wire-session-registry.ts --check` 门禁 |
+| **GAP-80** | **Perp 模块 RPC 瞬时风暴与超时阻断、Alpaca 周末空日线致 404 降级与 Render 探活**：Perp 模块单一 RPC 依赖且 125+ 并发读导致瞬时抖动页面归零；Alpaca 默认取当天自然日导致周末/休市 0 根 K 线报 404；Render 免费容器缺少稳定 10 分钟常驻探活 | 🔴 P0 | ✅ | 见 §5.18（关闭于 `docs/changes/075`）。升级 `monadRpcTransport` 启用 10s 超时+3次指数退避降级；PositionPanel 实施池资产与仓位解耦、倒序按需分页加载（默认前 10 条+按需加载更多）与各仓位容错隔离；PriceOracle 追加 7 天起始窗口与多标的分页累积循环；新增 10 分钟定时探活工作流与保活脚本 |
 
 
 > **⚠️ GAP-72 的取号注（2026-10-12，第三次合并 `fix/login-state-sync` ← `upstream/main` `22fa845`）**：
@@ -1858,6 +1861,23 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 **残余（未做，登记备查）**：
 - `SessionKeyRegistry.spendConsumer` 由所有者 `0xe0EF754161f38F9595780238FDfA11029b172d59` 掌管，如需启用 `openPositionFor` 模块级自动划扣，需由该 Owner 钱包执行授权。
 - 外部部署平台（Vercel / Render）需人工在面板填入对应配置以触发生产生效。
+
+### 5.18 RPC 弹性降级与周末行情鲁棒性及 Render 保活（2026-10-24，GAP-80）
+
+> **来源**：生产联调实测与用户反馈（Perp 报 `RPC Request failed.`、Market 报 `UPSTREAM DEGRADED` 与 `[RESOURCE_NOT_FOUND]`）。
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-79`**，`GAP-80` 在全部 ref 上**零命中**（实测），故取 **80**；
+> `docs/changes/075` 亦零命中（`docs/changes/` 并集最大 `074`）。
+> **完整记录见 `docs/changes/075`。**
+
+#### GAP-80 · RPC 弹性降级、周末行情鲁棒性与 Render 保活（[OK] 已关闭）
+
+| 事实 | 证据（实测） |
+| --- | --- |
+| RPC 无超时重试与降级 | `perpChain.ts` 单一绑定 `testnet-rpc.monad.xyz`；现迁移为复用 `monadRpcTransport()`（10s 超时、3 次指数退避重试、主备 fallback 并发降级） |
+| Perp 瞬时 125+ 并发查询风暴 | `PositionPanel.tsx` 页面加载时瞬间打出 125+ 次链上查询，一次抖动全盘归零；现实施池资产解耦即时显示、最新 10 笔活跃仓位倒序按需加载、单仓位容错隔离与按需加载更多 |
+| 美股休市致 Alpaca 0 日线 404 降级 | 周末未传 `start` 参数导致 Alpaca 返回空数据集；现追加 7 天时间窗口（`time.Now().UTC().AddDate(0, 0, -7)`），多标的单页扩至 100 条且支持最多 3 页累积，保证收盘行情无论周中周末权威稳定 |
+| 后端新增针对性回归判据 | `TestPriceOracleLookbackWindowAndPagination` 验证时间参数注入与跨页 token 拼接，毫秒级通过 |
+| Render 10 分钟保活 | 更新 `.github/workflows/keepalive.yml` 为稳定 `*/10 * * * *` 调度并覆盖 healthz 与 movers；新增独立保活脚本 `scripts/keepalive-render.sh`（实测返回双 200 OK） |
 
 ---
 

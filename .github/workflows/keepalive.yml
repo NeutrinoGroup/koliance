@@ -2,7 +2,7 @@ name: Render Background Keepalive
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -13,11 +13,16 @@ jobs:
       - name: Ping Render Backend Health Probe
         run: |
           BACKEND_URL="${{ secrets.BACKEND_API_URL || 'https://koliance-backend.onrender.com' }}"
-          echo "[INFO] Sending keepalive probe to ${BACKEND_URL}/healthz..."
+          echo "[INFO] Sending 10-minute keepalive probe to ${BACKEND_URL}/healthz..."
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${BACKEND_URL}/healthz" || echo "000")
-          echo "[INFO] Probe response status: ${HTTP_STATUS}"
+          echo "[INFO] Healthz probe response status: ${HTTP_STATUS}"
+          
+          echo "[INFO] Sending keepalive probe to ${BACKEND_URL}/api/v1/market/movers..."
+          MOVERS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${BACKEND_URL}/api/v1/market/movers" || echo "000")
+          echo "[INFO] Market movers probe response status: ${MOVERS_STATUS}"
+
           if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 400 ]; then
             echo "[OK] Render backend instance is warm and healthy."
           else
-            echo "[WARN] Render backend ping responded with status: ${HTTP_STATUS}"
+            echo "[WARN] Render backend healthz ping responded with status: ${HTTP_STATUS}"
           fi

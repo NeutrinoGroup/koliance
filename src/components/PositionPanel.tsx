@@ -102,6 +102,8 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
   const [walletUsdc, setWalletUsdc] = useState(0n);
   const [allowance, setAllowance] = useState(0n);
   const [rows, setRows] = useState<PositionRow[]>([]);
+  const [totalPositions, setTotalPositions] = useState(0);
+  const [scanLimit, setScanLimit] = useState(10);
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
     type: "success" | "error";
@@ -115,6 +117,9 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
 
   const accountRef = useRef(account);
   accountRef.current = account;
+
+  const scanLimitRef = useRef(scanLimit);
+  scanLimitRef.current = scanLimit;
 
   // ---- form-derived figures -------------------------------------------------
 
@@ -145,8 +150,13 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
   const refresh = useCallback(async () => {
     if (!PERP_IS_CONFIGURED) return;
     const who = accountRef.current;
+
+    // Step 1: Read pool solvency metrics.
+    // Decoupled from position scans so a dropped packet on historical rows
+    // never wipes pool assets or available liquidity to zero.
+    let count = 0;
     try {
-      const [assets, reserved, available, nextId, mark] = await Promise.all([
+      const [assets, reserved, available, nextId] = await Promise.all([
         CLIENT.readContract({
           address: PERP_ADDRESSES.vault,
           abi: VAULT_ABI,
@@ -167,19 +177,32 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
           abi: POSITION_MANAGER_ABI,
           functionName: "nextPositionId",
         }),
-        CLIENT.readContract({
-          address: PERP_ADDRESSES.oracle,
-          abi: DEMO_ORACLE_ABI,
-          functionName: "getPrice",
-          args: [ACTIVE_FEED],
-        }),
       ]);
 
       setPoolAssets(assets);
       setPoolReserved(reserved);
       setPoolAvailable(available);
+      count = Number(nextId);
+      setTotalPositions(count);
 
-      if (who) {
+      setFeedback((prev) =>
+        prev?.type === "error" &&
+        (prev.msg.includes("RPC") || prev.msg.includes("读取链上状态失败"))
+          ? null
+          : prev
+      );
+    } catch (poolErr: unknown) {
+      const e = poolErr as { shortMessage?: string; message?: string };
+      setFeedback({
+        type: "error",
+        msg: e?.shortMessage || e?.message || "读取链上状态失败",
+      });
+      return;
+    }
+
+    // Step 2: Read connected wallet USDC balance and allowance
+    if (who) {
+      try {
         const [bal, alw] = await Promise.all([
           CLIENT.readContract({
             address: PERP_ADDRESSES.usdc,
@@ -196,17 +219,24 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
         ]);
         setWalletUsdc(bal);
         setAllowance(alw);
+      } catch (walletErr) {
+        console.warn("[WARN] Failed to read wallet USDC balance/allowance:", walletErr);
       }
+    }
 
-      // Ids are contiguous from 1 and PositionManager assigns `++nextPositionId`,
-      // so nextPositionId is the LAST id issued and the scan is 1..nextPositionId.
-      const count = Number(nextId);
-      const candidateIds = Array.from(
-        { length: count > 0 ? count : 0 },
-        (_, i) => BigInt(i + 1)
-      );
+    // Step 3: Lazy scan positions latest-first to avoid 100+ concurrent requests storm
+    if (count <= 0) {
+      setRows([]);
+      return;
+    }
 
-      const openStates = await Promise.all(
+    try {
+      const limit = scanLimitRef.current;
+      const take = Math.min(count, limit);
+      // Scan newest position IDs downwards (e.g. 20 down to 11)
+      const candidateIds = Array.from({ length: take }, (_, i) => BigInt(count - i));
+
+      const openSettled = await Promise.allSettled(
         candidateIds.map((id) =>
           CLIENT.readContract({
             address: PERP_ADDRESSES.positionManager,
@@ -217,10 +247,17 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
         )
       );
 
-      const activeIds = candidateIds.filter((_, idx) => openStates[idx]);
+      const activeIds: bigint[] = [];
+      candidateIds.forEach((id, idx) => {
+        const res = openSettled[idx];
+        if (res.status === "fulfilled" && res.value) {
+          activeIds.push(id);
+        }
+      });
 
-      const found = await Promise.all(
-        activeIds.map(async (id) => {
+      // Fetch active position details with per-item fault tolerance
+      const detailPromises = activeIds.map(async (id): Promise<PositionRow | null> => {
+        try {
           const [pos, pnl, equity, funding, liquidatable] = await Promise.all([
             CLIENT.readContract({
               address: PERP_ADDRESSES.positionManager,
@@ -270,27 +307,22 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
             marginBps:
               pos.sizeUsd === 0n
                 ? 0n
-                : (equity > 0n ? equity : 0n) * BPS_DENOMINATOR / pos.sizeUsd,
+                : ((equity > 0n ? equity : 0n) * BPS_DENOMINATOR) / pos.sizeUsd,
             liqPrice: liquidationPrice(math),
             liqPriceWithFunding: liquidationPriceWithFunding(math, funding),
             liquidatable,
-          } as PositionRow;
-        })
-      );
-
-      setRows(found);
-      setFeedback((prev) =>
-        prev?.type === "error" &&
-        (prev.msg.includes("RPC") || prev.msg.includes("读取链上状态失败"))
-          ? null
-          : prev
-      );
-    } catch (err: unknown) {
-      const e = err as { shortMessage?: string; message?: string };
-      setFeedback({
-        type: "error",
-        msg: e?.shortMessage || e?.message || "读取链上状态失败",
+          };
+        } catch (itemErr) {
+          console.warn(`[WARN] Failed reading position #${id}:`, itemErr);
+          return null;
+        }
       });
+
+      const positionResults = await Promise.all(detailPromises);
+      const validRows = positionResults.filter((r): r is PositionRow => r !== null);
+      setRows(validRows);
+    } catch (scanErr) {
+      console.warn("[WARN] Position lazy scan error:", scanErr);
     }
   }, []);
 
@@ -698,6 +730,18 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
                 );
               })}
             </div>
+          )}
+
+          {totalPositions > scanLimit && (
+            <button
+              onClick={() => {
+                setScanLimit((prev) => prev + 10);
+                setTimeout(refresh, 50);
+              }}
+              className="mt-3 flex w-full items-center justify-center gap-1 rounded-md border border-white/10 bg-white/5 py-2 text-xs font-mono font-medium text-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-all hover:bg-white/10 hover:text-white active:scale-[0.98]"
+            >
+              加载更多历史仓位 (已加载 {Math.min(totalPositions, scanLimit)}/{totalPositions})
+            </button>
           )}
         </div>
       </div>
