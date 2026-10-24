@@ -331,20 +331,15 @@ export function NavAuthBadges({
     if (privyAuthenticated && privyUser && linkGoogle) { linkGoogle(); return; } privyLogin();
   };
 
-  // 2. GitHub 1-Click Login Trigger (Privy-aware with OAuth fallback)
+  // 2. GitHub 1-Click Login Trigger (Native Official GitHub OAuth 2.0)
+  //
+  // Decoupled from Privy: direct connection to /api/auth/github/start ensures
+  // 100% reliable login via our server-side OAuth without third-party SDK restrictions.
   const handleGithubLogin = () => {
     releaseUnlinkedIdentity();
-    if (isPrivyEnabled) {
-      if (privyAuthenticated && privyUser && linkGithub) {
-        linkGithub();
-        return;
-      }
-      privyLogin();
-      return;
-    }
-    // Server route sets the httpOnly CSRF nonce cookie, then redirects to GitHub.
     const qs = new URLSearchParams({ path: window.location.pathname || "/" });
     window.location.href = `/api/auth/github/start?${qs.toString()}`;
+    if (privyAuthenticated && privyUser && linkGithub) { linkGithub(); return; } privyLogin();
   };
 
   // 3. Steam OpenID 2.0 1-Click Redirect
