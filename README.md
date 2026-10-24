@@ -233,6 +233,15 @@ All smart contracts are compiled with Solidity `0.8.31` targeting the `Osaka` EV
 | `github.com/ethereum/go-ethereum` | `v1.16.9` | Cryptographic Keccak256 hashing, secp256k1 signature verification & EVM state encoding |
 | `github.com/joho/godotenv` | `v1.5.1` | Zero-plaintext runtime environment configuration management |
 
+### 4. Rust High-Performance Solver & Parity Engine (`crates/koliance-solver/Cargo.toml`)
+| Dependency | Version | Architectural Responsibility |
+| :--- | :--- | :--- |
+| `Rust Toolchain` | `1.95.0` | High-throughput systems runtime targeting 10M+ ops/sec |
+| `ethnum` | `1.5.3` | Native 256-bit unsigned and signed arithmetic (`U256`, `I256`) with zero truncation drift |
+| `tiny-keccak` | `2.0.2` | Native Keccak-256 implementation for EIP-712 domain separators & struct hashes |
+| `clap` | `4.6.7` | High-performance CLI harness for golden vector verification and benchmarks |
+| `serde` / `serde_json` | `1.0` | Zero-copy vector parsing matching Hardhat and Vitest golden fixtures |
+
 ---
 
 ## Developer & Autonomous Agent Standards
@@ -258,6 +267,10 @@ All human contributors and autonomous AI agents must follow the operational guid
    cd ../backend
    go vet ./...
    go test -race ./...
+
+   # Gate 4: Rust Settlement & Parity Engine
+   cd ..
+   cargo test
    ```
 4. **Security & Cryptographic Boundaries**:
    - Zero committed plaintext secrets or API keys.

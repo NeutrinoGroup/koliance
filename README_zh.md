@@ -230,6 +230,15 @@ flowchart TB
 | `github.com/ethereum/go-ethereum` | `v1.16.9` | 密码学 Keccak256 哈希计算、secp256k1 验签与 EVM 状态编码 |
 | `github.com/joho/godotenv` | `v1.5.1` | 零明文硬编码的运行时动态环境变量载入工具 |
 
+### 4. Rust 极速清算求解器与 EIP-712 验签引擎 (`crates/koliance-solver/Cargo.toml`)
+| 依赖组件 | 版本 | 架构设计职责 |
+| :--- | :--- | :--- |
+| `Rust Toolchain` | `1.95.0` | 极致性能的系统级运行时，实测清算判题吞吐量突破 1000 万次/秒 |
+| `ethnum` | `1.5.3` | 原生 256 位无符号与有符号大数运算 (`U256`, `I256`)，杜绝任何精度截断漂移 |
+| `tiny-keccak` | `2.0.2` | 原生 Keccak-256 算法实现，用于 EIP-712 Domain 与 AgentDelegation 结构哈希 |
+| `clap` | `4.6.7` | 高性能 CLI 命令行工具，提供 60 黄金向量自动回放与微基准性能评测 |
+| `serde` / `serde_json` | `1.0` | 零拷贝 JSON 向量解析，与 Hardhat 和 Vitest 测试固件 100% 对齐 |
+
 ---
 
 ## 开发者与 Agent 协作准则 (3% 迭代原则)
@@ -238,7 +247,7 @@ flowchart TB
 
 1. **高频提交与 3% 渐进式优化**：每次 Commit 仅完成目标能力的约 3% 递增优化，杜绝单次提交海量未验证改动。
 2. **全项目零 Emoji 规范**：严禁在代码、日志、注释与提交信息中引入任何 Unicode Emoji 表情符号，采用结构化文本指示器：`[INFO]`, `[OK]`, `[WARN]`, `[ERROR]`, `[SUCCESS]`。
-3. **本地 CI 强制三阶门禁**：
+3. **本地 CI 强制四阶门禁**：
    ```bash
    # Gate 1: 前端与全量 TypeScript 套件
    pnpm type:lint
@@ -255,6 +264,10 @@ flowchart TB
    cd ../backend
    go vet ./...
    go test -race ./...
+
+   # Gate 4: Rust 结算与清算求解引擎
+   cd ..
+   cargo test
    ```
 4. **安全与密码学红线**：
    - 严禁提交任何明文凭据或私钥，所有配置统一经由环境变量安全载入。
