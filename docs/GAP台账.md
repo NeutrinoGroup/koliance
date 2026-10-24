@@ -7,7 +7,9 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：**2026-10-24** · 新开并关闭 **GAP-86**（§5.24，`docs/changes/086`）
+> **最后更新**：**2026-10-24** · 新开并关闭 **GAP-87**（§5.25，`docs/changes/087`）
+> —— 落地多平台内容矩阵自动化发布与智能体代发技能（`.agents/skills/koliance-multi-publisher/`）。深度调研并结构化回答六大核心维度（资产供应、核心用途、本质问题、必要性论证、关键差异化、实操接入）；定制产出 Reddit、知乎、Dev.to、微信公众号、小红书 5 篇平台定制长文；实现 Active Chrome 会话桥接（AppleScript）与 Headless 无头模式（Playwright），支持并发发布（`--parallel` 3秒全网分发）与 DOM 级智能认证探测；补齐 `tests/multi-publisher.test.ts` 单元测试与零 Emoji 守卫。四道 CI 门禁全绿（前端 403 pass / 合约 209 pass LF 88.92% / 后端 -race 23 pkg 全绿 / Rust 5 pass）。
+> **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-86**（§5.24，`docs/changes/086`）
 > —— Render Keepalive 定时保活时段精细化治理与 Rust 高性能清算求解器落地。保活时段由 24 小时改为北京时间 10:00-21:59（UTC 02:00-13:59），全月消耗 ~372 小时，彻底规避月中 750 小时额度耗尽风险；新增系统级 Rust 求解器 `crates/koliance-solver`，基于大阪/Monad 规范实现零截断漂移的清算判题（1046 万次/秒吞吐，95.63 ns 延迟）与 EIP-712 Session Key 鉴权，100% 对齐 60 个黄金向量与 24 个资金费向量。四道 CI 门禁全绿（前端 395 pass / 合约 209 pass LF 88.92% / 后端 -race 23 pkg 全绿 / Rust 5 pass）。
 > **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-85**（§5.23，`docs/changes/084`）
 > —— 云端 GitHub Issue 治理、架构宣称真实性对齐与防伪熔断闭环。结单关闭 #15（黑客松截止过期）、#16（市场行情与模拟盘已闭环落地）；解决 #71（dailyLimitUSD 24小时滚动窗口落地与 SpentTodayUSD 重置）、#70（消除伪 Keccak 注释，全面切换 EVM 原生 Keccak256 证明）、#58（Steam 验证生产环境严格禁用 demo 模式）、#69（合约别名 freezeSessionKey/revokeSessionKey 与后端 freeze/revoke 路由及前端熔断闭环）、#74 & #75（README 真实对齐清算 parity 判据、Perp 全栈引擎、28+ API 路由并剔除 Cloudflare/Foundry/Python 等幻影组件）。三道 CI 门禁全绿（前端 389 pass / 合约 209 pass LF 88.92% / 后端 -race 23 pkg 全绿）。
@@ -1996,7 +1998,20 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 | --- | --- |
 | Keepalive 24小时常驻导致月中耗尽 Render 750h 免费额度 | `.github/workflows/keepalive.yml` Cron 调整为 `'*/10 2-13 * * *'`（UTC 02:00-13:59 / 北京时间 10:00-21:59），每日保活 ~12h，全月消耗 ~372h（占比 49.6%），留存超 50% 安全缓冲；`scripts/keepalive-render.sh` 新增 `is_within_active_window` 判定与 `--force` 绕过选项 |
 | Monad 高吞吐公链缺乏纳秒级清算判题与零 GC 求解引擎 | 根目录引入 Rust Workspace 与 `crates/koliance-solver` 模块；采用 `ethnum` 256 位原生大数（`U256`, `I256`）与原生 Keccak-256 哈希，杜绝任何浮点漂移或整数截断失真；实测清算计算吞吐量达 10.46 Million ops/sec（延迟 95.63 ns）；100% 比特级对齐 60 个黄金清算向量与 24 个资金费清算向量；集成 EIP-712 Domain Separator 与 AgentDelegation 验签与限额熔断 |
-| CI 门禁缺少 Rust 系统级套件自动化防护 | `.github/workflows/ci.yml` 新增 `solver (rust)` 作业自动执行 `cargo check` 与 `cargo test`；`AGENTS.md`、`README.md` 与 `README_zh.md` 对齐升级为四阶门禁标准 |
+### 5.25 多平台内容矩阵自动化发布与智能体代发技能（2026-10-24，GAP-87）
+
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-86`**，`GAP-87` 在全部 ref 上**零命中**（实测），故取 **87**；
+> 本次变更记录为 `docs/changes/087-koliance-multi-platform-publisher-skill.md`。
+
+#### GAP-87 · 多平台内容矩阵自动化发布与智能体代发技能（[OK] 已关闭）
+
+| 缺陷/事项 | 治理与修复实现 |
+| --- | --- |
+| 缺乏面向主流平台的标准化智能体代发工具与内容分发自动化 | 落地 `.agents/skills/koliance-multi-publisher/`，封装为 Antigravity 标准复用技能（包含 `SKILL.md`、CLI `publish.js`、平台适配层与技术白皮书） |
+| 各平台（Reddit, 知乎, Dev.to, 公众号, 小红书）受众偏好与格式各异 | 针对 5 大平台差异化定制长文并严格回答 6 大核心维度（资产供应、核心用途、本质问题、必要性论证、关键差异化、实操接入），确保零 Emoji 规范 |
+| 现代 Web 平台普遍具备复杂的富文本编辑器（ProseMirror, Draft.js, Tiptap, Shadow DOM, Lexical） | 深度适配微信公众号（ProseMirror HTML 注入与草稿保存）、知乎专栏（Draft.js 注入与自动存盘）、小红书（Tiptap 自动创建长文与草稿入库）、Dev.to（Markdown Frontmatter 注入与草稿保存）、Reddit（Shadow DOM Title 与 Lexical Composer 内容填装） |
+| 单步串行发布耗时较长（30s+）且缺乏并发处理与智能认证检测 | 主运行器新增 `--parallel` 并行执行（全网 5 平台 3 秒级极速分发完成）；Headless 无头模式增加 DOM 级智能认证探测（`AUTH_REQUIRED`），消除未知超时异常 |
+| 缺乏自动化用例防范内容回归与 Emoji 污染 | 新增 `tests/multi-publisher.test.ts`（8 个用例全部通过），自动化检验文章完整性、6 维度覆盖率与全文件零 Emoji 合规 |
 
 ---
 

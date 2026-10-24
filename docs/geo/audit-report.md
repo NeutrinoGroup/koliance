@@ -1,6 +1,6 @@
 # Koliance Protocol — GEO / AI Search Grounding Audit Report
 
-Audit Timestamp: 2026-10-24T13:45:19.851Z
+Audit Timestamp: 2026-10-24T14:27:39.048Z
 Scope: AI Search Grounding Ingestion Parity (Google Gemini, OpenAI ChatGPT, Anthropic Claude, Perplexity)
 
 ## 1. Grounding Files & Specifications Verification
