@@ -7,7 +7,9 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：**2026-10-24** · 新开并关闭 **GAP-84**（§5.22，`docs/changes/081`）
+> **最后更新**：**2026-10-24** · 新开并关闭 **GAP-85**（§5.23，`docs/changes/084`）
+> —— 云端 GitHub Issue 治理、架构宣称真实性对齐与防伪熔断闭环。结单关闭 #15（黑客松截止过期）、#16（市场行情与模拟盘已闭环落地）；解决 #71（dailyLimitUSD 24小时滚动窗口落地与 SpentTodayUSD 重置）、#70（消除伪 Keccak 注释，全面切换 EVM 原生 Keccak256 证明）、#58（Steam 验证生产环境严格禁用 demo 模式）、#69（合约别名 freezeSessionKey/revokeSessionKey 与后端 freeze/revoke 路由及前端熔断闭环）、#74 & #75（README 真实对齐清算 parity 判据、Perp 全栈引擎、28+ API 路由并剔除 Cloudflare/Foundry/Python 等幻影组件）。三道 CI 门禁全绿（前端 389 pass / 合约 209 pass LF 88.92% / 后端 -race 23 pkg 全绿）。
+> **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-84**（§5.22，`docs/changes/081`）
 > —— 落地生成式引擎优化（GEO，针对 ChatGPT Search、Perplexity、Claude、Gemini 等）与全球边缘加速。输出标准 `llms.txt` 与单文件大模型全景白皮书 `llms-full.txt`；`robots.ts` 接入 16 个主流大模型与 AI 爬虫白名单；Schema.org 扩展 DefinedTermSet、Dataset 与 7 项权威 FAQPage；配置 Anycast Edge 缓存与全球 CORS 跨域。三道 CI/CD 门禁全绿（前端 382 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
 > **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-83**（§5.21，`docs/changes/079`）
 > —— 落地 Web2.5 极简好友通讯录与点对点链上凭证私信，上线 KOL 双轨制金库行为激励池与视听数触多巴胺奖励动效（首次绑钱包+100、首开API Key+50、消费10%返现）。三道 CI/CD 门禁全绿（前端 362 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
@@ -292,6 +294,7 @@
 | **GAP-81** | **官网公开定价路由、专属在线文档站、法务合规三件套与物理 LICENSE 缺失**：全站缺独立公开 /pricing、/docs 外链公链无专属文档中心、缺服务条款/隐私政策/退款安全页、根目录缺物理 LICENSE 文件（导致外部审计初评分仅 58/100） | [P1] | [OK] | 见 §5.19（关闭于 `docs/changes/077`）。新增 /pricing、/docs、/terms、/privacy、/refund 独立页面；统一全局 GlobalFooter 组件；补全物理 LICENSE (MIT) 与 package.json 声明；sitemap 与 llms.txt 机器可读索引全量同步；新增 tests/public-audit-routes.test.ts 9 项守卫断言全部通过 |
 | **GAP-83** | **Web2.5 常用联系人通讯录与双轨 KOL 行为激励闭环及原生多巴胺动效体系**：转账手动输入 42 位 0x 地址繁琐；链上硬顶不可增发约束下缺乏防超发/防女巫闭环与点对点红包转赠扣账；缺失外链图片缩略微览与原生视听数触激励仪式感（AGENTS.md 第 7/8 条） | [P0] | [OK] | 见 §5.21（关闭于 `docs/changes/079`）。新增 friends / direct_messages / user_rewards 表与 API；实现首绑钱包+100、首开卡+150、首Key+50、消费10%返现与Stripe充值折算；落地点对点红包转赠扣减对账与防女巫限额；封装原生 Web Audio + Confetti + 滚动计数 RewardCelebrationModal；TransferModal 集成联系人抽屉/一键锁定与即时私信图文/外链微缩预览 |
 | **GAP-84** | **生成式引擎优化（GEO）与全球边缘网络缓存加速体系建设**：各大模型（Perplexity、ChatGPT Search、Claude、Gemini）在回答 Web3 与 Agent 相关问题时缺乏单文件完整技术上下文；缺乏 DefinedTermSet/Dataset 深度实体图谱；缺少 Anycast 边缘缓存与 16 种 AI 爬虫准入 | [P1] | [OK] | 见 §5.22（关闭于 `docs/changes/083`）。新增 Answer.AI 规范的标准 `llms.txt` 与单文件大模型全景白皮书 `llms-full.txt`；扩展 `robots.ts` 放行 16 大主流 AI 检索爬虫；`layout.tsx` 注入 DefinedTermSet（定义 Agent Card / Monad 10,000 TPS / EIP-712 / KOL）、Dataset 与 7 项权威 FAQPage；配置 Anycast 边缘缓存（s-maxage 86400）与跨域 CORS；新增 `tests/geo-optimization.test.ts` 6 项自动化测试毫秒级全绿 |
+| **GAP-85** | **云端 GitHub Issue 治理、架构宣称真实性对齐与防伪熔断闭环**：结单关闭 #15（黑客松终点过期）、#16（市场模拟盘与 Alpaca 真实数据闭环）；解决 #71（dailyLimitUSD 24小时滚动窗口落地与 SpentTodayUSD 重置）；解决 #70（消除伪 Keccak 注释，全面切换 EVM 原生 Keccak256 证明）；解决 #58（Steam 验证生产环境严格禁用 demo 模式）；解决 #69（合约别名 freezeSessionKey/revokeSessionKey 与后端 freeze/revoke 路由及前端熔断闭环）；解决 #74 & #75（README 真实对齐清算 parity 判据、Perp 全栈引擎、28+ API 路由并剔除 Cloudflare/Foundry/Python 等幻影组件） | [P0] | [OK] | 见 §5.23（关闭于 `docs/changes/084`）。Go 侧 `PermissionGuard` 实现 24 小时动态滚动窗口与单笔/每日硬顶；`crypto.Keccak256Hash` 统一证明算法；Steam 验证路由对非生产/ALLOW_STEAM_DEMO 施加 403 门禁；`SessionKeyRegistry.sol` 补齐别名函数并通过 Hardhat 209 用例与 88.92% 覆盖率；`router.go` 挂载 freeze/revoke 端点并通过 AST 路由反向审计；README 与中英文档全景修复。三道 CI 门禁全绿 |
 
 
 
@@ -1961,6 +1964,24 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 | 全球 Anycast 边缘缓存与跨域 CORS | `next.config.ts` 为 `/(llms.txt|llms-full.txt|sitemap.xml|robots.txt)` 注入 `Cache-Control: public, s-maxage=86400, stale-while-revalidate=86400` 与 `Access-Control-Allow-Origin: *`，极大降低全球不同区域大模型抓取延迟 |
 | GitHub 根目录 README 定价表与会话熔断加固 | 在双语根目录 `README.md` 与 `README_zh.md` 首屏直接嵌入《开发者 API 定价与免费额度》明细表，使 Bing/Googlebot 爬取 GitHub 首页时直接收录定价数据；后端与合约层对齐 24 小时滚动重置与熔断冻结控制（见 `docs/changes/084`） |
 | 自动化守卫用例 | 新增 `tests/geo-optimization.test.ts`（6 项断言覆盖 Answer.AI 规范、llms-full.txt 关键字段、robots.ts 爬虫白名单、layout 关联标记与 edge 缓存头配置），毫秒级全部通过 |
+
+---
+
+### 5.23 云端 GitHub Issue 治理与架构一致性对齐（2026-10-24，GAP-85）
+
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-84`**，`GAP-85` 在全部 ref 上**零命中**（实测），故取 **85**；
+> 本次变更记录为 `docs/changes/084-云端issue治理与架构一致性对齐.md`。
+
+#### GAP-85 · 云端 GitHub Issue 治理与架构一致性对齐（[OK] 已关闭）
+
+| 缺陷/事项 | 治理与修复实现 |
+| --- | --- |
+| 历史已完成/过期 Issue 积压 | 结单关闭 #15（黑客松交付截止过期）与 #16（市场行情与模拟盘已闭环落地），评论均给出 PR #45 与 commit `aca3f34` 证据 |
+| Issue #71: `dailyLimitUSD` 24小时滚动窗口只增不减 | `backend/internal/agentcard/permission_guard.go` 新增 `WindowStart` 字段，调用时跨越 24 小时原子重置 `SpentTodayUSD = 0`，对齐合约 `SessionKeyRegistry.sol` 86400 秒逻辑；新增测试验证滚动重置、边界拒绝与并发安全 |
+| Issue #70: 伪 Keccak 注释与 SHA-256 降级 | 消除伪注释，全面升级 `backend/internal/developer/github.go`、`game/service.go`、`agentcard/service.go` 使用 EVM 原生 `crypto.Keccak256Hash`，实现链上链下 bytes32 密码学对齐 |
+| Issue #58: Steam 验证接口在生产环境可传 `demo: true` 绕过 Valve 签名 | `src/app/api/auth/steam/verify/route.ts` 施加非生产环境 / `ALLOW_STEAM_DEMO` 严格门禁，生产构建直接 403 阻断；前端对 synthetic 标记账号展示沙箱提示且不分配真实额度 |
+| Issue #69: 紧急熔断无合约别名/无后端路由/前端按钮本地态 | `SessionKeyRegistry.sol` 补齐 `freezeSessionKey` / `revokeSessionKey` 别名；`router.go` 挂载 `POST /api/v1/agentcard/freeze` 与 `/revoke` 并通过反向 AST 路由清单审计；前端按钮持久化并触发熔断，拦截后续模拟消费 |
+| Issue #74 & #75: README 漏报核心实现与宣称幻影组件 | `README.md` 与 `README_zh.md` 深度增补清算 parity 双向对拍与 Perp 全栈引擎章节；API 表从 14 条扩展为全部 28 条已挂载路由并标注 fail-closed 策略；彻底剔除 Cloudflare、Foundry、Python SDK 等幻影组件；纠正覆盖率与测试徽标 |
 
 ---
 
