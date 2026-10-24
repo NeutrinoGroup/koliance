@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   User,
   Edit3,
+  LogIn,
   Wallet,
   Send,
   Copy,
@@ -409,10 +410,10 @@ export function NavAuthBadges({
 
   return (
     <div className="relative">
-      {/* Top-Right Account Pill Button (Solid, 100% Opaque High-End Tech Dark) */}
+      {/* Top-Right Account Button (Solid, 100% Opaque High-End Tech Dark) */}
       <button
         onClick={() => setDropdownOpen(!dropdownOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-2xl bg-[#141824] hover:bg-[#1a2032] border border-white/20 hover:border-blue-400 text-xs font-mono text-white transition-all select-none shadow-lg active:scale-95 group"
+        className="flex items-center gap-2 px-3 py-1.5 sm:py-2 rounded-md bg-[#141824] hover:bg-[#1a2032] border border-white/20 hover:border-blue-400 text-xs font-mono text-white transition-all select-none shadow-lg active:scale-95 group"
       >
         {/* User Avatar Circle */}
         <div className="w-6 h-6 rounded-full overflow-hidden border border-blue-400 shadow-[0_0_8px_rgba(59,130,246,0.5)] relative bg-[#1c2438] flex items-center justify-center shrink-0">
@@ -471,10 +472,10 @@ export function NavAuthBadges({
               className="fixed inset-x-3 top-14 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-88 rounded-xl bg-[#101420] border border-white/25 p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.85)] z-50 text-white space-y-3 max-h-[85vh] overflow-y-auto"
             >
               {/* 1. User Header & Edit Profile Action */}
-              <div className="p-3 rounded-xl bg-[#172036] border border-blue-500/40 space-y-2.5 shadow-md">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-10 h-10 rounded-full overflow-hidden border border-blue-400 bg-[#1c2438] flex items-center justify-center shrink-0">
+              <div className="p-3 rounded-lg bg-[#172036] border border-blue-500/40 space-y-2.5 shadow-md">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-md overflow-hidden border border-blue-400 bg-[#1c2438] flex items-center justify-center shrink-0">
                       {identity?.picture ? (
                         <Image
                           src={identity.picture}
@@ -488,30 +489,40 @@ export function NavAuthBadges({
                         <User className="w-5 h-5 text-blue-300" />
                       )}
                     </div>
-                    <div className="overflow-hidden">
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span className="truncate max-w-[130px]">
+                        <span className="truncate">
                           {identity ? identity.name : t("auth.developer_default")}
                         </span>
                         {identity && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate max-w-[150px]">
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
                         {identity ? identity.email || t("auth.verified") : t("auth.google_unlinked")}
                       </div>
                     </div>
                   </div>
 
-                  {/* Edit Profile Button */}
-                  <button
-                    onClick={() => {
-                      setDropdownOpen(false);
-                      setEditModalOpen(true);
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95 cursor-pointer"
-                  >
-                    <Edit3 className="w-3 h-3 text-white" />
-                    <span>{t("auth.edit_profile")}</span>
-                  </button>
+                  {/* Edit Profile or Login Action Button */}
+                  {identity ? (
+                    <button
+                      onClick={() => {
+                        setDropdownOpen(false);
+                        setEditModalOpen(true);
+                      }}
+                      className="shrink-0 whitespace-nowrap px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95 cursor-pointer"
+                    >
+                      <Edit3 className="w-3 h-3 text-white" />
+                      <span>{t("auth.edit_profile")}</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleGoogleLogin}
+                      className="shrink-0 whitespace-nowrap px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95 cursor-pointer"
+                    >
+                      <LogIn className="w-3 h-3 text-white" />
+                      <span>{t("auth.to_login")}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Sign Out: the counterpart to the Sign In button, and the only
@@ -519,7 +530,7 @@ export function NavAuthBadges({
                 {identity && (
                   <button
                     onClick={handleSignOut}
-                    className="w-full py-1.5 rounded-lg bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full py-1.5 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1.5 cursor-pointer"
                   >
                     <LogOut className="w-3 h-3" />
                     <span>{t("auth.logout")}</span>
@@ -535,30 +546,38 @@ export function NavAuthBadges({
               </div>
 
               {/* 2. Web3 Wallet & Onchain Transfer Section */}
-              <div className="p-3 rounded-xl bg-[#151a28] border border-white/20 space-y-2.5 shadow-md">
-                <div className="flex items-center justify-between text-xs font-mono">
-                  <span className="text-white flex items-center gap-1.5 font-bold">
-                    <Wallet className="w-4 h-4 text-purple-400" />
+              <div className="p-3 rounded-lg bg-[#151a28] border border-white/20 space-y-2.5 shadow-md">
+                <div className="flex items-center justify-between text-xs font-mono gap-2">
+                  <span className="text-white flex items-center gap-1.5 font-bold shrink-0 whitespace-nowrap">
+                    <Wallet className="w-4 h-4 text-purple-400 shrink-0" />
                     <span>{t("auth.onchain_wallet")}</span>
                   </span>
                   <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    <span className="text-[10px] text-purple-300 font-bold bg-purple-950/60 border border-purple-500/50 px-2 py-0.5 rounded-full">
-                      {walletAddress ? `${kolBalance} KOL` : t("auth.wallet_unconnected")}
-                    </span>
-                    <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-500/50 px-2 py-0.5 rounded-full">
-                      {walletAddress ? `${balance} MON` : t("auth.wallet_unconnected")}
-                    </span>
+                    {walletAddress ? (
+                      <>
+                        <span className="text-[10px] text-purple-300 font-bold bg-purple-950/60 border border-purple-500/50 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
+                          {kolBalance} KOL
+                        </span>
+                        <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-500/50 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
+                          {balance} MON
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-medium bg-slate-800/80 border border-white/10 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
+                        {t("auth.wallet_unconnected")}
+                      </span>
+                    )}
                   </div>
                 </div>
 
                 {walletAddress ? (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between p-2 rounded-lg bg-[#0d1018] border border-white/15 text-xs font-mono">
+                    <div className="flex items-center justify-between p-2 rounded-md bg-[#0d1018] border border-white/15 text-xs font-mono">
                       <span className="text-slate-100 font-semibold">{truncateAddress(walletAddress)}</span>
                       <div className="flex items-center gap-1.5">
                         <button
                           onClick={() => copyToClipboard(walletAddress)}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition flex items-center gap-1 border border-white/10 cursor-pointer"
+                          className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition flex items-center gap-1 border border-white/10 cursor-pointer"
                           title={t("auth.copy_address")}
                         >
                           {copied ? (
@@ -572,7 +591,7 @@ export function NavAuthBadges({
                           href={`${monadTestnet.blockExplorers.default.url}/address/${walletAddress}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-[10px] p-1 rounded bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition border border-white/10"
+                          className="text-[10px] p-1 rounded-md bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition border border-white/10"
                           title={t("auth.view_explorer")}
                         >
                           <ExternalLink className="w-3 h-3" />
@@ -588,7 +607,7 @@ export function NavAuthBadges({
                           setDropdownOpen(false);
                           setTransferModalOpen(true);
                         }}
-                        className="py-1.5 px-2 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-purple-400/40 cursor-pointer"
+                        className="py-1.5 px-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-purple-400/40 cursor-pointer"
                       >
                         <Coins className="w-3 h-3 text-purple-200" />
                         <span>{t("auth.transfer_kol")}</span>
@@ -599,7 +618,7 @@ export function NavAuthBadges({
                           setDropdownOpen(false);
                           setTransferModalOpen(true);
                         }}
-                        className="py-1.5 px-2 rounded-lg bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-emerald-400/40 cursor-pointer"
+                        className="py-1.5 px-2 rounded-md bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-emerald-400/40 cursor-pointer"
                       >
                         <Send className="w-3 h-3 text-emerald-200" />
                         <span>{t("auth.transfer_mon")}</span>
@@ -609,7 +628,7 @@ export function NavAuthBadges({
                           setDropdownOpen(false);
                           onDisconnectWallet?.();
                         }}
-                        className="py-1.5 px-2 rounded-lg bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1 cursor-pointer"
+                        className="py-1.5 px-2 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1 cursor-pointer"
                       >
                         <LogOut className="w-3 h-3" />
                         <span>{t("auth.disconnect")}</span>
@@ -625,7 +644,7 @@ export function NavAuthBadges({
                     {walletRail === "link-to-existing" && (
                       <button
                         onClick={handleWalletRail}
-                        className="w-full py-1 px-2 rounded-lg bg-[#1a2134] hover:bg-[#25304a] text-slate-300 hover:text-white text-[10px] font-mono transition flex items-center justify-center gap-1 border border-white/10"
+                        className="w-full py-1 px-2 rounded-md bg-[#1a2134] hover:bg-[#25304a] text-slate-300 hover:text-white text-[10px] font-mono transition flex items-center justify-center gap-1 border border-white/10"
                       >
                         <Link2 className="w-3 h-3 text-purple-400" />
                         <span>{walletRailLabel(true, lang)}</span>
@@ -647,7 +666,7 @@ export function NavAuthBadges({
                     {walletRail === "start-session" && (
                       <button
                         onClick={handleWalletRail}
-                        className="w-full py-2 rounded-xl bg-white hover:bg-slate-100 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                        className="w-full py-2 rounded-md bg-white hover:bg-slate-100 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
                       >
                         <Wallet className="w-3.5 h-3.5 text-black" />
                         <span>{walletRailLabel(false, lang)}</span>
@@ -664,26 +683,26 @@ export function NavAuthBadges({
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                     <span>{lang === "en" ? "Multi-Rail Credential Attestation" : "多轨身份背书与授信"}</span>
                   </span>
-                  <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/60 px-1.5 py-0.2 rounded border border-emerald-500/30">
+                  <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-500/30">
                     {lang === "en" ? "Credit Boost" : "额度增强"}
                   </span>
                 </div>
 
                 {/* Google Row */}
-                <div className="p-2.5 rounded-xl bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <svg className="w-4 h-4" viewBox="0 0 24 24">
+                <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                       <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z" />
                       <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
                       <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.1c0 2.8.7 5.4 1.9 7.8l3.7-2.9z" />
                       <path fill="#34A853" d="M12 23.2c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16.2C3.7 20 7.5 23.2 12 23.2z" />
                     </svg>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span>{lang === "en" ? "Google Identity" : "Google 认证"}</span>
-                        {googleUser && <CheckCircle2 className="w-3 h-3 text-blue-400" />}
+                        <span className="truncate">{lang === "en" ? "Google Identity" : "Google 认证"}</span>
+                        {googleUser && <CheckCircle2 className="w-3 h-3 text-blue-400 shrink-0" />}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
                         {googleUser
                           ? googleUser.synthetic
                             ? "[SYNTHETIC] 0 USD"
@@ -695,22 +714,22 @@ export function NavAuthBadges({
                   {googleUser ? (
                     <button
                       onClick={() => handleUnlink("google")}
-                      className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
+                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                     >
                       {lang === "en" ? "Unlink" : "解除"}
                     </button>
                   ) : (
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-1 shrink-0">
                       <button
                         onClick={handleGoogleLogin}
-                        className="text-[10px] font-mono px-2.5 py-1 rounded bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-sm cursor-pointer"
+                        className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-sm cursor-pointer"
                       >
                         {t("auth.to_login")}
                       </button>
                       <button
                         onClick={handleInstantGoogleDemo}
                         title={t("auth.instant_demo")}
-                        className="p-1 rounded bg-[#222a42] hover:bg-[#2c3652] text-slate-200 border border-white/10 cursor-pointer"
+                        className="p-1 rounded-md bg-[#222a42] hover:bg-[#2c3652] text-slate-200 border border-white/10 cursor-pointer"
                       >
                         <Sparkles className="w-3 h-3 text-blue-300" />
                       </button>
@@ -719,15 +738,15 @@ export function NavAuthBadges({
                 </div>
 
                 {/* GitHub Row */}
-                <div className="p-2.5 rounded-xl bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <Github className="w-4 h-4 text-white" />
-                    <div>
+                <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Github className="w-4 h-4 text-white shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span>GitHub BUIDL</span>
-                        {githubUser && <CheckCircle2 className="w-3 h-3 text-indigo-400" />}
+                        <span className="truncate">GitHub BUIDL</span>
+                        {githubUser && <CheckCircle2 className="w-3 h-3 text-indigo-400 shrink-0" />}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
                         {githubUser ? `@${githubUser.username}` : "+$1,000 USD"}
                       </div>
                     </div>
@@ -735,14 +754,14 @@ export function NavAuthBadges({
                   {githubUser ? (
                     <button
                       onClick={() => handleUnlink("github")}
-                      className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
+                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                     >
                       {lang === "en" ? "Unlink" : "解除"}
                     </button>
                   ) : (
                     <button
                       onClick={handleGithubLogin}
-                      className="text-[10px] font-mono px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-sm cursor-pointer"
+                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-sm cursor-pointer"
                     >
                       {lang === "en" ? "Authorize" : "授权"}
                     </button>
@@ -750,15 +769,15 @@ export function NavAuthBadges({
                 </div>
 
                 {/* Steam Row */}
-                <div className="p-2.5 rounded-xl bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-2">
-                    <Gamepad2 className="w-4 h-4 text-cyan-400" />
-                    <div>
+                <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                    <div className="min-w-0 flex-1">
                       <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span>{lang === "en" ? "Steam Gameplay" : "Steam 游戏时长"}</span>
-                        {steamUser && <CheckCircle2 className="w-3 h-3 text-cyan-400" />}
+                        <span className="truncate">{lang === "en" ? "Steam Gameplay" : "Steam 游戏时长"}</span>
+                        {steamUser && <CheckCircle2 className="w-3 h-3 text-cyan-400 shrink-0" />}
                       </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate max-w-[130px]">
+                      <div className="text-[10px] font-mono text-slate-300 truncate">
                         {steamUser ? steamUser.personaName : "+$800 USD"}
                       </div>
                     </div>
@@ -766,14 +785,14 @@ export function NavAuthBadges({
                   {steamUser ? (
                     <button
                       onClick={() => handleUnlink("steam")}
-                      className="text-[10px] font-mono px-2 py-1 rounded bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
+                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
                     >
                       {lang === "en" ? "Unlink" : "解除"}
                     </button>
                   ) : (
                     <button
                       onClick={handleSteamLogin}
-                      className="text-[10px] font-mono px-2.5 py-1 rounded bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition shadow-sm cursor-pointer"
+                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition shadow-sm cursor-pointer"
                     >
                       {lang === "en" ? "Link Steam" : "绑定"}
                     </button>
