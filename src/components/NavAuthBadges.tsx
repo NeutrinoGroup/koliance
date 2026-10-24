@@ -1,6 +1,6 @@
 "use client";
 
-import { clearSessionTokens } from "@/lib/sessionClient";
+import { clearSessionTokens, setSessionToken } from "@/lib/sessionClient";
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -21,6 +21,11 @@ import {
   Link2,
   Coins,
   MessagesSquare,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  Loader2,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -173,6 +178,74 @@ export function NavAuthBadges({
     amount: number;
     actionType: string;
   }>({ isOpen: false, amount: 0, actionType: "WALLET_BIND" });
+
+  // Concise Email + Password Auth State
+  const [emailAuthMode, setEmailAuthMode] = useState<"login" | "register">("login");
+  const [emailInput, setEmailInput] = useState("");
+  const [passwordInput, setPasswordInput] = useState("");
+  const [nameInput, setNameInput] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [emailAuthLoading, setEmailAuthLoading] = useState(false);
+  const [emailAuthError, setEmailAuthError] = useState<string | null>(null);
+
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailAuthError(null);
+    const cleanEmail = emailInput.trim().toLowerCase();
+    if (!cleanEmail || !passwordInput) {
+      setEmailAuthError("请填写邮箱与密码");
+      return;
+    }
+    if (passwordInput.length < 6) {
+      setEmailAuthError("密码不得少于 6 位");
+      return;
+    }
+
+    setEmailAuthLoading(true);
+    try {
+      const res = await fetch("/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: emailAuthMode,
+          email: cleanEmail,
+          password: passwordInput,
+          name: nameInput.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.sessionToken) {
+          setSessionToken(data.sessionToken);
+        }
+        if (data.profile) {
+          writeAccountState("google", {
+            googleId: data.profile.id,
+            email: data.profile.email,
+            emailVerified: true,
+            name: data.profile.name,
+            picture: data.profile.picture,
+            bio: data.profile.bio,
+            walletAddress: data.profile.walletAddress || null,
+            trustTier: data.profile.trustTier,
+            creditAllowanceUSD: data.profile.creditAllowanceUSD || 600,
+          });
+        }
+        setEmailInput("");
+        setPasswordInput("");
+        setNameInput("");
+        setDropdownOpen(false);
+        window.dispatchEvent(new Event("koliance:login"));
+      } else {
+        setEmailAuthError(data.error || "认证失败，请重试");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setEmailAuthError(msg || "网络请求失败");
+    } finally {
+      setEmailAuthLoading(false);
+    }
+  };
 
   useEffect(() => {
     const handleRewardEvent = (e: Event) => {
@@ -461,7 +534,7 @@ export function NavAuthBadges({
             ) : identity ? (
               <span className="truncate max-w-[110px]">{identity.email || t("auth.verified")}</span>
             ) : (
-              <span>{t("auth.connect_wallet")}</span>
+              <span>{lang === "en" ? "Google / GitHub" : "Google / GitHub"}</span>
             )}
           </span>
         </div>
@@ -490,358 +563,472 @@ export function NavAuthBadges({
               transition={{ duration: 0.15 }}
               className="fixed inset-x-3 top-14 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:mt-2 sm:w-88 rounded-xl bg-[#101420] border border-white/25 p-3.5 shadow-[0_12px_40px_rgba(0,0,0,0.85)] z-50 text-white space-y-3 max-h-[85vh] overflow-y-auto"
             >
-              {/* 1. User Header & Edit Profile Action */}
-              <div className="p-3 rounded-lg bg-[#172036] border border-blue-500/40 space-y-2.5 shadow-md">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                    <div className="w-10 h-10 rounded-md overflow-hidden border border-blue-400 bg-[#1c2438] flex items-center justify-center shrink-0">
-                      {identity?.picture ? (
-                        <Image
-                          src={identity.picture}
-                          alt={identity.name || "User Avatar"}
-                          width={40}
-                          height={40}
-                          unoptimized
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <User className="w-5 h-5 text-blue-300" />
-                      )}
+              {!identity ? (
+                /* Concise, Clean Unauthenticated Login & Register View */
+                <div className="p-3.5 rounded-lg bg-[#141824] border border-white/20 space-y-3.5 shadow-xl">
+                  {/* Header */}
+                  <div className="flex items-center gap-2.5 border-b border-white/10 pb-3">
+                    <div className="w-9 h-9 rounded-md bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400 shrink-0">
+                      <LogIn className="w-4 h-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span className="truncate">
-                          {identity ? identity.name : t("auth.developer_default")}
-                        </span>
-                        {identity && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate">
-                        {identity ? identity.email || t("auth.verified") : t("auth.google_unlinked")}
-                      </div>
+                      <h3 className="text-xs font-bold text-white font-mono flex items-center gap-1.5">
+                        <span>登录 / 注册 Koliance</span>
+                        <Sparkles className="w-3 h-3 text-blue-400" />
+                      </h3>
+                      <p className="text-[10px] text-slate-300 font-sans truncate">
+                        支持 Google / GitHub 一键登录，登录后即可绑定钱包
+                      </p>
                     </div>
                   </div>
 
-                  {/* Edit Profile or Login Action Button */}
-                  {identity ? (
-                    <button
-                      onClick={() => {
-                        setDropdownOpen(false);
-                        setEditModalOpen(true);
-                      }}
-                      className="shrink-0 whitespace-nowrap px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95 cursor-pointer"
-                    >
-                      <Edit3 className="w-3 h-3 text-white" />
-                      <span>{t("auth.edit_profile")}</span>
-                    </button>
-                  ) : (
+                  {/* Primary 1-Click OAuth Logins */}
+                  <div className="space-y-2">
                     <button
                       onClick={handleGoogleLogin}
-                      className="shrink-0 whitespace-nowrap px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95 cursor-pointer"
+                      className="w-full py-2 px-3 rounded-md bg-[#1e2538] hover:bg-[#28324a] border border-blue-500/30 text-white text-xs font-mono font-medium transition flex items-center justify-center gap-2.5 shadow-sm active:scale-98 cursor-pointer"
                     >
-                      <LogIn className="w-3 h-3 text-white" />
-                      <span>{t("auth.to_login")}</span>
+                      <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                        <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z" />
+                        <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
+                        <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.1c0 2.8.7 5.4 1.9 7.8l3.7-2.9z" />
+                        <path fill="#34A853" d="M12 23.2c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16.2C3.7 20 7.5 23.2 12 23.2z" />
+                      </svg>
+                      <span>使用 Google 账号继续</span>
                     </button>
-                  )}
-                </div>
 
-                {/* Direct IM Chat Entry in Account Center (Always reachable in dropdown with calm Slack/Feishu dark styling) */}
-                <Link
-                  href="/im"
-                  onClick={() => setDropdownOpen(false)}
-                  className="w-full py-1.5 px-2.5 rounded-md bg-[#232529] hover:bg-[#2b2d31] border border-[#3e4147] text-zinc-200 hover:text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
-                >
-                  <MessagesSquare className="w-3.5 h-3.5 text-blue-400" />
-                  <span>实时IM消息与通讯录</span>
-                  <span className="text-[9px] px-1 py-0.2 rounded-sm bg-blue-600/20 text-blue-300 font-mono">
-                    [OPEN]
-                  </span>
-                </Link>
-
-                {/* Sign Out: the counterpart to the Sign In button, and the only
-                    control that clears every rail at once. */}
-                {identity && (
-                  <button
-                    onClick={handleSignOut}
-                    className="w-full py-1.5 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <LogOut className="w-3 h-3" />
-                    <span>{t("auth.logout")}</span>
-                  </button>
-                )}
-
-                {/* Bio summary if present */}
-                {googleUser?.bio && (
-                  <p className="text-[10px] text-slate-300 font-sans italic line-clamp-1 border-t border-white/10 pt-1.5">
-                    &ldquo;{googleUser.bio}&rdquo;
-                  </p>
-                )}
-              </div>
-
-              {/* 2. Web3 Wallet & Onchain Transfer Section */}
-              <div className="p-3 rounded-lg bg-[#151a28] border border-white/20 space-y-2.5 shadow-md">
-                <div className="flex items-center justify-between text-xs font-mono gap-2">
-                  <span className="text-white flex items-center gap-1.5 font-bold shrink-0 whitespace-nowrap">
-                    <Wallet className="w-4 h-4 text-purple-400 shrink-0" />
-                    <span>{t("auth.onchain_wallet")}</span>
-                  </span>
-                  <div className="flex items-center gap-1.5 flex-wrap justify-end">
-                    {walletAddress ? (
-                      <>
-                        <span className="text-[10px] text-purple-300 font-bold bg-purple-950/60 border border-purple-500/50 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
-                          {kolBalance} KOL
-                        </span>
-                        <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-500/50 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
-                          {balance} MON
-                        </span>
-                      </>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 font-medium bg-slate-800/80 border border-white/10 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
-                        {t("auth.wallet_unconnected")}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {walletAddress ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between p-2 rounded-md bg-[#0d1018] border border-white/15 text-xs font-mono">
-                      <span className="text-slate-100 font-semibold">{truncateAddress(walletAddress)}</span>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          onClick={() => copyToClipboard(walletAddress)}
-                          className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition flex items-center gap-1 border border-white/10 cursor-pointer"
-                          title={t("auth.copy_address")}
-                        >
-                          {copied ? (
-                            <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                          <span>{copied ? t("auth.copied") : t("auth.copy")}</span>
-                        </button>
-                        <a
-                          href={`${monadTestnet.blockExplorers.default.url}/address/${walletAddress}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] p-1 rounded-md bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition border border-white/10"
-                          title={t("auth.view_explorer")}
-                        >
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    </div>
-
-                    {/* Wallet Action Buttons: Transfer KOL, Transfer MON, Friends & IM, Disconnect */}
-                    <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                      <button
-                        onClick={() => {
-                          setTransferCurrency("KOL");
-                          setDropdownOpen(false);
-                          setTransferModalOpen(true);
-                        }}
-                        className="py-1.5 px-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-purple-400/40 cursor-pointer"
-                      >
-                        <Coins className="w-3 h-3 text-purple-200" />
-                        <span>{t("auth.transfer_kol")}</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          setTransferCurrency("MON");
-                          setDropdownOpen(false);
-                          setTransferModalOpen(true);
-                        }}
-                        className="py-1.5 px-2 rounded-md bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-emerald-400/40 cursor-pointer"
-                      >
-                        <Send className="w-3 h-3 text-emerald-200" />
-                        <span>{t("auth.transfer_mon")}</span>
-                      </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-1.5 pt-1">
-                      <Link
-                        href="/im"
-                        onClick={() => setDropdownOpen(false)}
-                        className="py-1.5 px-2 rounded-md bg-[#232529] hover:bg-[#2b2d31] border border-[#3e4147] text-zinc-200 hover:text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-sm active:scale-95 cursor-pointer"
-                      >
-                        <MessagesSquare className="w-3 h-3 text-blue-400" />
-                        <span>好友与IM消息</span>
-                      </Link>
-                      <button
-                        onClick={() => {
-                          setDropdownOpen(false);
-                          onDisconnectWallet?.();
-                        }}
-                        className="py-1.5 px-2 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1 cursor-pointer"
-                      >
-                        <LogOut className="w-3 h-3" />
-                        <span>{t("auth.disconnect")}</span>
-                      </button>
-                    </div>
-
-                    {/* Issue #30: a wallet click means "attach a wallet to the
-                        session I already have" only when there is a session.
-                        With none, `linkWallet` is documented "For users who are
-                        authenticated" and silently does nothing - so the entry
-                        point moves to the unconnected block below, which starts
-                        a session instead. */}
-                    {walletRail === "link-to-existing" && (
-                      <button
-                        onClick={handleWalletRail}
-                        className="w-full py-1 px-2 rounded-md bg-[#1a2134] hover:bg-[#25304a] text-slate-300 hover:text-white text-[10px] font-mono transition flex items-center justify-center gap-1 border border-white/10"
-                      >
-                        <Link2 className="w-3 h-3 text-purple-400" />
-                        <span>{walletRailLabel(true, lang)}</span>
-                      </button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-[11px] text-slate-300 font-sans">
-                      {lang === "en"
-                        ? "Connect your Monad wallet for on-chain transfers, asset staking, and credit endorsement. A wallet is enough to sign in - Google and GitHub are optional rails that raise your credit limit."
-                        : "连接 Monad 钱包即可进行链上转账、资产抵押与信用背书。仅凭钱包即可登录——Google / GitHub 是可选的身份增强轨，只影响授信额度。"}
-                    </p>
-                    {/* Issue #30: the pure-wallet user's only way in. This used
-                        to be wired to `onConnectWallet` (which on the home page
-                        is the same full `login()`), so the wallet rail named
-                        nothing and nobody without Google could get a session.
-                        `handleWalletRail` starts one, wallet methods first. */}
-                    {walletRail === "start-session" && (
-                      <button
-                        onClick={handleWalletRail}
-                        className="w-full py-2 rounded-md bg-white hover:bg-slate-100 text-black font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
-                      >
-                        <Wallet className="w-3.5 h-3.5 text-black" />
-                        <span>{walletRailLabel(false, lang)}</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* 3. Identity Credential Badges (Google, GitHub, Steam) */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-200 px-0.5">
-                  <span className="flex items-center gap-1 font-semibold">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{lang === "en" ? "Multi-Rail Credential Attestation" : "多轨身份背书与授信"}</span>
-                  </span>
-                  <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-500/30">
-                    {lang === "en" ? "Credit Boost" : "额度增强"}
-                  </span>
-                </div>
-
-                {/* Google Row */}
-                <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                      <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z" />
-                      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
-                      <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.1c0 2.8.7 5.4 1.9 7.8l3.7-2.9z" />
-                      <path fill="#34A853" d="M12 23.2c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16.2C3.7 20 7.5 23.2 12 23.2z" />
-                    </svg>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span className="truncate">{lang === "en" ? "Google Identity" : "Google 认证"}</span>
-                        {googleUser && <CheckCircle2 className="w-3 h-3 text-blue-400 shrink-0" />}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate">
-                        {googleUser
-                          ? googleUser.synthetic
-                            ? "[SYNTHETIC] 0 USD"
-                            : googleUser.email
-                          : "+$1,200 USD"}
-                      </div>
-                    </div>
-                  </div>
-                  {googleUser ? (
-                    <button
-                      onClick={() => handleUnlink("google")}
-                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
-                    >
-                      {lang === "en" ? "Unlink" : "解除"}
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={handleGoogleLogin}
-                        className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-sm cursor-pointer"
-                      >
-                        {t("auth.to_login")}
-                      </button>
-                      <button
-                        onClick={handleInstantGoogleDemo}
-                        title={t("auth.instant_demo")}
-                        className="p-1 rounded-md bg-[#222a42] hover:bg-[#2c3652] text-slate-200 border border-white/10 cursor-pointer"
-                      >
-                        <Sparkles className="w-3 h-3 text-blue-300" />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* GitHub Row */}
-                <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Github className="w-4 h-4 text-white shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span className="truncate">GitHub BUIDL</span>
-                        {githubUser && <CheckCircle2 className="w-3 h-3 text-indigo-400 shrink-0" />}
-                      </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate">
-                        {githubUser ? `@${githubUser.username}` : "+$1,000 USD"}
-                      </div>
-                    </div>
-                  </div>
-                  {githubUser ? (
-                    <button
-                      onClick={() => handleUnlink("github")}
-                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
-                    >
-                      {lang === "en" ? "Unlink" : "解除"}
-                    </button>
-                  ) : (
                     <button
                       onClick={handleGithubLogin}
-                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-sm cursor-pointer"
+                      className="w-full py-2 px-3 rounded-md bg-[#181a22] hover:bg-[#222530] border border-white/20 text-white text-xs font-mono font-medium transition flex items-center justify-center gap-2.5 shadow-sm active:scale-98 cursor-pointer"
                     >
-                      {lang === "en" ? "Authorize" : "授权"}
+                      <Github className="w-4 h-4 text-white shrink-0" />
+                      <span>使用 GitHub 账号继续</span>
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                {/* Steam Row */}
-                <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white flex items-center gap-1">
-                        <span className="truncate">{lang === "en" ? "Steam Gameplay" : "Steam 游戏时长"}</span>
-                        {steamUser && <CheckCircle2 className="w-3 h-3 text-cyan-400 shrink-0" />}
+                  {/* Divider */}
+                  <div className="relative flex items-center justify-center py-0.5">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-white/10" />
+                    </div>
+                    <span className="relative bg-[#141824] px-2 text-[10px] font-mono text-slate-400">
+                      或使用邮箱账号
+                    </span>
+                  </div>
+
+                  {/* Email + Password Form */}
+                  <form onSubmit={handleEmailAuthSubmit} className="space-y-2.5">
+                    {/* Mode Toggle (Login vs Register) */}
+                    <div className="grid grid-cols-2 p-0.5 rounded-md bg-[#0e111a] border border-white/10 text-[11px] font-mono">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmailAuthMode("login");
+                          setEmailAuthError(null);
+                        }}
+                        className={`py-1 rounded text-center transition font-medium cursor-pointer ${
+                          emailAuthMode === "login"
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        邮箱登录
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEmailAuthMode("register");
+                          setEmailAuthError(null);
+                        }}
+                        className={`py-1 rounded text-center transition font-medium cursor-pointer ${
+                          emailAuthMode === "register"
+                            ? "bg-blue-600 text-white shadow-sm"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                      >
+                        注册账号
+                      </button>
+                    </div>
+
+                    {emailAuthMode === "register" && (
+                      <div>
+                        <input
+                          type="text"
+                          value={nameInput}
+                          onChange={(e) => setNameInput(e.target.value)}
+                          placeholder="昵称 / 显示名称 (选填)"
+                          className="w-full px-2.5 py-1.5 rounded-md bg-[#0e111a] border border-white/15 text-xs text-white placeholder-slate-500 font-sans focus:outline-none focus:border-blue-400"
+                        />
                       </div>
-                      <div className="text-[10px] font-mono text-slate-300 truncate">
-                        {steamUser ? steamUser.personaName : "+$800 USD"}
+                    )}
+
+                    <div>
+                      <input
+                        type="email"
+                        required
+                        value={emailInput}
+                        onChange={(e) => setEmailInput(e.target.value)}
+                        placeholder="邮箱地址 (如 user@example.com)"
+                        className="w-full px-2.5 py-1.5 rounded-md bg-[#0e111a] border border-white/15 text-xs text-white placeholder-slate-500 font-sans focus:outline-none focus:border-blue-400"
+                      />
+                    </div>
+
+                    <div className="relative">
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required
+                        minLength={6}
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        placeholder="登录密码 (至少 6 位)"
+                        className="w-full px-2.5 py-1.5 pr-8 rounded-md bg-[#0e111a] border border-white/15 text-xs text-white placeholder-slate-500 font-sans focus:outline-none focus:border-blue-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                      >
+                        {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+
+                    {emailAuthError && (
+                      <div className="p-2 rounded-md bg-red-950/60 border border-red-500/40 text-[10px] text-red-300 font-mono">
+                        {emailAuthError}
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={emailAuthLoading}
+                      className="w-full py-2 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-mono font-semibold text-xs transition flex items-center justify-center gap-1.5 shadow-md active:scale-98 cursor-pointer"
+                    >
+                      {emailAuthLoading ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <LogIn className="w-3.5 h-3.5" />
+                      )}
+                      <span>{emailAuthMode === "register" ? "立即注册并登录" : "邮箱一键登录"}</span>
+                    </button>
+                  </form>
+
+                  {/* Bottom Instant Demo Shortcut for Dev Testing */}
+                  <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] font-mono text-slate-400">
+                    <span>开发测试沙箱:</span>
+                    <button
+                      type="button"
+                      onClick={handleInstantGoogleDemo}
+                      className="text-blue-400 hover:text-blue-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      <span>免密体验 Demo</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Authenticated User Center (Shows Profile + Wallet Binding + IM + Credentials) */
+                <>
+                  {/* 1. User Header & Edit Profile Action */}
+                  <div className="p-3 rounded-lg bg-[#172036] border border-blue-500/40 space-y-2.5 shadow-md">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-md overflow-hidden border border-blue-400 bg-[#1c2438] flex items-center justify-center shrink-0">
+                          {identity?.picture ? (
+                            <Image
+                              src={identity.picture}
+                              alt={identity.name || "User Avatar"}
+                              width={40}
+                              height={40}
+                              unoptimized
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <User className="w-5 h-5 text-blue-300" />
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white flex items-center gap-1">
+                            <span className="truncate">
+                              {identity ? identity.name : t("auth.developer_default")}
+                            </span>
+                            {identity && <CheckCircle2 className="w-3.5 h-3.5 text-blue-400 shrink-0" />}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-300 truncate">
+                            {identity ? identity.email || t("auth.verified") : t("auth.google_unlinked")}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Edit Profile Action Button */}
+                      <button
+                        onClick={() => {
+                          setDropdownOpen(false);
+                          setEditModalOpen(true);
+                        }}
+                        className="shrink-0 whitespace-nowrap px-2.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 border border-blue-400/50 text-[11px] font-mono text-white flex items-center gap-1 font-semibold transition shadow-md active:scale-95 cursor-pointer"
+                      >
+                        <Edit3 className="w-3 h-3 text-white" />
+                        <span>{t("auth.edit_profile")}</span>
+                      </button>
+                    </div>
+
+                    {/* Direct IM Chat Entry in Account Center */}
+                    <Link
+                      href="/im"
+                      onClick={() => setDropdownOpen(false)}
+                      className="w-full py-1.5 px-2.5 rounded-md bg-[#232529] hover:bg-[#2b2d31] border border-[#3e4147] text-zinc-200 hover:text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
+                    >
+                      <MessagesSquare className="w-3.5 h-3.5 text-blue-400" />
+                      <span>好友与IM消息</span>
+                      <span className="text-[9px] px-1 py-0.2 rounded-sm bg-blue-600/20 text-blue-300 font-mono">
+                        [OPEN]
+                      </span>
+                    </Link>
+
+                    {/* Sign Out Action Button */}
+                    <button
+                      onClick={handleSignOut}
+                      className="w-full py-1.5 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <LogOut className="w-3 h-3" />
+                      <span>{t("auth.logout")}</span>
+                    </button>
+
+                    {/* Bio summary if present */}
+                    {googleUser?.bio && (
+                      <p className="text-[10px] text-slate-300 font-sans italic line-clamp-1 border-t border-white/10 pt-1.5">
+                        &ldquo;{googleUser.bio}&rdquo;
+                      </p>
+                    )}
+                  </div>
+
+                  {/* 2. Web3 Wallet & Onchain Transfer Section (Only bound/accessible after login!) */}
+                  <div className="p-3 rounded-lg bg-[#151a28] border border-white/20 space-y-2.5 shadow-md">
+                    <div className="flex items-center justify-between text-xs font-mono gap-2">
+                      <span className="text-white flex items-center gap-1.5 font-bold shrink-0 whitespace-nowrap">
+                        <Wallet className="w-4 h-4 text-purple-400 shrink-0" />
+                        <span>{t("auth.onchain_wallet")}</span>
+                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                        {walletAddress ? (
+                          <>
+                            <span className="text-[10px] text-purple-300 font-bold bg-purple-950/60 border border-purple-500/50 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
+                              {kolBalance} KOL
+                            </span>
+                            <span className="text-[10px] text-emerald-300 font-bold bg-emerald-950/60 border border-emerald-500/50 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
+                              {balance} MON
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-medium bg-slate-800/80 border border-white/10 px-2 py-0.5 rounded-md font-mono whitespace-nowrap">
+                            {t("auth.wallet_unconnected")}
+                          </span>
+                        )}
                       </div>
                     </div>
+
+                    {walletAddress ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between p-2 rounded-md bg-[#0d1018] border border-white/15 text-xs font-mono">
+                          <span className="text-slate-100 font-semibold">{truncateAddress(walletAddress)}</span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => copyToClipboard(walletAddress)}
+                              className="text-[10px] px-1.5 py-0.5 rounded-md bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition flex items-center gap-1 border border-white/10 cursor-pointer"
+                              title={t("auth.copy_address")}
+                            >
+                              {copied ? (
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                              <span>{copied ? t("auth.copied") : t("auth.copy")}</span>
+                            </button>
+                            <a
+                              href={`${monadTestnet.blockExplorers.default.url}/address/${walletAddress}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-[10px] p-1 rounded-md bg-[#20273c] hover:bg-[#2c3652] text-slate-200 hover:text-white transition border border-white/10"
+                              title={t("auth.view_explorer")}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
+                        </div>
+
+                        {/* Wallet Action Buttons: Transfer KOL, Transfer MON, Disconnect */}
+                        <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+                          <button
+                            onClick={() => {
+                              setTransferCurrency("KOL");
+                              setDropdownOpen(false);
+                              setTransferModalOpen(true);
+                            }}
+                            className="py-1.5 px-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-purple-400/40 cursor-pointer"
+                          >
+                            <Coins className="w-3 h-3 text-purple-200" />
+                            <span>{t("auth.transfer_kol")}</span>
+                          </button>
+                          <button
+                            onClick={() => {
+                              setTransferCurrency("MON");
+                              setDropdownOpen(false);
+                              setTransferModalOpen(true);
+                            }}
+                            className="py-1.5 px-2 rounded-md bg-emerald-700/80 hover:bg-emerald-600 text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 border border-emerald-400/40 cursor-pointer"
+                          >
+                            <Send className="w-3 h-3 text-emerald-200" />
+                            <span>{t("auth.transfer_mon")}</span>
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            setDropdownOpen(false);
+                            onDisconnectWallet?.();
+                          }}
+                          className="w-full py-1.5 px-2 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] border border-red-500/40 text-red-300 text-[11px] font-mono transition flex items-center justify-center gap-1 cursor-pointer"
+                        >
+                          <LogOut className="w-3 h-3" />
+                          <span>{t("auth.disconnect")}</span>
+                        </button>
+                      </div>
+                    ) : walletRail === "link-to-existing" ? (
+                      <div className="space-y-2">
+                        <p className="text-[11px] text-slate-300 font-sans">
+                          {lang === "en"
+                            ? "Bind your Monad wallet for on-chain transfers, asset staking, and credit endorsement."
+                            : "绑定 Monad 链上钱包以启用资产充提、KOL 代币结算与信用背书。"}
+                        </p>
+                        <button
+                          onClick={handleWalletRail}
+                          className="w-full py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs font-mono transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer border border-purple-400/50"
+                        >
+                          <Wallet className="w-3.5 h-3.5 text-white" />
+                          <span>{lang === "en" ? "Bind Monad Wallet" : "绑定 Monad 钱包"}</span>
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                  {steamUser ? (
-                    <button
-                      onClick={() => handleUnlink("steam")}
-                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
-                    >
-                      {lang === "en" ? "Unlink" : "解除"}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={handleSteamLogin}
-                      className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition shadow-sm cursor-pointer"
-                    >
-                      {lang === "en" ? "Link Steam" : "绑定"}
-                    </button>
-                  )}
-                </div>
-              </div>
+
+                  {/* 3. Identity Credential Badges (Google, GitHub, Steam) */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[11px] font-mono text-slate-200 px-0.5">
+                      <span className="flex items-center gap-1 font-semibold">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>{lang === "en" ? "Multi-Rail Credential Attestation" : "多轨身份背书与授信"}</span>
+                      </span>
+                      <span className="text-[9px] text-emerald-300 font-mono bg-emerald-950/60 px-1.5 py-0.5 rounded-md border border-emerald-500/30">
+                        {lang === "en" ? "Credit Boost" : "额度增强"}
+                      </span>
+                    </div>
+
+                    {/* Google Row */}
+                    <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                          <path fill="#EA4335" d="M12 5c1.6 0 3 .6 4.1 1.6l3.1-3.1C17.3 1.8 14.8 1 12 1 7.5 1 3.7 3.6 1.9 7.3l3.7 2.9C6.5 7.4 9 5 12 5z" />
+                          <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.7l3.7 2.9c2.2-2 3.7-5 3.7-8.8z" />
+                          <path fill="#FBBC05" d="M5.6 14.8c-.2-.7-.4-1.5-.4-2.3s.2-1.6.4-2.3L1.9 7.3C.7 9.7 0 12.3 0 15.1c0 2.8.7 5.4 1.9 7.8l3.7-2.9z" />
+                          <path fill="#34A853" d="M12 23.2c3.2 0 6-1.1 8-3l-3.7-2.9c-1.1.7-2.5 1.2-4.3 1.2-3 0-5.5-2.4-6.4-5.2L1.9 16.2C3.7 20 7.5 23.2 12 23.2z" />
+                        </svg>
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white flex items-center gap-1">
+                            <span className="truncate">{lang === "en" ? "Google Identity" : "Google 认证"}</span>
+                            {googleUser && <CheckCircle2 className="w-3 h-3 text-blue-400 shrink-0" />}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-300 truncate">
+                            {googleUser
+                              ? googleUser.synthetic
+                                ? "[SYNTHETIC] 0 USD"
+                                : googleUser.email
+                              : "+$1,200 USD"}
+                          </div>
+                        </div>
+                      </div>
+                      {googleUser ? (
+                        <button
+                          onClick={() => handleUnlink("google")}
+                          className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
+                        >
+                          {lang === "en" ? "Unlink" : "解除"}
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={handleGoogleLogin}
+                            className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-bold transition shadow-sm cursor-pointer"
+                          >
+                            {t("auth.to_login")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* GitHub Row */}
+                    <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Github className="w-4 h-4 text-white shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white flex items-center gap-1">
+                            <span className="truncate">GitHub BUIDL</span>
+                            {githubUser && <CheckCircle2 className="w-3 h-3 text-indigo-400 shrink-0" />}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-300 truncate">
+                            {githubUser ? `@${githubUser.username}` : "+$1,000 USD"}
+                          </div>
+                        </div>
+                      </div>
+                      {githubUser ? (
+                        <button
+                          onClick={() => handleUnlink("github")}
+                          className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
+                        >
+                          {lang === "en" ? "Unlink" : "解除"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleGithubLogin}
+                          className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition shadow-sm cursor-pointer"
+                        >
+                          {lang === "en" ? "Authorize" : "授权"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Steam Row */}
+                    <div className="p-2.5 rounded-lg bg-[#151a28] border border-white/15 flex items-center justify-between shadow-sm gap-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <Gamepad2 className="w-4 h-4 text-cyan-400 shrink-0" />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-bold text-white flex items-center gap-1">
+                            <span className="truncate">{lang === "en" ? "Steam Gameplay" : "Steam 游戏时长"}</span>
+                            {steamUser && <CheckCircle2 className="w-3 h-3 text-cyan-400 shrink-0" />}
+                          </div>
+                          <div className="text-[10px] font-mono text-slate-300 truncate">
+                            {steamUser ? steamUser.personaName : "+$800 USD"}
+                          </div>
+                        </div>
+                      </div>
+                      {steamUser ? (
+                        <button
+                          onClick={() => handleUnlink("steam")}
+                          className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2 py-1 rounded-md bg-[#2a1720] hover:bg-[#3d1f2d] text-red-300 border border-red-500/40 transition cursor-pointer"
+                        >
+                          {lang === "en" ? "Unlink" : "解除"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={handleSteamLogin}
+                          className="shrink-0 whitespace-nowrap text-[10px] font-mono px-2.5 py-1 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition shadow-sm cursor-pointer"
+                        >
+                          {lang === "en" ? "Link Steam" : "绑定"}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Footer */}
               <div className="pt-1 flex items-center justify-between text-[10px] font-mono text-slate-400">

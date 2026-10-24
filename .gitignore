@@ -54,3 +54,6 @@ video/public/audio/*
 # Rust build artifacts
 target/
 Cargo.lock
+
+# Go binaries
+bin/
