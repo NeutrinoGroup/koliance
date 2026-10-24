@@ -210,9 +210,27 @@ func runProxy(args []string) {
 		}
 	})
 
+	modelsHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": "list",
+			"data": []map[string]interface{}{
+				{"id": "deepseek-chat", "object": "model", "owned_by": "deepseek"},
+				{"id": "deepseek-reasoner", "object": "model", "owned_by": "deepseek"},
+				{"id": "doubao-pro", "object": "model", "owned_by": "bytedance"},
+				{"id": "doubao-lite", "object": "model", "owned_by": "bytedance"},
+			},
+		})
+	})
+
 	serverMux := http.NewServeMux()
 	serverMux.Handle("/v1/chat/completions", handler)
+	serverMux.Handle("/chat/completions", handler)
 	serverMux.Handle("/api/v1/proxy/chat/completions", handler)
+	serverMux.Handle("/v1/models", modelsHandler)
+	serverMux.Handle("/models", modelsHandler)
+	serverMux.Handle("/api/v1/proxy/models", modelsHandler)
 
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	fmt.Printf("[OK] Koliance Local AI Proxy listening on http://%s\n", addr)
@@ -283,25 +301,84 @@ func runTrade(args []string) {
 
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == http.StatusOK {
-		fmt.Printf("[OK] Alpaca Market Order Executed Successfully!\n")
+		var res struct {
+			Success     bool    `json:"success"`
+			Message     string  `json:"message"`
+			Symbol      string  `json:"symbol"`
+			Side        string  `json:"side"`
+			NotionalUSD float64 `json:"notionalUSD"`
+		}
+		if err := json.Unmarshal(respBody, &res); err == nil && res.Success {
+			fmt.Printf("[OK] Alpaca Market Order Executed Successfully!\n")
+			fmt.Printf("   ├─ Symbol:      %s\n", sym)
+			fmt.Printf("   ├─ Action:      %s $%.2f (%dx leverage -> Notional: $%.2f)\n", strings.ToUpper(s), *amount, *leverage, notional)
+			fmt.Printf("   └─ Status:      %s\n", res.Message)
+		} else {
+			fmt.Printf("[OK] Alpaca Market Order Submitted!\n")
+			fmt.Printf("   ├─ Symbol:      %s\n", sym)
+			fmt.Printf("   ├─ Action:      %s $%.2f (%dx leverage -> Notional: $%.2f)\n", strings.ToUpper(s), *amount, *leverage, notional)
+			fmt.Printf("   └─ Details:     %s\n", string(respBody))
+		}
+	} else if resp.StatusCode == http.StatusServiceUnavailable {
+		fmt.Printf("[INFO] Alpaca Paper Trading Simulation Mode (Broker Offline):\n")
 		fmt.Printf("   ├─ Symbol:      %s\n", sym)
 		fmt.Printf("   ├─ Action:      %s $%.2f (%dx leverage -> Notional: $%.2f)\n", strings.ToUpper(s), *amount, *leverage, notional)
-		fmt.Printf("   └─ Details:     %s\n", string(respBody))
+		fmt.Printf("   ├─ Order ID:    ord_sim_%x\n", time.Now().UnixNano())
+		fmt.Printf("   └─ Status:      SIMULATED_FILLED\n")
+	} else if resp.StatusCode == http.StatusUnauthorized {
+		fmt.Fprintf(os.Stderr, "[ERROR] Unauthorized: Invalid API key. Please re-run 'koliance auth --key=...'\n")
+		os.Exit(1)
 	} else {
-		// Mock order for demo execution
-		fmt.Printf("[OK] Paper Trading Order Placed (Alpaca Paper Simulator):\n")
-		fmt.Printf("   ├─ Symbol:      %s\n", sym)
-		fmt.Printf("   ├─ Side:        %s\n", strings.ToUpper(s))
-		fmt.Printf("   ├─ Equity:      $%.2f\n", *amount)
-		fmt.Printf("   ├─ Leverage:    %dx (Total Purchasing Power: $%.2f)\n", *leverage, notional)
-		fmt.Printf("   ├─ Order ID:    ord_alpaca_%x\n", time.Now().UnixNano())
-		fmt.Printf("   └─ Status:      FILLED\n")
+		fmt.Printf("[WARN] Upstream returned HTTP %d: %s\n", resp.StatusCode, string(respBody))
 	}
 }
 
 func runStatus(args []string) {
 	cfg, _ := loadConfig()
-	wallet := cfg.Wallet
+	client := &http.Client{Timeout: 5 * time.Second}
+
+	// 1. Fetch Inference Vault (with key to discover real wallet if missing)
+	vaultURL := fmt.Sprintf("%s/api/v1/inference/vault", cfg.Endpoint)
+	if cfg.Wallet != "" {
+		vaultURL = fmt.Sprintf("%s/api/v1/inference/vault?wallet=%s", cfg.Endpoint, cfg.Wallet)
+	}
+	req, _ := http.NewRequest(http.MethodGet, vaultURL, nil)
+	if cfg.APIKey != "" {
+		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
+
+	balanceCNY := 10.80
+	balanceUSD := 1.50
+	dailyLimit := 50.00
+	spentToday := 0.00
+	autoRecharge := false
+	discoveredWallet := cfg.Wallet
+
+	if resp, err := client.Do(req); err == nil && resp.StatusCode == http.StatusOK {
+		var vResp struct {
+			Data struct {
+				WalletAddress       string  `json:"wallet_address"`
+				BalanceCNY          float64 `json:"balance_cny"`
+				BalanceUSD          float64 `json:"balance_usd"`
+				DailyLimitUSD       float64 `json:"daily_limit_usd"`
+				SpentTodayUSD       float64 `json:"spent_today_usd"`
+				AutoRechargeEnabled bool    `json:"auto_recharge_enabled"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&vResp); err == nil {
+			balanceCNY = vResp.Data.BalanceCNY
+			balanceUSD = vResp.Data.BalanceUSD
+			dailyLimit = vResp.Data.DailyLimitUSD
+			spentToday = vResp.Data.SpentTodayUSD
+			autoRecharge = vResp.Data.AutoRechargeEnabled
+			if vResp.Data.WalletAddress != "" {
+				discoveredWallet = vResp.Data.WalletAddress
+			}
+		}
+		resp.Body.Close()
+	}
+
+	wallet := discoveredWallet
 	if wallet == "" {
 		wallet = "0x71C8360f3E118A7cD87A0cf633a69a089d4c20b2"
 	}
@@ -317,40 +394,6 @@ func runStatus(args []string) {
 	fmt.Printf("Wallet Address: %s\n", wallet)
 	fmt.Printf("Network:        Monad Testnet (Chain ID 10143)\n")
 	fmt.Println()
-
-	// 1. Fetch Inference Vault
-	vaultURL := fmt.Sprintf("%s/api/v1/inference/vault?wallet=%s", cfg.Endpoint, wallet)
-	client := &http.Client{Timeout: 5 * time.Second}
-	req, _ := http.NewRequest(http.MethodGet, vaultURL, nil)
-	if cfg.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
-	}
-
-	balanceCNY := 10.80
-	balanceUSD := 1.50
-	dailyLimit := 50.00
-	spentToday := 0.00
-	autoRecharge := false
-
-	if resp, err := client.Do(req); err == nil && resp.StatusCode == http.StatusOK {
-		var vResp struct {
-			Data struct {
-				BalanceCNY          float64 `json:"balance_cny"`
-				BalanceUSD          float64 `json:"balance_usd"`
-				DailyLimitUSD       float64 `json:"daily_limit_usd"`
-				SpentTodayUSD       float64 `json:"spent_today_usd"`
-				AutoRechargeEnabled bool    `json:"auto_recharge_enabled"`
-			} `json:"data"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&vResp); err == nil {
-			balanceCNY = vResp.Data.BalanceCNY
-			balanceUSD = vResp.Data.BalanceUSD
-			dailyLimit = vResp.Data.DailyLimitUSD
-			spentToday = vResp.Data.SpentTodayUSD
-			autoRecharge = vResp.Data.AutoRechargeEnabled
-		}
-		resp.Body.Close()
-	}
 
 	fmt.Println("[Inference Fund Pool]")
 	fmt.Printf("  Balance (CNY):  %.2f CNY (~%d micro-calls remaining @ 0.10元/call)\n", balanceCNY, int(balanceCNY/0.10))
@@ -412,8 +455,37 @@ func runStatus(args []string) {
 	fmt.Printf("  └─ Fulfillment  (15%%):  %.1f / 15.0 (Liquidation avoidance)\n", ratingScore)
 	fmt.Println()
 
+	// 3. Fetch Active Paper Trading Positions
+	overviewURL := fmt.Sprintf("%s/api/v1/market/overview", cfg.Endpoint)
+	oReq, _ := http.NewRequest(http.MethodGet, overviewURL, nil)
+	if cfg.APIKey != "" {
+		oReq.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+	}
+
 	fmt.Println("[Active Paper Trading Positions]")
-	fmt.Println("  • NVDA: 1.25 shares | Value: $148.50 | Side: LONG 2x | PnL: +$5.20 (+3.5%)")
+	displayedPositions := false
+	if oResp, err := client.Do(oReq); err == nil && oResp.StatusCode == http.StatusOK {
+		var oData struct {
+			Positions []struct {
+				Symbol       string `json:"symbol"`
+				Qty          string `json:"qty"`
+				MarketValue  string `json:"market_value"`
+				Side         string `json:"side"`
+				UnrealizedPL string `json:"unrealized_pl"`
+			} `json:"positions"`
+		}
+		if err := json.NewDecoder(oResp.Body).Decode(&oData); err == nil && len(oData.Positions) > 0 {
+			for _, p := range oData.Positions {
+				fmt.Printf("  • %s: %s shares | Value: $%s | Side: %s | PnL: $%s\n",
+					p.Symbol, p.Qty, p.MarketValue, strings.ToUpper(p.Side), p.UnrealizedPL)
+			}
+			displayedPositions = true
+		}
+		oResp.Body.Close()
+	}
+	if !displayedPositions {
+		fmt.Println("  • NVDA: 1.25 shares | Value: $148.50 | Side: LONG 2x | PnL: +$5.20 (+3.5%) [SIMULATED]")
+	}
 	fmt.Println("==============================================================")
 }
 

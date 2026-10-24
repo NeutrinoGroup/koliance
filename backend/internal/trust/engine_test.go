@@ -2,6 +2,7 @@ package trust
 
 import (
 	"context"
+	"math"
 	"sync"
 	"testing"
 )
@@ -148,4 +149,22 @@ func TestEngineEvaluateAndConcurrency(t *testing.T) {
 		}(i)
 	}
 	wg.Wait()
+}
+
+func TestCalculateWithNaNAndInf(t *testing.T) {
+	metrics := RawMetrics{
+		SuccessRate: math.NaN(),
+		TradeCount:  -10,
+		AssetUSD:    math.Inf(1),
+		Rating:      math.NaN(),
+	}
+	breakdown := Calculate(metrics)
+	if math.IsNaN(breakdown.SuccessRateScore) || math.IsNaN(breakdown.AssetProofScore) || math.IsNaN(breakdown.RatingScore) {
+		t.Fatalf("expected finite scores for NaN/Inf inputs, got: %+v", breakdown)
+	}
+
+	tier, maxLev, credit, _ := DetermineTier(math.NaN())
+	if tier != TierUnverified || maxLev != 2 || credit != 100.0 {
+		t.Fatalf("expected baseline unverified tier for NaN score, got tier=%s maxLev=%d credit=%v", tier, maxLev, credit)
+	}
 }

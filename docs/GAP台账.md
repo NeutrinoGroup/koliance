@@ -2036,6 +2036,23 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 
 ---
 
+### 5.27 真实微支付落地、Agent自主运行闭环与多权重交易Trust评分模型（2026-10-25，GAP-89）
+
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-88`**，`GAP-89` 在全部 ref 上**零命中**（实测），故取 **89**；
+> 本次变更记录为 `docs/changes/089-真实微支付与Agent自主运行闭环及多权重交易Trust.md`。
+
+#### GAP-89 · 真实微支付落地、Agent自主运行闭环与多权重交易Trust评分模型（[OK] 已关闭）
+
+| 缺陷/事项 | 治理与修复实现 |
+| --- | --- |
+| 缺乏低门槛微支付入金通道，法币表单复杂与复制钱包高摩擦严重损耗 Agent 开发者转化率 | 落地法币（微信支付/支付宝通过 Stripe Checkout Session 聚合扫码）与 Web3（Monad 10143 测试网 1 MON / 1.5 USDC 扫码与 EIP-681 标准协议）双轨 1 元 / 10 元即时充值，后端打通 Webhook 与 RPC 确认自动入账 `InferenceVault` |
+| Agent 深夜自主执行长链任务易因余额耗尽遭遇 402 熔断报错导致断流 | 引入虚拟卡（Visa / Mastercard / Dupay / Wise / Revolut / PokePay）Stripe SetupIntent 安全授权绑定；实现自动续航代扣守护进程（可用余额 < 1.0 元 / < 1.00 USD 时静默代扣 10 元 / 10.00 USD），并设置单日最高 50 元硬熔断上限 |
+| 自动代扣触发顺序错误：余额归零或低于单次成本时直接返回 402 熔断而无法触发代扣 | 修复 `DeductInference` 逻辑，在执行扣款前优先检查余额与当前成本并触发自动代扣，确保长链任务永不断流；代扣扣款后余额低于阈值亦支持触发次级自动续航 |
+| 缺乏零门槛终端接入与 OpenAI 兼容代理反代能力 | 开发单文件 Go CLI 二进制 `cmd/koliance`（支持 `auth`, `proxy`, `trade`, `status`）及非交互一行安装脚本 `scripts/install-agent-cli.sh`；提供 0.10 元/次 OpenAI 兼容反向代理 `/api/v1/proxy/chat/completions` 并路由至 DeepSeek V3/R1 与豆包 Ark |
+| 传统 API 聚合商缺乏金融级自主信用体系，无法衡量 Agent 交易与履约能力 | 构建围绕交易的多权重 Trust 评分引擎（35% 交易成功率 + 25% 成交频次 + 25% 资产背书 + 15% 履约评级），输出 0-100 分数与等级（PRIME / TRUSTED / STANDARD / UNVERIFIED），并在 Developer Console 实时双向呈现与试算 |
+
+---
+
 | 编号 | 事项 | 理由 |
 | --- | --- | --- |
 | GAP-30 | Redis 额度池 | `想法记录.md:4` 划定范围为"只完成立项/需求/设计/开发/测试和发布"；且 RFC 的 Lua 有 4 个实测缺陷（GAP-18~21），本次不值得引入 |

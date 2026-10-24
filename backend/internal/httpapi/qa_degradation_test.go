@@ -95,6 +95,7 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodPost, "/api/v1/card/bind", `{}`, "", 400, "unguarded: wallet_address is required"},
 	{http.MethodGet, "/api/v1/inference/vault", "", "", 401, "unguarded by DB, but requires an API key"},
 	{http.MethodPost, "/api/v1/proxy/chat/completions", `{}`, "", 401, "unguarded by DB, but requires an API key"},
+	{http.MethodGet, "/api/v1/proxy/models", "", "", 401, "unguarded by DB, but requires an API key"},
 
 	// ---- no database needed, but the upstream is the failure mode ----
 	// Driven against the closed local port this harness points Alpaca at, so the
