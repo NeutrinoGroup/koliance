@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Navbar, NavView } from "@/components/Navbar";
 import { CursorTrail } from "@/components/CursorTrail";
 import { DeveloperConsole } from "@/components/DeveloperConsole";
+import { GlobalFooter } from "@/components/GlobalFooter";
 import { useKolianceAuth } from "@/components/Providers";
 
 export default function ConsolePage() {
@@ -43,15 +44,7 @@ export default function ConsolePage() {
         <DeveloperConsole currentAccount={authAddress || null} />
       </main>
 
-      <footer className="border-t border-white/10 py-6 px-4 sm:px-8 bg-[#0d1017]/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-slate-400">
-          <div>
-            <span className="font-extrabold text-white tracking-wider">KOLIANCE</span>
-            <span className="ml-2 text-slate-400">{"//"} Autonomous Agent Trust & Settlement Layer</span>
-          </div>
-          <div>Monad Testnet (Chain ID 10143)</div>
-        </div>
-      </footer>
+      <GlobalFooter />
     </div>
   );
 }

@@ -512,7 +512,7 @@ export function mergeIdentity(
   state: AccountState,
   privyIdentity: AccountIdentity | null
 ): AccountIdentity | null {
-  if (privyIdentity) return privyIdentity;
+  if (privyIdentity && privyIdentity.email) return privyIdentity;
   if (state.google) {
     return {
       name: state.google.name,
@@ -529,6 +529,7 @@ export function mergeIdentity(
       picture: state.github.avatarUrl,
     };
   }
+  if (privyIdentity) return privyIdentity;
   return null;
 }
 

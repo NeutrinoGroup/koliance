@@ -116,16 +116,31 @@ export async function POST(request: NextRequest) {
       scopes,
     });
 
+    // Behavior Incentive: award +50 KOL on first API key created (anti-sybil checked in rewardsDb)
+    let rewardGranted: { amount: number; actionType: string } | null = null;
+    try {
+      const { recordUserReward } = await import("@/lib/rewardsDb");
+      const targetId = walletAddress || userId;
+      const rewardRes = await recordUserReward(targetId, "FIRST_API_KEY", 50);
+      if (!rewardRes.alreadyClaimed && rewardRes.reward) {
+        rewardGranted = { amount: 50, actionType: "FIRST_API_KEY" };
+      }
+    } catch (e) {
+      console.warn("[API Keys Route] Reward recording notice:", e);
+    }
+
     return NextResponse.json(
       {
         success: true,
         message: "API key created successfully and persisted to api_keys table.",
         key: result.key,
         raw_key: result.raw_key, // Returned only once!
+        rewardGranted,
       },
       { status: 201, headers: cors }
     );
   } catch (err: unknown) {
+
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: msg }, { status: 500, headers: cors });
   }

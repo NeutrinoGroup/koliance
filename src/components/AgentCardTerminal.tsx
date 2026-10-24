@@ -131,8 +131,16 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
     if (status === "success") {
       setStripeToast("Stripe 充值成功！资金已到账至您的 AgentCard 授信额度。");
       setCreditLimit((prev) => prev + 50);
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("koliance:reward", {
+            detail: { amount: 500, actionType: "STRIPE_TOPUP" },
+          })
+        );
+      }
       window.history.replaceState({}, document.title, window.location.pathname);
     }
+
 
     // Detect GitHub OAuth callback (?code=... & ?state=...)
     //
@@ -323,7 +331,18 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
           msg: `Visa 授权成功 [代码 00 - APPROVED]：已扣款 $${amount} USD (${merchant})`,
           type: "success",
         });
+
+        // 10% AgentCard Cashback in KOL
+        const cashbackKol = Number((amount * 0.1).toFixed(4));
+        if (cashbackKol > 0 && typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("koliance:reward", {
+              detail: { amount: cashbackKol, actionType: "CARD_CASHBACK_10" },
+            })
+          );
+        }
       } else {
+
         setMicroTxList((prev) => [
           {
             txId: `tx_declined_${Date.now()}`,

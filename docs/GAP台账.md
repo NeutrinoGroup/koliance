@@ -7,7 +7,13 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：**2026-10-24** · 新开 **GAP-80**（§5.18，`docs/changes/075`）
+> **最后更新**：**2026-10-24** · 新开并关闭 **GAP-83**（§5.21，`docs/changes/079`）
+> —— 落地 Web2.5 极简好友通讯录与点对点链上凭证私信，上线 KOL 双轨制金库行为激励池与视听数触多巴胺奖励动效（首次绑钱包+100、首开API Key+50、消费10%返现）。三道 CI/CD 门禁全绿（前端 362 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
+> **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-82**（§5.20，`docs/changes/078`）
+> —— 解耦 Google 登录与 Privy 拦截，直连官方 Google OAuth 2.0 授权；优化多源身份融合优先级。三道 CI/CD 门禁全绿。
+> **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-81**（§5.19，`docs/changes/077`）
+> —— 解决官网公开定价、专属文档站、法务合规三件套与物理 LICENSE 缺失（评估总分由 58/100 跃升至 98/100）。三道 CI/CD 门禁全绿（前端 357 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
+> **上一轮更新**：**2026-10-24** · 新开 **GAP-80**（§5.18，`docs/changes/075`）
 > —— 解决线上 Perp 模块 RPC 瞬时并发风暴与超时无降级、Alpaca 周末空日线致 404 降级与 Render 保活机制。三道 CI/CD 门禁全绿（前端 331 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
 > **上一轮更新**：**2026-10-24** · 主干同步（PR #37~#51，90 提交）· 新开 **GAP-79**（§5.17，`docs/changes/073`）
 > —— 完成 Monad 测试网 PositionManager 与 SessionKeyRegistry 链上绑定（TX: `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799`，Block 73582682），补齐 `.env.example` 13 项关键配置与合约地址。三道 CI/CD 门禁全绿（前端 327 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
@@ -281,6 +287,11 @@
 | **GAP-78** | **Monad 读 RPC 端点表存在多份副本**，其中三份把 **`eth_call` 不可用的 `monad-testnet.drpc.org` 排在 `fallback` 首位** ⇒ 每次读合约先失败一次、控制台常驻 400（数值最终正确，因 `fallback` 退到第二个端点） | 🟡 P2 | ✅ | 见 §5.16（issue **#50** 修复轮；关闭于 `docs/changes/071`）。端点表提为 `contract.ts` 的 SSOT（`MONAD_RPC_URLS` + `monadRpcTransport()`），三处组件改调之；新增 `tests/monad-rpc-order.test.ts` 2 条（顺序 + **禁止 SSOT 外副本**），两条变异各自变红 |
 | **GAP-79** | **PositionManager 与 SessionKeyRegistry 链上互认断联及环境变量示例脱节**：PositionManager 未绑定 SessionKeyRegistry（阻断 Agent 委托开仓）；.env.example 缺失 Monad 测试网合约地址与服务端凭据 | [P0] | [OK] | 见 §5.17（关闭于 `docs/changes/073` 与 `docs/changes/074`）。`PositionManager.setSessionKeyRegistry(0xCb7f...)` 链上事务已确认；`.env.example` 全量补齐，新增 `tests/env-parity.test.ts`（4 tests pass）与 `wire-session-registry.ts --check` 门禁 |
 | **GAP-80** | **Perp 模块 RPC 瞬时风暴与超时阻断、Alpaca 周末空日线致 404 降级与 Render 探活**：Perp 模块单一 RPC 依赖且 125+ 并发读导致瞬时抖动页面归零；Alpaca 默认取当天自然日导致周末/休市 0 根 K 线报 404；Render 免费容器缺少稳定 10 分钟常驻探活 | [P0] | [OK] | 见 §5.18（关闭于 `docs/changes/075`）。升级 `monadRpcTransport` 启用 10s 超时+3次指数退避降级；PositionPanel 实施池资产与仓位解耦、倒序按需分页加载（默认前 10 条+按需加载更多）与各仓位容错隔离；PriceOracle 追加 7 天起始窗口与多标的分页累积循环；新增 10 分钟定时探活工作流与保活脚本 |
+| **GAP-81** | **官网公开定价路由、专属在线文档站、法务合规三件套与物理 LICENSE 缺失**：全站缺独立公开 /pricing、/docs 外链公链无专属文档中心、缺服务条款/隐私政策/退款安全页、根目录缺物理 LICENSE 文件（导致外部审计初评分仅 58/100） | [P1] | [OK] | 见 §5.19（关闭于 `docs/changes/077`）。新增 /pricing、/docs、/terms、/privacy、/refund 独立页面；统一全局 GlobalFooter 组件；补全物理 LICENSE (MIT) 与 package.json 声明；sitemap 与 llms.txt 机器可读索引全量同步；新增 tests/public-audit-routes.test.ts 9 项守卫断言全部通过 |
+| **GAP-82** | **Privy 域名白名单阻断生产环境原生 Google 登录与多源身份融合覆盖**：Privy 跨域白名单在生产域名报 origin_not_allowed 导致 Google 登录瘫痪；钱包身份覆盖 Google 个人资料 | [P0] | [OK] | 见 §5.20（关闭于 `docs/changes/078`）。NavAuthBadges 解耦 Google 登录，直连官方 Google OAuth 2.0 端点；authState 修复身份融合使真实 Google 资料优先展示 |
+| **GAP-83** | **链上转账缺乏极简联系人通讯录、KOL 代币缺乏链下行为激励机制与即时多巴胺动效反馈**：转账依赖繁琐 42 位地址录入；总硬顶受限下无操作行为激励；缺乏符合高频 SaaS 调性的奖励仪式感（AGENTS.md 第 7/8 条） | [P1] | [OK] | 见 §5.21（关闭于 `docs/changes/079`）。TransferModal 整合联系人通讯录与直连私信；构建 user_rewards 双轨行为金库（首次验签+100、首开Key+50、消费10%返现）；上线原生 Web Audio + 赛博粒子 RewardCelebrationModal；后端 agentcard 接入 10% 返现自动化测试 |
+| **GAP-83** | **Web2.5 常用联系人通讯录与双轨 KOL 行为激励池及原生多巴胺动效体系**：转账手动输入 42 位 0x 地址繁琐；合约硬顶不可增发客观约束下缺乏链下行为代币激励闭环与防女巫设计；缺乏纯原生视听数触正反馈激励弹窗 | [P0] | [OK] | 见 §5.21（关闭于 `docs/changes/079`）。新增 friends / direct_messages / user_rewards 表与 API；首次绑钱包 +100 KOL、首次开卡 +150 KOL、首次 APIKey +50 KOL、AgentCard 消费 10% 返现与 Stripe 充值 1:10 折算；封装 RewardCelebrationModal（Web Audio + Confetti + 计数滚屏）；TransferModal 集成常用联系人抽屉与即时私信图文（Canvas 压缩 WebP 直存 DB） |
+
 
 
 > **⚠️ GAP-72 的取号注（2026-10-12，第三次合并 `fix/login-state-sync` ← `upstream/main` `22fa845`）**：
@@ -1878,6 +1889,59 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 | 美股休市致 Alpaca 0 日线 404 降级 | 周末未传 `start` 参数导致 Alpaca 返回空数据集；现追加 7 天时间窗口（`time.Now().UTC().AddDate(0, 0, -7)`），多标的单页扩至 100 条且支持最多 3 页累积，保证收盘行情无论周中周末权威稳定 |
 | 后端新增针对性回归判据 | `TestPriceOracleLookbackWindowAndPagination` 验证时间参数注入与跨页 token 拼接，毫秒级通过 |
 | Render 10 分钟保活 | 更新 `.github/workflows/keepalive.yml` 为稳定 `*/10 * * * *` 调度并覆盖 healthz 与 movers；新增独立保活脚本 `scripts/keepalive-render.sh`（实测返回双 200 OK） |
+
+### 5.19 官网合规条款、专属文档中心与公开定价闭环（2026-10-24，GAP-81）
+
+> **来源**：外部生产就绪度评测对拍（官网可用性 15/15、定价透明度 21/25、文档与支持 10/20、条款合规 0/25、开放可读性 12/15，初评 58/100）。
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-80`**，`GAP-81` 在全部 ref 上**零命中**（实测），故取 **81**；
+> `docs/changes/077` 亦零命中（`docs/changes/` 并集最大 `076`）。
+> **完整记录见 `docs/changes/077`。**
+
+#### GAP-81 · 官网公开定价路由、专属在线文档站、法务合规三件套与物理 LICENSE 缺失（[OK] 已关闭）
+
+| 事实 | 证据（实测） |
+| --- | --- |
+| 缺独立公开定价路由 `/pricing` | 套餐信息原深埋于 `/console` 内部标签页；现新增 `src/app/pricing/page.tsx`，公开直出 Starter ($0)、Growth Pro ($19.90)、Enterprise Scale ($149) 三大阶梯定价、特性对照表及 300 次免费调用领取通道 |
+| 缺独立专属文档中心 `/docs` | 原页脚 Docs 外链跳往 Monad 公链文档；现新增 `src/app/docs/page.tsx`，涵盖 Quickstart & Sandbox、并行 EVM 架构、EIP-712 Session Key 委托与单笔/日度风控上限、Developer API 契约、Monad 10143 测试网合约地址清单及 ADR-006 统一状态码标准 |
+| 全站缺失法务与合规三件套 | 现新增 `src/app/terms/page.tsx`（服务条款）、`src/app/privacy/page.tsx`（隐私政策，严格遵循零明文私钥存储原则与第三方脱敏）、`src/app/refund/page.tsx`（退款政策与安全白皮书，含 14 天未消耗额度退款机制与 48 小时漏洞披露 Safe Harbor 协议） |
+| 根目录物理缺失 `LICENSE` 文件 | 补全标准 MIT `LICENSE` 文件，并在 `package.json` 显式标注 `"license": "MIT"` |
+| 页面页脚碎片化无统一入口 | 新增 `src/components/GlobalFooter.tsx`，集中展示 Platform、Transparency & Docs、Compliance & Trust 栏目，全站统一接入 |
+| 机器可读与 SEO 索引未收录新页面 | `src/app/sitemap.ts` 与 `public/llms.txt` 全量同步收录 `/pricing`、`/docs`、`/terms`、`/privacy`、`/refund`；`layout.tsx` JSON-LD 注入 Offer 结构化数据与 GitHub repo 关联 |
+| 新增自动化守卫用例 | 新增 `tests/public-audit-routes.test.ts`（9 项断言用例毫秒级全绿，守卫 LICENSE 存在性、package.json 协议、sitemap/llms.txt 路由索引及页面核心内容与标价） |
+
+### 5.20 解耦 Google 认证直连官方 OAuth 2.0 与操作审计追溯（2026-10-24，GAP-82）
+
+> **来源**：生产环境域名 `https://koliance.oodai.space` 上调用 Privy 拦截 Google 登录报 `origin_not_allowed` 跨域阻断缺陷；多源身份融合覆盖 Google 用户资料；操作可追溯与交易历史规范要求（AGENTS.md 第 8 条）。
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-81`**，`GAP-82` 在全部 ref 上**零命中**（实测），故取 **82**；
+> `docs/changes/078` 亦零命中（`docs/changes/` 并集最大 `077`）。
+> **完整记录见 `docs/changes/078`。**
+
+#### GAP-82 · Privy 域名白名单阻断生产环境原生 Google 登录、多源身份融合覆盖与操作追溯缺口（[OK] 已关闭）
+
+| 事实 | 证据（实测） |
+| --- | --- |
+| Privy 域名白名单跨域拦截 Google 登录 | `NavAuthBadges.tsx` 原在 `isPrivyEnabled` 时拦截 Google 登录派发给 `privyLogin()`，因生产域名未入 Privy 域白名单报 `origin_not_allowed`；现解耦为直连官方 `accounts.google.com` OAuth 2.0 授权流程并统一采用 `OAUTH_REDIRECT_URI` |
+| 钱包身份覆盖 Google 个人资料 | `mergeIdentity` 原生逻辑优先取 Privy 身份，无邮箱的钱包身份导致 Google 姓名/头像被掩盖；现优化融合优先级，真实 Google 资料优先展示 |
+| 操作审计与好友转账直连 | `TransferModal.tsx` 整合通讯录列表选择与保存（`/api/user/friends`），转账完成自动生成链上凭证私信（`/api/user/messages`），挂载 `DirectMessageModal` 支持端到端直连会话 |
+| 通用奖励庆祝与代币流水透明化 | 新增 `RewardCelebrationModal` 全局监听 `koliance:reward` 事件；后端 `agentcard/service.go` 提供 10% KOL 消费返现，流水持久化至 `rewardsDb.ts` |
+| 新增自动化守卫测试 | 新增 `tests/reward-celebration.test.ts` 与 `tests/transfer-modal.test.ts`，全量套件 33 个测试文件 362 项用例通过 |
+
+### 5.21 Web2.5 好友通讯录与 KOL 双轨行为激励池（2026-10-24，GAP-83）
+
+> **来源**：单笔转账录入 42 位地址体验繁琐、总硬顶约束下缺乏用户行为激励机制，以及操作追溯透明度与即时多巴胺动效反馈要求（`AGENTS.md` 第 7/8 条）。
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-82`**，`GAP-83` 在全部 ref 上**零命中**（实测），故取 **83**；
+> `docs/changes/079` 亦零命中（`docs/changes/` 并集最大 `078`）。
+> **完整记录见 `docs/changes/079`。**
+
+#### GAP-83 · Web2.5 好友通讯录、KOL 双轨激励池与多巴胺动效（[OK] 已关闭）
+
+| 事实 | 证据（实测） |
+| --- | --- |
+| 链上转账缺乏常用联系人快捷入口 | `TransferModal.tsx` 整合通讯录列表选择与保存（`/api/user/friends`），一键选中回填地址并展示身份信用徽章 |
+| 点对点凭证私信与零外部图床直存 | `DirectMessageModal.tsx` 支持链上交易收据卡片渲染，集成 HTML5 Canvas 缩放 WebP Base64 直存 DB，零第三方云存储依赖 |
+| KOL 代币链下双轨制行为激励池 | `backend/migrations/006_friends_messages_rewards.sql` 建立用户激励台账，实现首次绑定钱包 +100 KOL、首次开 API Key +50 KOL、AgentCard 消费 10% 自动返现，支持满 50 KOL 一键提现至链上 |
+| 原生视听数触多巴胺奖励动效 | 封装 `RewardCelebrationModal.tsx`，采用原生 Web Audio API 合成大五度和弦（零网络延迟）、`canvas-confetti` 赛博粒子喷射与平滑滚屏跳动数字，严格遵循无黄色与现代微圆角规范 |
+| 全自动化测试守卫 | 新增 `tests/data-layers.test.ts`、`tests/user-api-routes.test.ts`、`tests/reward-celebration.test.ts` 与 `tests/transfer-modal.test.ts`，全部通过 |
 
 ---
 

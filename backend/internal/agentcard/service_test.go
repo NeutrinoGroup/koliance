@@ -167,3 +167,25 @@ func TestIssueSessionKeyValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestAuthorizeMicropaymentAwards10PercentCashback(t *testing.T) {
+	s := newSvc()
+	c := mustCard(t, s, 100)
+	resp, err := s.AuthorizeMicropayment(AuthorizeRequest{
+		CardID:       c.CardID,
+		AmountUSD:    25.50,
+		MerchantName: "Anthropic Claude API",
+		MCC:          "7372",
+	}, c.CardToken)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !resp.Success {
+		t.Fatalf("authorization failed: %v", resp.Message)
+	}
+	expectedCashback := 2.55 // 10% of 25.50
+	if math.Abs(resp.CashbackKOL-expectedCashback) > 0.0001 {
+		t.Errorf("CashbackKOL: want %v, got %v", expectedCashback, resp.CashbackKOL)
+	}
+}
+

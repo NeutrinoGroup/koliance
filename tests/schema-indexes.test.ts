@@ -36,4 +36,25 @@ describe("Database Schema, Indexes & RLS Unification", () => {
       expect(sql).toContain("users");
     }
   });
+
+  it("006_friends_messages_rewards.sql should define friends, direct_messages, and user_rewards with indexes and RLS", () => {
+    const migration006Path = path.resolve(process.cwd(), "backend/migrations/006_friends_messages_rewards.sql");
+    expect(fs.existsSync(migration006Path)).toBe(true);
+    const sql = fs.readFileSync(migration006Path, "utf-8");
+
+    // Tables
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS friends");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS direct_messages");
+    expect(sql).toContain("CREATE TABLE IF NOT EXISTS user_rewards");
+
+    // Indexes & Unique constraints
+    expect(sql).toContain("uq_user_friend UNIQUE(user_id, friend_wallet)");
+    expect(sql).toContain("idx_friends_user");
+    expect(sql).toContain("idx_messages_pair");
+    expect(sql).toContain("idx_rewards_user_status");
+
+    // RLS
+    expect(sql).toContain("ROW LEVEL SECURITY");
+  });
 });
+

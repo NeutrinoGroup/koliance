@@ -70,8 +70,31 @@ export async function POST(request: NextRequest) {
     }
     const wallet = address.toLowerCase();
     const sessionToken = createSessionToken({ userId: `did:koliance:wallet:${wallet}`, walletAddress: wallet });
-    return NextResponse.json({ success: true, sessionToken, userId: `did:koliance:wallet:${wallet}`, walletAddress: wallet }, { headers: cors });
+
+    // Behavior Incentive: award +100 KOL on first wallet bind (lifetime unique per 0x address)
+    let rewardGranted: { amount: number; actionType: string } | null = null;
+    try {
+      const { recordUserReward } = await import("@/lib/rewardsDb");
+      const rewardRes = await recordUserReward(wallet, "WALLET_BIND", 100);
+      if (!rewardRes.alreadyClaimed && rewardRes.reward) {
+        rewardGranted = { amount: 100, actionType: "WALLET_BIND" };
+      }
+    } catch (e) {
+      console.warn("[Wallet Auth] Reward recording notice:", e);
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        sessionToken,
+        userId: `did:koliance:wallet:${wallet}`,
+        walletAddress: wallet,
+        rewardGranted,
+      },
+      { headers: cors }
+    );
   } catch (err) {
     return configError(request, err);
   }
 }
+

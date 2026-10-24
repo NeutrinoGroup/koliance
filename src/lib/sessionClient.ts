@@ -65,5 +65,9 @@ export async function ensureWalletSession(
   const data = await res.json();
   if (!res.ok || !data.sessionToken) throw new Error(data.error || "Wallet sign-in failed");
   storage()?.setItem(WALLET_SESSION_PREFIX + wallet.toLowerCase(), data.sessionToken);
+  if (data.rewardGranted && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("koliance:reward", { detail: data.rewardGranted }));
+  }
   return data.sessionToken as string;
 }
+
