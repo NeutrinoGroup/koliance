@@ -1,4 +1,5 @@
 import { supabaseServer } from "@/lib/supabaseServer";
+import { isValidWalletAddress } from "@/lib/session";
 import crypto from "crypto";
 
 export type RewardActionType =
@@ -14,7 +15,7 @@ export interface UserRewardRecord {
   user_id: string;
   action_type: RewardActionType | string;
   amount_kol: number;
-  status: "CLAIMABLE" | "WITHDRAWN";
+  status: "CLAIMABLE" | "WITHDRAWN" | "SPENT";
   created_at: string;
 }
 
@@ -55,14 +56,15 @@ export async function recordUserReward(
   const normUser = userId.toLowerCase();
   const isSingleClaim = SINGLE_CLAIM_ACTIONS.has(actionType);
 
-  // If amount is not specified, use default for known actions
-  const grantAmount =
-    amountKol !== undefined
+  // For single-claim actions (Anti-Sybil), force the official reward amount; caller cannot inflate it.
+  const grantAmount = isSingleClaim
+    ? DEFAULT_REWARD_AMOUNTS[actionType as RewardActionType]
+    : amountKol !== undefined
       ? amountKol
       : DEFAULT_REWARD_AMOUNTS[actionType as RewardActionType] || 0;
 
-  if (grantAmount <= 0) {
-    return { reward: null, alreadyClaimed: false, error: "Reward amount must be greater than 0" };
+  if (!Number.isFinite(grantAmount) || grantAmount <= 0) {
+    return { reward: null, alreadyClaimed: false, error: "Reward amount must be a finite number greater than 0" };
   }
 
   // 1. Anti-Sybil Check in Supabase if single-claim action
@@ -147,7 +149,10 @@ export async function getUserRewards(userId: string): Promise<{
       let total = 0;
       for (const r of list) {
         const amt = Number(r.amount_kol) || 0;
-        total += amt;
+        if (!Number.isFinite(amt) || amt <= 0) continue;
+        if (r.status !== "SPENT") {
+          total += amt;
+        }
         if (r.status === "CLAIMABLE") {
           claimable += amt;
         }
@@ -169,9 +174,12 @@ export async function getUserRewards(userId: string): Promise<{
 
   memoryRewards.forEach((r) => {
     if (r.user_id.toLowerCase() === normUser) {
-      list.push(r);
       const amt = Number(r.amount_kol) || 0;
-      total += amt;
+      if (!Number.isFinite(amt) || amt <= 0) return;
+      list.push(r);
+      if (r.status !== "SPENT") {
+        total += amt;
+      }
       if (r.status === "CLAIMABLE") {
         claimable += amt;
       }
@@ -185,6 +193,123 @@ export async function getUserRewards(userId: string): Promise<{
     totalClaimableKol: Number(claimable.toFixed(4)),
     totalEarnedKol: Number(total.toFixed(4)),
   };
+}
+
+/**
+ * Send a P2P reward gift / red packet to a friend.
+ * Deducts from sender's existing claimable balance and credits recipient.
+ * Zero token inflation (strictly internal circulation).
+ */
+export async function sendRewardGift(
+  senderId: string,
+  recipientId: string,
+  amountKol: number
+): Promise<{ success: boolean; giftRecord?: UserRewardRecord; error?: string }> {
+  if (!senderId || !recipientId) {
+    return { success: false, error: "Sender and recipient are required" };
+  }
+
+  const normSender = senderId.toLowerCase();
+  const normRecipient = recipientId.toLowerCase();
+
+  if (normSender === normRecipient) {
+    return { success: false, error: "Cannot send a gift to yourself" };
+  }
+
+  if (!Number.isFinite(amountKol) || amountKol <= 0) {
+    return { success: false, error: "Gift amount must be a positive number" };
+  }
+
+  const roundedAmount = Number(amountKol.toFixed(4));
+  const senderSummary = await getUserRewards(normSender);
+
+  if (senderSummary.totalClaimableKol < roundedAmount) {
+    return {
+      success: false,
+      error: `Insufficient claimable KOL balance. Available: ${senderSummary.totalClaimableKol} KOL, requested: ${roundedAmount} KOL.`,
+    };
+  }
+
+  // 1. Deduct from sender's claimable records in Supabase
+  let remainingToDeduct = roundedAmount;
+  try {
+    const { data: senderRecords, error: fetchError } = await supabaseServer()
+      .from("user_rewards")
+      .select("*")
+      .eq("user_id", normSender)
+      .eq("status", "CLAIMABLE")
+      .order("created_at", { ascending: true });
+
+    if (!fetchError && Array.isArray(senderRecords) && senderRecords.length > 0) {
+      for (const rec of senderRecords) {
+        if (remainingToDeduct <= 0) break;
+        const recAmt = Number(rec.amount_kol) || 0;
+        if (recAmt <= remainingToDeduct) {
+          remainingToDeduct = Number((remainingToDeduct - recAmt).toFixed(4));
+          await supabaseServer()
+            .from("user_rewards")
+            .update({ status: "SPENT" })
+            .eq("id", rec.id);
+        } else {
+          const newAmt = Number((recAmt - remainingToDeduct).toFixed(4));
+          remainingToDeduct = 0;
+          await supabaseServer()
+            .from("user_rewards")
+            .update({ amount_kol: newAmt })
+            .eq("id", rec.id);
+          break;
+        }
+      }
+    }
+  } catch (err) {
+    console.warn("[RewardsDb] Supabase gift deduction notice (checking memory store):", err);
+  }
+
+  // 2. Deduct in memory store
+  let memRemaining = roundedAmount;
+  for (const rec of memoryRewards.values()) {
+    if (memRemaining <= 0) break;
+    if (rec.user_id.toLowerCase() === normSender && rec.status === "CLAIMABLE") {
+      if (rec.amount_kol <= memRemaining) {
+        memRemaining = Number((memRemaining - rec.amount_kol).toFixed(4));
+        rec.status = "SPENT";
+      } else {
+        rec.amount_kol = Number((rec.amount_kol - memRemaining).toFixed(4));
+        memRemaining = 0;
+        break;
+      }
+    }
+  }
+
+  // 3. Credit recipient with GIFT record
+  const giftId = `rew_${crypto.randomBytes(12).toString("hex")}`;
+  const now = new Date().toISOString();
+
+  const recipientRecord: UserRewardRecord = {
+    id: giftId,
+    user_id: normRecipient,
+    action_type: "GIFT",
+    amount_kol: roundedAmount,
+    status: "CLAIMABLE",
+    created_at: now,
+  };
+
+  try {
+    const { data, error } = await supabaseServer()
+      .from("user_rewards")
+      .insert(recipientRecord)
+      .select()
+      .single();
+
+    if (!error && data) {
+      return { success: true, giftRecord: data as UserRewardRecord };
+    }
+  } catch (err) {
+    console.warn("[RewardsDb] Supabase gift credit notice (falling back to memory store):", err);
+  }
+
+  memoryRewards.set(giftId, recipientRecord);
+  return { success: true, giftRecord: recipientRecord };
 }
 
 /**
@@ -202,11 +327,14 @@ export async function withdrawRewards(
   if (!userId || !toWalletAddress) {
     return { success: false, withdrawnKol: 0, error: "User ID and target wallet address are required" };
   }
+  if (!isValidWalletAddress(toWalletAddress)) {
+    return { success: false, withdrawnKol: 0, error: "Invalid target 0x wallet address" };
+  }
 
   const normUser = userId.toLowerCase();
   const summary = await getUserRewards(normUser);
 
-  if (summary.totalClaimableKol < MIN_WITHDRAW_THRESHOLD_KOL) {
+  if (!Number.isFinite(summary.totalClaimableKol) || summary.totalClaimableKol < MIN_WITHDRAW_THRESHOLD_KOL) {
     return {
       success: false,
       withdrawnKol: 0,

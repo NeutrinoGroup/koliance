@@ -21,6 +21,8 @@ export function resetDirectMessagesDbForTests(): void {
   memoryMessages.clear();
 }
 
+const SAFE_ID_REGEX = /^[a-zA-Z0-9_.:\-@]{1,128}$/;
+
 /**
  * List conversation messages between two users / peers
  */
@@ -31,8 +33,14 @@ export async function listDirectMessages(
 ): Promise<DirectMessageRecord[]> {
   if (!userId1 || !userId2) return [];
 
-  const norm1 = userId1.toLowerCase();
-  const norm2 = userId2.toLowerCase();
+  const norm1 = userId1.toLowerCase().trim();
+  const norm2 = userId2.toLowerCase().trim();
+
+  // Security Gate (Prevent PostgREST filter string injection via peer identifier)
+  if (!SAFE_ID_REGEX.test(norm1) || !SAFE_ID_REGEX.test(norm2)) {
+    console.warn("[DirectMessagesDb] Rejected conversation query with invalid peer ID pattern.");
+    return [];
+  }
 
   try {
     // Check messages where (sender = norm1 AND recipient = norm2) OR (sender = norm2 AND recipient = norm1)

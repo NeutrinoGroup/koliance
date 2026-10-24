@@ -63,6 +63,10 @@ export async function addFriend(
   }
 
   const normalizedWallet = friendWallet.toLowerCase();
+  const normalizedUser = userId.toLowerCase();
+  if (normalizedUser === normalizedWallet || normalizedUser.endsWith(`:${normalizedWallet}`)) {
+    return { success: false, error: "Cannot add your own wallet address as a friend" };
+  }
   const name = (friendName && friendName.trim()) || `Friend-${normalizedWallet.slice(2, 6)}`;
   const id = `fr_${crypto.randomBytes(12).toString("hex")}`;
   const now = new Date().toISOString();

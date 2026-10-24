@@ -1858,8 +1858,8 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                 <span>[SUCCESS] 密钥创建成功并已持久化至 api-key 表</span>
               </div>
 
-              <div className="p-3.5 rounded-md bg-amber-500/10 border border-amber-500/20 text-slate-300 text-xs font-mono leading-relaxed space-y-1">
-                <div className="font-bold text-amber-300">[IMPORTANT] 请妥善保存您的完整 API 密钥</div>
+              <div className="p-3.5 rounded-md bg-[#836ef9]/15 border border-[#836ef9]/30 text-slate-300 text-xs font-mono leading-relaxed space-y-1">
+                <div className="font-bold text-[#00f2fe]">[IMPORTANT] 请妥善保存您的完整 API 密钥</div>
                 <p>
                   出于安全隔离，完整密钥明文仅在此处展示一次。关闭此弹窗后将无法再次查看完整密钥，数据库中仅保留 SHA-256 哈希值。
                 </p>

@@ -288,9 +288,7 @@
 | **GAP-79** | **PositionManager 与 SessionKeyRegistry 链上互认断联及环境变量示例脱节**：PositionManager 未绑定 SessionKeyRegistry（阻断 Agent 委托开仓）；.env.example 缺失 Monad 测试网合约地址与服务端凭据 | [P0] | [OK] | 见 §5.17（关闭于 `docs/changes/073` 与 `docs/changes/074`）。`PositionManager.setSessionKeyRegistry(0xCb7f...)` 链上事务已确认；`.env.example` 全量补齐，新增 `tests/env-parity.test.ts`（4 tests pass）与 `wire-session-registry.ts --check` 门禁 |
 | **GAP-80** | **Perp 模块 RPC 瞬时风暴与超时阻断、Alpaca 周末空日线致 404 降级与 Render 探活**：Perp 模块单一 RPC 依赖且 125+ 并发读导致瞬时抖动页面归零；Alpaca 默认取当天自然日导致周末/休市 0 根 K 线报 404；Render 免费容器缺少稳定 10 分钟常驻探活 | [P0] | [OK] | 见 §5.18（关闭于 `docs/changes/075`）。升级 `monadRpcTransport` 启用 10s 超时+3次指数退避降级；PositionPanel 实施池资产与仓位解耦、倒序按需分页加载（默认前 10 条+按需加载更多）与各仓位容错隔离；PriceOracle 追加 7 天起始窗口与多标的分页累积循环；新增 10 分钟定时探活工作流与保活脚本 |
 | **GAP-81** | **官网公开定价路由、专属在线文档站、法务合规三件套与物理 LICENSE 缺失**：全站缺独立公开 /pricing、/docs 外链公链无专属文档中心、缺服务条款/隐私政策/退款安全页、根目录缺物理 LICENSE 文件（导致外部审计初评分仅 58/100） | [P1] | [OK] | 见 §5.19（关闭于 `docs/changes/077`）。新增 /pricing、/docs、/terms、/privacy、/refund 独立页面；统一全局 GlobalFooter 组件；补全物理 LICENSE (MIT) 与 package.json 声明；sitemap 与 llms.txt 机器可读索引全量同步；新增 tests/public-audit-routes.test.ts 9 项守卫断言全部通过 |
-| **GAP-82** | **Privy 域名白名单阻断生产环境原生 Google 登录与多源身份融合覆盖**：Privy 跨域白名单在生产域名报 origin_not_allowed 导致 Google 登录瘫痪；钱包身份覆盖 Google 个人资料 | [P0] | [OK] | 见 §5.20（关闭于 `docs/changes/078`）。NavAuthBadges 解耦 Google 登录，直连官方 Google OAuth 2.0 端点；authState 修复身份融合使真实 Google 资料优先展示 |
-| **GAP-83** | **链上转账缺乏极简联系人通讯录、KOL 代币缺乏链下行为激励机制与即时多巴胺动效反馈**：转账依赖繁琐 42 位地址录入；总硬顶受限下无操作行为激励；缺乏符合高频 SaaS 调性的奖励仪式感（AGENTS.md 第 7/8 条） | [P1] | [OK] | 见 §5.21（关闭于 `docs/changes/079`）。TransferModal 整合联系人通讯录与直连私信；构建 user_rewards 双轨行为金库（首次验签+100、首开Key+50、消费10%返现）；上线原生 Web Audio + 赛博粒子 RewardCelebrationModal；后端 agentcard 接入 10% 返现自动化测试 |
-| **GAP-83** | **Web2.5 常用联系人通讯录与双轨 KOL 行为激励池及原生多巴胺动效体系**：转账手动输入 42 位 0x 地址繁琐；合约硬顶不可增发客观约束下缺乏链下行为代币激励闭环与防女巫设计；缺乏纯原生视听数触正反馈激励弹窗 | [P0] | [OK] | 见 §5.21（关闭于 `docs/changes/079`）。新增 friends / direct_messages / user_rewards 表与 API；首次绑钱包 +100 KOL、首次开卡 +150 KOL、首次 APIKey +50 KOL、AgentCard 消费 10% 返现与 Stripe 充值 1:10 折算；封装 RewardCelebrationModal（Web Audio + Confetti + 计数滚屏）；TransferModal 集成常用联系人抽屉与即时私信图文（Canvas 压缩 WebP 直存 DB） |
+| **GAP-83** | **Web2.5 常用联系人通讯录与双轨 KOL 行为激励闭环及原生多巴胺动效体系**：转账手动输入 42 位 0x 地址繁琐；链上硬顶不可增发约束下缺乏防超发/防女巫闭环与点对点红包转赠扣账；缺失外链图片缩略微览与原生视听数触激励仪式感（AGENTS.md 第 7/8 条） | [P0] | [OK] | 见 §5.21（关闭于 `docs/changes/079`）。新增 friends / direct_messages / user_rewards 表与 API；实现首绑钱包+100、首开卡+150、首Key+50、消费10%返现与Stripe充值折算；落地点对点红包转赠扣减对账与防女巫限额；封装原生 Web Audio + Confetti + 滚动计数 RewardCelebrationModal；TransferModal 集成联系人抽屉/一键锁定与即时私信图文/外链微缩预览 |
 
 
 
@@ -1937,11 +1935,11 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 
 | 事实 | 证据（实测） |
 | --- | --- |
-| 链上转账缺乏常用联系人快捷入口 | `TransferModal.tsx` 整合通讯录列表选择与保存（`/api/user/friends`），一键选中回填地址并展示身份信用徽章 |
-| 点对点凭证私信与零外部图床直存 | `DirectMessageModal.tsx` 支持链上交易收据卡片渲染，集成 HTML5 Canvas 缩放 WebP Base64 直存 DB，零第三方云存储依赖 |
-| KOL 代币链下双轨制行为激励池 | `backend/migrations/006_friends_messages_rewards.sql` 建立用户激励台账，实现首次绑定钱包 +100 KOL、首次开 API Key +50 KOL、AgentCard 消费 10% 自动返现，支持满 50 KOL 一键提现至链上 |
-| 原生视听数触多巴胺奖励动效 | 封装 `RewardCelebrationModal.tsx`，采用原生 Web Audio API 合成大五度和弦（零网络延迟）、`canvas-confetti` 赛博粒子喷射与平滑滚屏跳动数字，严格遵循无黄色与现代微圆角规范 |
-| 全自动化测试守卫 | 新增 `tests/data-layers.test.ts`、`tests/user-api-routes.test.ts`、`tests/reward-celebration.test.ts` 与 `tests/transfer-modal.test.ts`，全部通过 |
+| 链上转账缺乏常用联系人快捷入口与地址锁定 | `TransferModal.tsx` 整合通讯录列表选择与保存（`/api/user/friends`），支持一键选中回填地址、常用好友地址锁定保护（带解除锁定交互）并展示身份信用徽章 |
+| 点对点凭证私信与零外部图床直存及外链微缩预览 | `DirectMessageModal.tsx` 支持链上交易收据卡片渲染，集成 HTML5 Canvas 缩放 WebP Base64 直存 DB，自动提取 Markdown 外链图片微缩预览并支持点击放大浮层 |
+| KOL 代币链下双轨制行为激励闭环与点对点转赠 | `backend/migrations/006_friends_messages_rewards.sql` 建立用户激励台账，实现首绑钱包 +100、首开卡 +150、首Key +50、消费 10% 返现与 Stripe 充值送币；落地点对点红包转赠扣账机制，防超发、防女巫限额，严格杜绝未背书虚假增发；支持满 50 KOL 一键提现至链上 |
+| 原生视听数触多巴胺奖励动效与拆红包交互 | 封装 `RewardCelebrationModal.tsx`，采用原生 Web Audio API 合成大五度和弦（零网络延迟）、`canvas-confetti` 赛博粒子喷射、动态数字跳动滚屏与微触感震动；私信红包卡片提供「拆开红包」动效集成，严格遵循无黄色与现代微圆角规范 |
+| 全自动化测试守卫 | 新增 `tests/data-layers.test.ts`、`tests/user-api-routes.test.ts`、`tests/reward-celebration.test.ts` 与 `tests/transfer-modal.test.ts`，总单测达 370 项全部通过 |
 
 ---
 
