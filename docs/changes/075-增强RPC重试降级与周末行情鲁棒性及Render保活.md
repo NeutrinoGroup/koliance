@@ -60,3 +60,17 @@
   - `/healthz` 响应码: `200`
   - `/api/v1/market/movers` 响应码: `200`
   - 判定: `[OK] Backend container is active and healthy.`
+
+---
+
+## 4. Greptile 代码评审优化项跟进 (PR #52 Review Follow-up)
+
+在 PR #52 合入后，针对 Greptile 评审意见进行了深入加固：
+1. **持仓状态防抖与缓存保留 ([`src/components/PositionPanel.tsx`](file:///Users/alexander/bwa/koliance/src/components/PositionPanel.tsx))**:
+   - 之前当单笔持仓读取遭遇瞬时 RPC 超时时，整个持仓行会被 `filter(Boolean)` 过滤，导致前端用户持仓与平仓按钮闪烁消失。
+   - 现引入 `rowsRef` 与 `preservedRowsMap` 缓存机制：只有当链上 `isOpen(id)` 显式返回 `false` 时才移除持仓；若因瞬时网络丢包或超时读取失败，自动保留已有缓存数据，并通过 Monad 紫色警告横幅提示用户正在重试，保障极端网络下平仓操作不中断。
+2. **多标的分页与深度窗口覆盖 ([`backend/internal/market/price_oracle.go`](file:///Users/alexander/bwa/koliance/backend/internal/market/price_oracle.go))**:
+   - 将 2 个标的请求时的 `limit` 由 2 调整为 100（`len(want) > 1` 即采用 100 批量槽位），并将分页上限从 3 页提升至 5 页。
+   - 补充完善了单测 `TestPriceOracleLookbackWindowAndPagination`，验证单个标的跨越多页后第二个标的仍能被正确累积分页解析。
+3. **严格遵守 Zero-Emojis 规范 ([`docs/GAP台账.md`](file:///Users/alexander/bwa/koliance/docs/GAP台账.md))**:
+   - 移除表格中的 Emoji 图标，规范为 `[P0] | [OK]`。

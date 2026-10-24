@@ -106,7 +106,7 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
   const [scanLimit, setScanLimit] = useState(10);
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
-    type: "success" | "error";
+    type: "success" | "error" | "warn";
     msg: string;
     txHash?: string;
   } | null>(null);
@@ -117,6 +117,9 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
 
   const accountRef = useRef(account);
   accountRef.current = account;
+
+  const rowsRef = useRef<PositionRow[]>([]);
+  rowsRef.current = rows;
 
   const scanLimitRef = useRef(scanLimit);
   scanLimitRef.current = scanLimit;
@@ -236,6 +239,11 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
       // Scan newest position IDs downwards (e.g. 20 down to 11)
       const candidateIds = Array.from({ length: take }, (_, i) => BigInt(count - i));
 
+      const cachedRowsMap = new Map<string, PositionRow>(
+        rowsRef.current.map((r) => [r.id.toString(), r])
+      );
+      let hasPartialError = false;
+
       const openSettled = await Promise.allSettled(
         candidateIds.map((id) =>
           CLIENT.readContract({
@@ -247,80 +255,126 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
         )
       );
 
-      const activeIds: bigint[] = [];
+      const toFetchIds: bigint[] = [];
+      const preservedRowsMap = new Map<string, PositionRow>();
+
       candidateIds.forEach((id, idx) => {
         const res = openSettled[idx];
-        if (res.status === "fulfilled" && res.value) {
-          activeIds.push(id);
+        const idStr = id.toString();
+        if (res.status === "fulfilled") {
+          if (res.value) {
+            toFetchIds.push(id);
+          } else {
+            // Explicitly false: closed on chain, do not preserve
+          }
+        } else {
+          // RPC rejected: keep stale row if exists to prevent dropping active positions
+          hasPartialError = true;
+          const cached = cachedRowsMap.get(idStr);
+          if (cached) {
+            preservedRowsMap.set(idStr, cached);
+          }
         }
       });
 
       // Fetch active position details with per-item fault tolerance
-      const detailPromises = activeIds.map(async (id): Promise<PositionRow | null> => {
-        try {
-          const [pos, pnl, equity, funding, liquidatable] = await Promise.all([
-            CLIENT.readContract({
-              address: PERP_ADDRESSES.positionManager,
-              abi: POSITION_MANAGER_ABI,
-              functionName: "getPosition",
-              args: [id],
-            }) as unknown as Promise<OnChainPosition>,
-            CLIENT.readContract({
-              address: PERP_ADDRESSES.positionManager,
-              abi: POSITION_MANAGER_ABI,
-              functionName: "unrealizedPnl",
-              args: [id],
-            }),
-            CLIENT.readContract({
-              address: PERP_ADDRESSES.positionManager,
-              abi: POSITION_MANAGER_ABI,
-              functionName: "positionEquity",
-              args: [id],
-            }),
-            CLIENT.readContract({
-              address: PERP_ADDRESSES.positionManager,
-              abi: POSITION_MANAGER_ABI,
-              functionName: "fundingOwed",
-              args: [id],
-            }),
-            CLIENT.readContract({
-              address: PERP_ADDRESSES.positionManager,
-              abi: POSITION_MANAGER_ABI,
-              functionName: "isLiquidatable",
-              args: [id],
-            }),
-          ]);
+      const detailResults = await Promise.all(
+        toFetchIds.map(async (id): Promise<PositionRow | null> => {
+          try {
+            const [pos, pnl, equity, funding, liquidatable] = await Promise.all([
+              CLIENT.readContract({
+                address: PERP_ADDRESSES.positionManager,
+                abi: POSITION_MANAGER_ABI,
+                functionName: "getPosition",
+                args: [id],
+              }) as unknown as Promise<OnChainPosition>,
+              CLIENT.readContract({
+                address: PERP_ADDRESSES.positionManager,
+                abi: POSITION_MANAGER_ABI,
+                functionName: "unrealizedPnl",
+                args: [id],
+              }),
+              CLIENT.readContract({
+                address: PERP_ADDRESSES.positionManager,
+                abi: POSITION_MANAGER_ABI,
+                functionName: "positionEquity",
+                args: [id],
+              }),
+              CLIENT.readContract({
+                address: PERP_ADDRESSES.positionManager,
+                abi: POSITION_MANAGER_ABI,
+                functionName: "fundingOwed",
+                args: [id],
+              }),
+              CLIENT.readContract({
+                address: PERP_ADDRESSES.positionManager,
+                abi: POSITION_MANAGER_ABI,
+                functionName: "isLiquidatable",
+                args: [id],
+              }),
+            ]);
 
-          const math = {
-            collateralUsd: pos.collateralUsd,
-            entryPrice: pos.entryPrice,
-            leverageBps: (pos.sizeUsd * BPS_DENOMINATOR) / (pos.collateralUsd || 1n),
-            isLong: pos.isLong,
-          };
+            const math = {
+              collateralUsd: pos.collateralUsd,
+              entryPrice: pos.entryPrice,
+              leverageBps: (pos.sizeUsd * BPS_DENOMINATOR) / (pos.collateralUsd || 1n),
+              isLong: pos.isLong,
+            };
 
-          return {
-            id,
-            pos,
-            pnl,
-            equity,
-            funding,
-            marginBps:
-              pos.sizeUsd === 0n
-                ? 0n
-                : ((equity > 0n ? equity : 0n) * BPS_DENOMINATOR) / pos.sizeUsd,
-            liqPrice: liquidationPrice(math),
-            liqPriceWithFunding: liquidationPriceWithFunding(math, funding),
-            liquidatable,
-          };
-        } catch (itemErr) {
-          console.warn(`[WARN] Failed reading position #${id}:`, itemErr);
-          return null;
+            return {
+              id,
+              pos,
+              pnl,
+              equity,
+              funding,
+              marginBps:
+                pos.sizeUsd === 0n
+                  ? 0n
+                  : ((equity > 0n ? equity : 0n) * BPS_DENOMINATOR) / pos.sizeUsd,
+              liqPrice: liquidationPrice(math),
+              liqPriceWithFunding: liquidationPriceWithFunding(math, funding),
+              liquidatable,
+            };
+          } catch (itemErr) {
+            console.warn(`[WARN] Failed reading position #${id}:`, itemErr);
+            hasPartialError = true;
+            // Fall back to cached row if available
+            return cachedRowsMap.get(id.toString()) || null;
+          }
+        })
+      );
+
+      detailResults.forEach((r) => {
+        if (r) {
+          preservedRowsMap.set(r.id.toString(), r);
         }
       });
 
-      const positionResults = await Promise.all(detailPromises);
-      const validRows = positionResults.filter((r): r is PositionRow => r !== null);
-      setRows(validRows);
+      const finalRows: PositionRow[] = [];
+      for (const id of candidateIds) {
+        const row = preservedRowsMap.get(id.toString());
+        if (row) {
+          finalRows.push(row);
+        }
+      }
+      setRows(finalRows);
+
+      if (hasPartialError && finalRows.length > 0) {
+        setFeedback((prev) =>
+          prev === null
+            ? {
+                type: "warn",
+                msg: "部分持仓链上数据读取超时，已展示缓存数据；正在自动重试",
+              }
+            : prev
+        );
+      } else if (!hasPartialError) {
+        setFeedback((prev) =>
+          prev?.type === "warn" && prev.msg.includes("部分持仓链上数据读取超时")
+            ? null
+            : prev
+        );
+      }
     } catch (scanErr) {
       console.warn("[WARN] Position lazy scan error:", scanErr);
     }
@@ -482,11 +536,15 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
           className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${
             feedback.type === "success"
               ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
+              : feedback.type === "warn"
+              ? "border-purple-500/40 bg-purple-500/10 text-purple-200"
               : "border-rose-500/40 bg-rose-500/10 text-rose-200"
           }`}
         >
           {feedback.type === "success" ? (
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : feedback.type === "warn" ? (
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
           ) : (
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
           )}
