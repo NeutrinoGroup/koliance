@@ -60,6 +60,16 @@ type alpacaBarsPage struct {
 	NextPageToken string                 `json:"next_page_token"`
 }
 
+// SymbolBarsDTO models real historical bars for a symbol from Alpaca.
+type SymbolBarsDTO struct {
+	Symbol     string    `json:"symbol"`
+	Timeframe  string    `json:"timeframe"`
+	Timestamps []int64   `json:"timestamps"`
+	Closes     []float64 `json:"closes"`
+	Source     string    `json:"source"`
+	Synthetic  bool      `json:"synthetic"`
+}
+
 // PriceOracle reads real Alpaca daily bars and derives the numbers the market
 // page needs: latest price and change over the most recent session.
 type PriceOracle struct {
@@ -376,4 +386,97 @@ func round2(v float64) float64 {
 
 func round4(v float64) float64 {
 	return math.Round(v*10000) / 10000
+}
+
+// mapRangeToAlpacaParams maps requested timeframe range to Alpaca /v2/stocks/bars query parameters.
+func mapRangeToAlpacaParams(rangeParam string) (timeframe string, start string, limit int) {
+	now := time.Now().UTC()
+	switch strings.ToLower(strings.TrimSpace(rangeParam)) {
+	case "1d":
+		// 15-minute intraday bars over the last 3 days to guarantee coverage across weekends/holidays.
+		return "15Min", now.AddDate(0, 0, -3).Format("2006-01-02"), 100
+	case "5d":
+		// 1-hour bars over the last 7 days.
+		return "1Hour", now.AddDate(0, 0, -7).Format("2006-01-02"), 100
+	case "1y":
+		// Daily bars over the last 370 days.
+		return "1Day", now.AddDate(-1, 0, -5).Format("2006-01-02"), 365
+	case "1mo", "":
+		fallthrough
+	default:
+		// Daily bars over the last 35 days (1 month).
+		return "1Day", now.AddDate(0, -1, -5).Format("2006-01-02"), 50
+	}
+}
+
+// GetBars queries Alpaca for real historical bars of a symbol across the requested range.
+func (p *PriceOracle) GetBars(ctx context.Context, symbol, rangeParam string) (*SymbolBarsDTO, error) {
+	if !p.Configured() {
+		return nil, ErrAlpacaCredentialsMissing
+	}
+	sym := strings.ToUpper(strings.TrimSpace(symbol))
+	if sym == "" {
+		return nil, fmt.Errorf("%w: empty symbol", ErrNoMarketData)
+	}
+
+	timeframe, startWindow, limit := mapRangeToAlpacaParams(rangeParam)
+
+	q := url.Values{}
+	q.Set("symbols", sym)
+	q.Set("timeframe", timeframe)
+	q.Set("limit", strconv.Itoa(limit))
+	q.Set("sort", "asc")
+	q.Set("feed", p.feed)
+	q.Set("start", startWindow)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/v2/stocks/bars?"+q.Encode(), nil)
+	if err != nil {
+		return nil, fmt.Errorf("market: build bars request: %w", err)
+	}
+	req.Header.Set("APCA-API-KEY-ID", p.keyID)
+	req.Header.Set("APCA-API-SECRET-KEY", p.secretKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := p.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("market: alpaca bars: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		return nil, fmt.Errorf("market: alpaca bars status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+	}
+
+	var page alpacaBarsPage
+	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
+		return nil, fmt.Errorf("market: decode alpaca bars: %w", err)
+	}
+
+	var rawBars []AlpacaBar
+	for k, v := range page.Bars {
+		if strings.EqualFold(k, sym) {
+			rawBars = v
+			break
+		}
+	}
+	if len(rawBars) == 0 {
+		return nil, fmt.Errorf("%w: %s", ErrNoMarketData, sym)
+	}
+
+	timestamps := make([]int64, len(rawBars))
+	closes := make([]float64, len(rawBars))
+	for i, b := range rawBars {
+		timestamps[i] = b.T.Unix()
+		closes[i] = round2(b.C)
+	}
+
+	return &SymbolBarsDTO{
+		Symbol:     sym,
+		Timeframe:  timeframe,
+		Timestamps: timestamps,
+		Closes:     closes,
+		Source:     SourceAlpacaBars,
+		Synthetic:  false,
+	}, nil
 }

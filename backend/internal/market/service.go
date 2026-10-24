@@ -207,3 +207,7 @@ func (s *Service) ClosePosition(ctx context.Context, symbol string) error {
 func (s *Service) GetPrice(ctx context.Context, symbol string) (*PythPriceData, error) {
 	return s.oracle.LatestPrice(ctx, symbol)
 }
+
+func (s *Service) GetBars(ctx context.Context, symbol, rangeParam string) (*SymbolBarsDTO, error) {
+	return s.oracle.GetBars(ctx, symbol, rangeParam)
+}

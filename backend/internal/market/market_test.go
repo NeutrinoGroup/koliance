@@ -777,3 +777,68 @@ func TestPriceChangeHonoursContextCancellation(t *testing.T) {
 		t.Errorf("call took %v to notice cancellation", elapsed)
 	}
 }
+
+func TestGetBarsReturnsRealBarsAcrossRanges(t *testing.T) {
+	var requestedURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestedURL = r.URL.String()
+		_, _ = w.Write([]byte(`{
+			"bars": {
+				"NVDA": [
+					{"t": "2026-10-23T14:30:00Z", "c": 210.50},
+					{"t": "2026-10-23T15:30:00Z", "c": 212.75}
+				]
+			}
+		}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	o := newStubOracle(t, srv, []string{"NVDA"})
+	bars, err := o.GetBars(context.Background(), "NVDA", "1d")
+	if err != nil {
+		t.Fatalf("GetBars: %v", err)
+	}
+
+	if bars.Symbol != "NVDA" {
+		t.Errorf("Symbol = %q, want NVDA", bars.Symbol)
+	}
+	if len(bars.Closes) != 2 || len(bars.Timestamps) != 2 {
+		t.Fatalf("len(Closes)=%d, len(Timestamps)=%d, want 2", len(bars.Closes), len(bars.Timestamps))
+	}
+	if bars.Closes[0] != 210.50 || bars.Closes[1] != 212.75 {
+		t.Errorf("Closes = %v, want [210.50, 212.75]", bars.Closes)
+	}
+	if bars.Source != SourceAlpacaBars {
+		t.Errorf("Source = %q, want %q", bars.Source, SourceAlpacaBars)
+	}
+	if bars.Synthetic {
+		t.Error("bars must not be marked synthetic")
+	}
+	if !strings.Contains(requestedURL, "timeframe=15Min") {
+		t.Errorf("query %q should contain timeframe=15Min for 1d range", requestedURL)
+	}
+	if !strings.Contains(requestedURL, "sort=asc") {
+		t.Errorf("query %q should contain sort=asc for chronologically ordered bars", requestedURL)
+	}
+}
+
+func TestGetBarsReportsNoMarketDataOnEmpty(t *testing.T) {
+	srv := alpacaStub(t, `{"bars":{}}`, http.StatusOK, nil)
+	o := newStubOracle(t, srv, []string{"NVDA"})
+
+	_, err := o.GetBars(context.Background(), "NVDA", "1mo")
+	if err == nil {
+		t.Fatal("expected ErrNoMarketData on empty bars")
+	}
+	if !errors.Is(err, ErrNoMarketData) {
+		t.Errorf("err = %v, want ErrNoMarketData", err)
+	}
+}
+
+func TestGetBarsRequiresCredentials(t *testing.T) {
+	o := NewPriceOracle("", "")
+	_, err := o.GetBars(context.Background(), "NVDA", "1mo")
+	if !errors.Is(err, ErrAlpacaCredentialsMissing) {
+		t.Errorf("err = %v, want ErrAlpacaCredentialsMissing", err)
+	}
+}

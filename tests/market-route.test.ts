@@ -313,6 +313,30 @@ describe("market route — relays real data or refuses, never generates", () => 
       expect(numbersIn(body.chart)).toEqual([]);
     });
 
+    it("relays real bars to chart when backend supplies them", async () => {
+      vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/v1/market/bars")) {
+          return Promise.resolve(
+            jsonResponse(200, {
+              symbol: "NVDA",
+              timeframe: "1Day",
+              timestamps: [1728500000, 1728600000],
+              closes: [180.5, 185.2],
+              source: "alpaca_daily_bars",
+              synthetic: false,
+            })
+          ) as unknown as Promise<Response>;
+        }
+        return Promise.resolve(jsonResponse(200, backendRow())) as unknown as Promise<Response>;
+      });
+
+      const body = await (await GET(req("NVDA"))).json();
+      expect(body.chart.closes).toEqual([180.5, 185.2]);
+      expect(body.chart.timestamps).toEqual([1728500000, 1728600000]);
+      expect(body.analysis.available).toBe(true);
+    });
+
     it("describes the missing series instead of implying one is loading", async () => {
       const body = await (await GET(req("NVDA"))).json();
 

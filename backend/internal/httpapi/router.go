@@ -479,6 +479,30 @@ func NewRouter(d Deps) http.Handler {
 		jsonResponse(w, http.StatusOK, prices)
 	})))
 
+	h("/api/v1/market/bars", methodOnly(http.MethodGet, marketData(func(w http.ResponseWriter, r *http.Request) {
+		symbol := r.URL.Query().Get("symbol")
+		if symbol == "" {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("market: symbol is required"))
+			return
+		}
+		sym, err := normalizeSymbol(symbol)
+		if err != nil {
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			return
+		}
+		rangeParam := r.URL.Query().Get("range")
+		bars, err := d.Market.GetBars(r.Context(), sym, rangeParam)
+		if err != nil {
+			if errors.Is(err, market.ErrNoMarketData) {
+				writeError(w, r, http.StatusNotFound, CodeResourceNotFound, err)
+				return
+			}
+			writeError(w, r, http.StatusBadGateway, CodeUpstreamUnavailable, err)
+			return
+		}
+		jsonResponse(w, http.StatusOK, bars)
+	})))
+
 	// Issue #16: 标的涨跌幅排行, computed from the last two daily bars of each
 	// tracked instrument. An upstream failure is a 502, never an empty board —
 	// "we could not ask" and "nothing moved" must not look alike.

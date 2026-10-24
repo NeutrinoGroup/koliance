@@ -90,6 +90,7 @@ var qaRouteInventory = []qaRouteExpectation{
 	// outcome is deterministic ("unreachable"), not whatever the network answers.
 	{http.MethodGet, "/api/v1/market/prices", "", "", 502, "unguarded: PriceOracle over the Alpaca data API; the upstream is unreachable here, and a 502 from an unguarded route proves the DB gate is not on it"},
 	{http.MethodGet, "/api/v1/market/movers", "", "", 502, "unguarded: same upstream, same 502 (this is the endpoint whose loudness market_edge_qa_test.go relies on)"},
+	{http.MethodGet, "/api/v1/market/bars?symbol=NVDA", "", "", 502, "unguarded: same upstream, same 502"},
 	{http.MethodGet, "/api/v1/market/overview", "", "", 500, "unguarded: Alpaca is the source; 500 (not 502) is this handler's own inconsistency, recorded in market_edge_qa_test.go"},
 
 	// ---- persists through the DB handle: must refuse with 503 ----

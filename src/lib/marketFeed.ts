@@ -40,7 +40,7 @@ export type { MarketFetchReason };
  * with tests.
  */
 export interface MarketAnalysis {
-  available: false;
+  available: boolean;
   reason: string;
 }
 
@@ -122,7 +122,11 @@ export const NO_SERIES_NOTE =
  * nothing and the UI says why. If a series endpoint is added later it comes
  * through here verbatim — no smoothing, no back-fill.
  */
-export function buildSymbolPayload(row: MarketPriceRow): SymbolPayload {
+export function buildSymbolPayload(
+  row: MarketPriceRow,
+  bars?: { timestamps: number[]; closes: number[] }
+): SymbolPayload {
+  const hasSeries = Boolean(bars && Array.isArray(bars.closes) && bars.closes.length >= 2);
   return {
     source: row.source || "unknown",
     synthetic: row.synthetic === true,
@@ -150,8 +154,12 @@ export function buildSymbolPayload(row: MarketPriceRow): SymbolPayload {
       marketCap: null,
       peRatio: null,
     },
-    chart: { timestamps: [], closes: [] },
-    analysis: unavailableAnalysis(NO_SERIES_NOTE),
+    chart: hasSeries
+      ? { timestamps: bars!.timestamps, closes: bars!.closes }
+      : { timestamps: [], closes: [] },
+    analysis: hasSeries
+      ? { available: true, reason: "Real market data series (Alpaca)." }
+      : unavailableAnalysis(NO_SERIES_NOTE),
   };
 }
 

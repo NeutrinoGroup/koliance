@@ -166,7 +166,30 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const payload: SymbolPayload = buildSymbolPayload(row as Parameters<typeof buildSymbolPayload>[0]);
+  let bars: { timestamps: number[]; closes: number[] } | undefined;
+  try {
+    const barsRes = await fetch(
+      `${GO_BACKEND_URL}/api/v1/market/bars?symbol=${encodeURIComponent(symbol)}&range=${encodeURIComponent(range)}`,
+      { cache: "no-store" }
+    );
+    if (barsRes.ok) {
+      const barsData = await barsRes.json();
+      if (
+        barsData &&
+        Array.isArray(barsData.timestamps) &&
+        Array.isArray(barsData.closes)
+      ) {
+        bars = {
+          timestamps: barsData.timestamps,
+          closes: barsData.closes,
+        };
+      }
+    }
+  } catch {
+    // If bars endpoint is unreachable or fails, degrade gracefully without synthetic data.
+  }
+
+  const payload: SymbolPayload = buildSymbolPayload(row as Parameters<typeof buildSymbolPayload>[0], bars);
   return NextResponse.json(
     { ...payload, requestedRange: range, requestedInterval: interval },
     { status: 200 }

@@ -328,6 +328,7 @@ func TestMarketReadEndpointsRefuseWithoutCredentials(t *testing.T) {
 		"/api/v1/market/overview",
 		"/api/v1/market/prices",
 		"/api/v1/market/movers",
+		"/api/v1/market/bars",
 	} {
 		rr := do(h, http.MethodGet, path, "", nil)
 		if rr.Code != http.StatusServiceUnavailable {

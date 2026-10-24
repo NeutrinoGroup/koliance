@@ -252,12 +252,12 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
    * Fetches the selected symbol's quote from the server route, which relays the
    * gateway's answer. A non-2xx answer is a refusal and is displayed as one.
    */
-  const fetchMarketData = useCallback(async (sym: string) => {
+  const fetchMarketData = useCallback(async (sym: string, range: string = selectedRange) => {
     setLoading(true);
     setSearchError(null);
     setQuoteFailure(null);
     try {
-      const res = await fetch(`/api/market?symbol=${encodeURIComponent(sym)}&range=1mo`);
+      const res = await fetch(`/api/market?symbol=${encodeURIComponent(sym)}&range=${encodeURIComponent(range)}`);
       const json = await res.json();
       if (!res.ok) {
         setMarketData(null);
@@ -282,11 +282,11 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [selectedRange]);
 
   useEffect(() => {
-    fetchMarketData(selectedSymbol);
-  }, [selectedSymbol, fetchMarketData]);
+    fetchMarketData(selectedSymbol, selectedRange);
+  }, [selectedSymbol, selectedRange, fetchMarketData]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -603,17 +603,20 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               </div>
             </div>
 
-            <div className="flex items-center gap-1 bg-[#0d1017] p-1 rounded-xl border border-white/[0.08]">
+            <div className="flex items-center gap-1 bg-[#0d1017] p-1 rounded-lg border border-white/[0.08]">
               {["1d", "5d", "1mo", "1y"].map((r) => (
                 <button
                   key={r}
-                  onClick={() => setSelectedRange(r)}
+                  onClick={() => {
+                    setSelectedRange(r);
+                    fetchMarketData(selectedSymbol, r);
+                  }}
                   title={
-                    selectedRange === r
-                      ? "该区间的序列需后端提供历史序列端点；当前仅返回最新价与前收两个观测点。"
-                      : undefined
+                    selectedRange === r && (!marketData?.chart.closes || marketData.chart.closes.length < 2)
+                      ? "该区间的序列需上游提供历史序列；当前上游仅返回最新价与前收。"
+                      : `切换至 ${r.toUpperCase()} 真实时序走势`
                   }
-                  className={`px-3 py-1 rounded-lg text-xs font-mono transition ${
+                  className={`px-3 py-1 rounded-md text-xs font-mono transition ${
                     selectedRange === r ? "bg-white text-black font-bold" : "text-slate-400 hover:text-white"
                   }`}
                 >
