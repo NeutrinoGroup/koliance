@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -183,42 +184,87 @@ func (p *PriceOracle) PriceChange(ctx context.Context, symbols []string) ([]Inst
 		return nil, fmt.Errorf("market: no symbols requested and none configured")
 	}
 
+	limit := 2
+	if len(want) > 2 {
+		limit = 100
+	}
+
+	// Calculate a 7-day lookback window start date (YYYY-MM-DD).
+	// Alpaca /v2/stocks/bars defaults start to 00:00:00 UTC of today if omitted,
+	// which returns empty bars on weekends (Saturday, Sunday) and holidays.
+	// Providing a 7-day start window guarantees that the latest sessions
+	// (e.g. Friday and Thursday close) are always returned regardless of weekday/weekend.
+	startWindow := time.Now().UTC().AddDate(0, 0, -7).Format("2006-01-02")
+
 	q := url.Values{}
 	q.Set("symbols", strings.Join(want, ","))
 	q.Set("timeframe", "1Day")
-	q.Set("limit", "2")
+	q.Set("limit", strconv.Itoa(limit))
 	q.Set("sort", "desc")
 	q.Set("feed", p.feed)
+	q.Set("start", startWindow)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/v2/stocks/bars?"+q.Encode(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("market: build bars request: %w", err)
-	}
-	req.Header.Set("APCA-API-KEY-ID", p.keyID)
-	req.Header.Set("APCA-API-SECRET-KEY", p.secretKey)
-	req.Header.Set("Accept", "application/json")
+	allBars := make(map[string][]AlpacaBar)
+	pageToken := ""
 
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("market: alpaca bars: %w", err)
-	}
-	defer resp.Body.Close()
+	// Page up to 3 times if Alpaca paginated and some requested symbols are still missing bars
+	for pageIdx := 0; pageIdx < 3; pageIdx++ {
+		if pageToken != "" {
+			q.Set("page_token", pageToken)
+		} else {
+			q.Del("page_token")
+		}
 
-	if resp.StatusCode != http.StatusOK {
-		raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return nil, fmt.Errorf("market: alpaca bars status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
-	}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/v2/stocks/bars?"+q.Encode(), nil)
+		if err != nil {
+			return nil, fmt.Errorf("market: build bars request: %w", err)
+		}
+		req.Header.Set("APCA-API-KEY-ID", p.keyID)
+		req.Header.Set("APCA-API-SECRET-KEY", p.secretKey)
+		req.Header.Set("Accept", "application/json")
 
-	var page alpacaBarsPage
-	if err := json.NewDecoder(resp.Body).Decode(&page); err != nil {
-		return nil, fmt.Errorf("market: decode alpaca bars: %w", err)
+		resp, err := p.httpClient.Do(req)
+		if err != nil {
+			return nil, fmt.Errorf("market: alpaca bars: %w", err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			raw, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			resp.Body.Close()
+			return nil, fmt.Errorf("market: alpaca bars status %d: %s", resp.StatusCode, strings.TrimSpace(string(raw)))
+		}
+
+		var page alpacaBarsPage
+		decodeErr := json.NewDecoder(resp.Body).Decode(&page)
+		resp.Body.Close()
+		if decodeErr != nil {
+			return nil, fmt.Errorf("market: decode alpaca bars: %w", decodeErr)
+		}
+
+		for k, bars := range page.Bars {
+			allBars[strings.ToUpper(k)] = append(allBars[strings.ToUpper(k)], bars...)
+		}
+
+		// Check if we already have bars for all requested symbols
+		allFound := true
+		for _, sym := range want {
+			if len(allBars[strings.ToUpper(sym)]) < 2 {
+				allFound = false
+				break
+			}
+		}
+
+		if allFound || page.NextPageToken == "" {
+			break
+		}
+		pageToken = page.NextPageToken
 	}
 
 	out := make([]InstrumentChange, 0, len(want))
 	for _, sym := range want {
 		// A symbol with no bars is reported as unranked rather than dropped, so
 		// "we asked and got nothing" stays distinguishable from "we did not ask".
-		out = append(out, changeForSymbol(strings.ToUpper(sym), page.Bars[strings.ToUpper(sym)]))
+		out = append(out, changeForSymbol(strings.ToUpper(sym), allBars[strings.ToUpper(sym)]))
 	}
 	return out, nil
 }

@@ -3,13 +3,14 @@ import {
   createWalletClient,
   custom,
   defineChain,
+  fallback,
   http,
   type Chain,
   type PublicClient,
   type WalletClient,
 } from "viem";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
-import { monadTestnet } from "@/lib/contract";
+import { monadTestnet, monadRpcTransport } from "@/lib/contract";
 
 /**
  * Which chain the perp module (/perp, PositionPanel, DemoControlPanel) talks to.
@@ -49,11 +50,28 @@ export function perpTxUrl(hash: string): string | null {
   return `${monadTestnet.blockExplorers.default.url}/tx/${hash}`;
 }
 
-/** Read client. Multicall batching only where a multicall3 contract exists. */
+/** Read client. Uses resilient fallback transport across Monad endpoints with automatic retries and timeouts. */
 export function createPerpPublicClient(): PublicClient {
+  const transport = PERP_IS_LOCAL
+    ? http(PERP_RPC_URL, { timeout: 10_000, retryCount: 2, batch: true })
+    : process.env.NEXT_PUBLIC_PERP_RPC_URL
+    ? fallback(
+        [
+          http(process.env.NEXT_PUBLIC_PERP_RPC_URL, {
+            timeout: 10_000,
+            retryCount: 3,
+            retryDelay: 500,
+            batch: true,
+          }),
+          monadRpcTransport({ timeout: 10_000, retryCount: 3, batch: true }),
+        ],
+        { rank: false }
+      )
+    : monadRpcTransport({ timeout: 10_000, retryCount: 3, batch: true });
+
   return createPublicClient({
     chain: perpChain,
-    transport: http(PERP_RPC_URL, { batch: true }),
+    transport,
     batch: { multicall: !PERP_IS_LOCAL },
   }) as PublicClient;
 }

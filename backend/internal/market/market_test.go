@@ -261,6 +261,82 @@ func TestPriceOracleDerivesChangeFromTwoDailyBars(t *testing.T) {
 	}
 }
 
+// TestPriceOracleLookbackWindowAndPagination asserts that PriceChange passes
+// a 7-day start window parameter (protecting weekend and holiday requests from
+// 0-bar empty sets) and follows upstream NextPageTokens to assemble multi-symbol bars.
+func TestPriceOracleLookbackWindowAndPagination(t *testing.T) {
+	page1 := `{"bars":{
+		"NVDA":[
+			{"t":"2026-10-23T04:00:00Z","c":210.0},
+			{"t":"2026-10-22T04:00:00Z","c":200.0}
+		]
+	},"next_page_token":"token_page_2"}`
+
+	page2 := `{"bars":{
+		"AAPL":[
+			{"t":"2026-10-23T04:00:00Z","c":350.0},
+			{"t":"2026-10-22T04:00:00Z","c":340.0}
+		]
+	},"next_page_token":""}`
+
+	var requests []string
+	callCount := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests = append(requests, r.URL.RawQuery)
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		if callCount == 1 {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(page1))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(page2))
+	}))
+	defer srv.Close()
+
+	o := newStubOracle(t, srv, []string{"NVDA", "AAPL"})
+	changes, err := o.PriceChange(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("PriceChange error: %v", err)
+	}
+	if len(changes) != 2 {
+		t.Fatalf("got %d changes, want 2", len(changes))
+	}
+
+	if len(requests) != 2 {
+		t.Fatalf("got %d upstream requests, want 2 pages", len(requests))
+	}
+
+	// First request must supply start window and symbols
+	req1 := requests[0]
+	if !strings.Contains(req1, "start=") {
+		t.Errorf("request 1 query %q missing start parameter", req1)
+	}
+	expectedStart := time.Now().UTC().AddDate(0, 0, -7).Format("2006-01-02")
+	if !strings.Contains(req1, "start="+expectedStart) {
+		t.Errorf("request 1 start parameter mismatch, got %q, want %q", req1, expectedStart)
+	}
+
+	// Second request must include page_token
+	req2 := requests[1]
+	if !strings.Contains(req2, "page_token=token_page_2") {
+		t.Errorf("request 2 query %q missing page_token", req2)
+	}
+
+	bySym := map[string]InstrumentChange{}
+	for _, c := range changes {
+		bySym[c.Symbol] = c
+	}
+
+	if bySym["NVDA"].Price != 210.0 || bySym["NVDA"].PreviousClose != 200.0 {
+		t.Errorf("NVDA prices incorrect: %+v", bySym["NVDA"])
+	}
+	if bySym["AAPL"].Price != 350.0 || bySym["AAPL"].PreviousClose != 340.0 {
+		t.Errorf("AAPL prices incorrect: %+v", bySym["AAPL"])
+	}
+}
+
 // The two ends of the subtraction must come from the same snapshot. A payload
 // that arrives in ascending order must not produce a sign-flipped change, and
 // an instrument with a single bar has an unknown change, not a zero one.
