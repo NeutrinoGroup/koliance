@@ -22,8 +22,8 @@ describe("GAP-83 Real-time IM Chat Page & Login Area Entry Icon", () => {
     const navAuthContent = readFileSync(navAuthPath, "utf-8");
     // Verifies href="/im" is present
     expect(navAuthContent).toContain('href="/im"');
-    // Verifies MessageSquare icon is used
-    expect(navAuthContent).toContain("<MessageSquare");
+    // Verifies MessagesSquare icon is used
+    expect(navAuthContent).toContain("<MessagesSquare");
     // Verifies active pathname check is present
     expect(navAuthContent).toContain('pathname === "/im"');
     // Verifies dropdown also links to /im

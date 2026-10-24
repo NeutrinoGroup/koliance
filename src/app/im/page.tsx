@@ -11,7 +11,7 @@ import {
   playCelebrationAudio,
 } from "@/components/RewardCelebrationModal";
 import {
-  MessageSquare,
+  MessagesSquare,
   Send,
   Image as ImageIcon,
   ExternalLink,
@@ -608,7 +608,7 @@ export default function ImPage() {
         <div className="flex flex-wrap items-center justify-between gap-3 mb-4 px-1">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-md bg-[#2b2d31] border border-[#3e4147] text-zinc-300 flex items-center justify-center">
-              <MessageSquare className="w-4 h-4" />
+              <MessagesSquare className="w-4 h-4" />
             </div>
             <div>
               <div className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
@@ -1156,7 +1156,7 @@ export default function ImPage() {
                 <div ref={chatScrollContainerRef} className="flex-1 p-4 overflow-y-auto space-y-3">
                   {messages.length === 0 ? (
                     <div className="h-full flex flex-col items-center justify-center text-center text-zinc-400 space-y-2">
-                      <MessageSquare className="w-10 h-10 text-zinc-500 opacity-60" />
+                      <MessagesSquare className="w-10 h-10 text-zinc-500 opacity-60" />
                       <div className="text-xs font-sans text-zinc-300">
                         暂无会话记录，向 {selectedPeer.friend_name} 发送第一条打招呼消息吧
                       </div>
@@ -1393,7 +1393,7 @@ export default function ImPage() {
               /* No Peer Selected or Guest State */
               <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4">
                 <div className="w-14 h-14 rounded-lg bg-[#2b2d31] border border-[#3e4147] text-zinc-300 flex items-center justify-center">
-                  <MessageSquare className="w-7 h-7" />
+                  <MessagesSquare className="w-7 h-7" />
                 </div>
                 <div className="space-y-1 max-w-md">
                   <div className="text-base font-bold text-zinc-100 font-mono">

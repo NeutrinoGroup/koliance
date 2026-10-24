@@ -20,7 +20,7 @@ import {
   Copy,
   Link2,
   Coins,
-  MessageSquare,
+  MessagesSquare,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
@@ -425,7 +425,7 @@ export function NavAuthBadges({
         }`}
         title="实时IM消息与通讯录 (Real-time IM Chat)"
       >
-        <MessageSquare className="w-4 h-4" />
+        <MessagesSquare className="w-4 h-4" />
         <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-sm bg-blue-500 border border-[#18191c] pointer-events-none" />
       </Link>
 
@@ -550,7 +550,7 @@ export function NavAuthBadges({
                   onClick={() => setDropdownOpen(false)}
                   className="w-full py-1.5 px-2.5 rounded-md bg-[#232529] hover:bg-[#2b2d31] border border-[#3e4147] text-zinc-200 hover:text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1.5 shadow-sm active:scale-95 cursor-pointer"
                 >
-                  <MessageSquare className="w-3.5 h-3.5 text-blue-400" />
+                  <MessagesSquare className="w-3.5 h-3.5 text-blue-400" />
                   <span>实时IM消息与通讯录</span>
                   <span className="text-[9px] px-1 py-0.2 rounded-sm bg-blue-600/20 text-blue-300 font-mono">
                     [OPEN]
@@ -663,7 +663,7 @@ export function NavAuthBadges({
                         onClick={() => setDropdownOpen(false)}
                         className="py-1.5 px-2 rounded-md bg-[#232529] hover:bg-[#2b2d31] border border-[#3e4147] text-zinc-200 hover:text-white text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-sm active:scale-95 cursor-pointer"
                       >
-                        <MessageSquare className="w-3 h-3 text-blue-400" />
+                        <MessagesSquare className="w-3 h-3 text-blue-400" />
                         <span>好友与IM消息</span>
                       </Link>
                       <button
