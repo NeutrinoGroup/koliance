@@ -106,10 +106,11 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
   const [scanLimit, setScanLimit] = useState(10);
   const [pending, setPending] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{
-    type: "success" | "error" | "warn";
+    type: "success" | "error";
     msg: string;
     txHash?: string;
   } | null>(null);
+  const [readWarning, setReadWarning] = useState<string | null>(null);
 
   const [collateral, setCollateral] = useState("100");
   const [leverageX, setLeverageX] = useState(10);
@@ -360,20 +361,9 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
       setRows(finalRows);
 
       if (hasPartialError && finalRows.length > 0) {
-        setFeedback((prev) =>
-          prev === null
-            ? {
-                type: "warn",
-                msg: "部分持仓链上数据读取超时，已展示缓存数据；正在自动重试",
-              }
-            : prev
-        );
-      } else if (!hasPartialError) {
-        setFeedback((prev) =>
-          prev?.type === "warn" && prev.msg.includes("部分持仓链上数据读取超时")
-            ? null
-            : prev
-        );
+        setReadWarning("部分持仓链上数据读取超时，已展示缓存数据；正在自动重试");
+      } else {
+        setReadWarning(null);
       }
     } catch (scanErr) {
       console.warn("[WARN] Position lazy scan error:", scanErr);
@@ -531,22 +521,25 @@ export function PositionPanel({ account }: { account: `0x${string}` | null }) {
         ))}
       </div>
 
+      {readWarning && (
+        <div className="flex items-start gap-2 rounded-lg border border-purple-500/40 bg-purple-500/10 p-3 text-sm text-purple-200">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
+          <div>{readWarning}</div>
+        </div>
+      )}
+
       {feedback && (
         <div
           className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${
             feedback.type === "success"
               ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-              : feedback.type === "warn"
-              ? "border-purple-500/40 bg-purple-500/10 text-purple-200"
               : "border-rose-500/40 bg-rose-500/10 text-rose-200"
           }`}
         >
           {feedback.type === "success" ? (
             <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-          ) : feedback.type === "warn" ? (
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-purple-400" />
           ) : (
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
           )}
           <div className="min-w-0">
             <div>{feedback.msg}</div>
