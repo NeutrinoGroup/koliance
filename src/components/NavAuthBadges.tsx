@@ -23,6 +23,8 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { createPublicClient, formatEther } from "viem";
 import { GOOGLE_CLIENT_ID, OAUTH_REDIRECT_URI } from "@/lib/authConfig";
 import { EditProfileModal, UserProfileData } from "@/components/EditProfileModal";
@@ -126,6 +128,7 @@ export function NavAuthBadges({
   } = useKolianceAuth();
   const { state, unlink, signOut } = useKolianceAccount();
   const { lang, t } = useLanguage();
+  const pathname = usePathname();
 
   /**
    * Issue #30. A wallet click has two different meanings and they must not be
@@ -417,20 +420,19 @@ export function NavAuthBadges({
 
   return (
     <div className="relative flex items-center gap-1.5">
-      {/* Top Bar Direct IM & Contacts Shortcut Button */}
-      {(identity || effectiveWallet) && (
-        <button
-          type="button"
-          onClick={() => {
-            setTransferCurrency("KOL");
-            setTransferModalOpen(true);
-          }}
-          className="flex items-center justify-center w-8 h-8 rounded-md bg-[#141824] hover:bg-[#1a2032] border border-white/20 hover:border-cyan-400 text-slate-300 hover:text-[#00f2fe] transition-all shadow-md active:scale-95 cursor-pointer"
-          title="好友通讯录与IM聊天 (Contacts & Direct Chat)"
-        >
-          <MessageSquare className="w-4 h-4" />
-        </button>
-      )}
+      {/* Top Bar Direct IM & Contacts Shortcut Button (Always visible at login area) */}
+      <Link
+        href="/im"
+        className={`relative flex items-center justify-center w-8 h-8 rounded-md transition-all shadow-md active:scale-95 cursor-pointer ${
+          pathname === "/im"
+            ? "border border-[#00f2fe] bg-[#162035] text-[#00f2fe] shadow-[0_0_12px_rgba(0,242,254,0.35)]"
+            : "border border-white/20 hover:border-[#00f2fe]/60 bg-[#141824] hover:bg-[#1a2032] text-slate-300 hover:text-[#00f2fe]"
+        }`}
+        title="实时IM消息与通讯录 (Real-time IM Chat)"
+      >
+        <MessageSquare className="w-4 h-4" />
+        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-sm bg-[#00f2fe] animate-pulse pointer-events-none" />
+      </Link>
 
       {/* Top-Right Account Button (Solid, 100% Opaque High-End Tech Dark) */}
       <button
@@ -648,16 +650,14 @@ export function NavAuthBadges({
                     </div>
 
                     <div className="grid grid-cols-2 gap-1.5 pt-1">
-                      <button
-                        onClick={() => {
-                          setDropdownOpen(false);
-                          setTransferModalOpen(true);
-                        }}
+                      <Link
+                        href="/im"
+                        onClick={() => setDropdownOpen(false)}
                         className="py-1.5 px-2 rounded-md bg-[#162035] hover:bg-[#1f2d4a] border border-[#00f2fe]/40 text-[#00f2fe] text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 cursor-pointer"
                       >
                         <MessageSquare className="w-3 h-3 text-[#00f2fe]" />
                         <span>好友与IM消息</span>
-                      </button>
+                      </Link>
                       <button
                         onClick={() => {
                           setDropdownOpen(false);
