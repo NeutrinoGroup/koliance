@@ -76,6 +76,8 @@ var qaRouteInventory = []qaRouteExpectation{
 	// ---- no database needed, refused on other grounds ----
 	{http.MethodGet, "/api/v1/agentcard/cards/cX", "", "", 401, "unguarded: credential checked before any store is touched"},
 	{http.MethodPost, "/api/v1/agentcard/session-key", `{}`, "", 401, "unguarded: credential checked first; the guard is in-memory"},
+	{http.MethodPost, "/api/v1/agentcard/freeze", `{}`, "", 400, "unguarded: keyHex is required"},
+	{http.MethodPost, "/api/v1/agentcard/revoke", `{}`, "", 400, "unguarded: keyHex is required"},
 	{http.MethodPost, "/api/v1/market/close", `{"symbol":"nv da"}`, "Bearer " + opToken, 400, "unguarded: Alpaca is the book of record"},
 	{http.MethodPost, "/api/v1/stripe/checkout-session", `{"amountCents":-500}`, "", 400, "unguarded: Stripe's API is the store"},
 	{http.MethodPost, "/api/v1/stripe/customer", `{}`, "", 401, "unguarded: operator-gated, Stripe-backed"},

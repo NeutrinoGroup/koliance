@@ -21,8 +21,8 @@
 
 <!-- CI / CD & Quality -->
 [![CI Pipeline](https://github.com/moonhotline/koliance/actions/workflows/ci.yml/badge.svg)](https://github.com/moonhotline/koliance/actions/workflows/ci.yml)
-[![Hardhat Coverage](https://img.shields.io/badge/Contracts_Coverage-90.12%25-brightgreen.svg)](contracts/coverage)
-[![Frontend Suite](https://img.shields.io/badge/Vitest_Tests-76%2F76_Passing-brightgreen.svg)](tests/)
+[![Contracts Floor](https://img.shields.io/badge/Contracts_Coverage-88%25_CI_Floor-brightgreen.svg)](contracts/scripts/check-coverage.ts)
+[![Frontend Suite](https://img.shields.io/badge/Vitest_Tests-389%20Passing-brightgreen.svg)](tests/)
 [![Security Scan](https://img.shields.io/badge/Security-Gitleaks_Passed-2ea44f.svg)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -151,12 +151,12 @@ flowchart TB
         CardEngine["AgentCard Generation & Luhn Validation"]
         SteamEngine["Steam OpenID 2.0 Cryptographic Verifier"]
         MarketEngine["Alpaca Engine & Pyth Hermes Relayer"]
-        StripeEngine["Stripe Connect & Checkout Service"]
+        StripeEngine["Stripe Checkout API Service"]
     end
 
     subgraph PersistenceLayer ["Persistence & Cloud Infrastructure"]
         PostgreSQL["Supabase PostgreSQL (pgxpool + RLS Policy)"]
-        EdgeProxy["Cloudflare CDN & DDoS Shield"]
+        EdgeProxy["Edge CDN & Global Anycast Network"]
     end
 
     subgraph OnChainLayer ["Monad Parallel EVM (Chain ID: 10143)"]
@@ -220,10 +220,9 @@ All smart contracts are compiled with Solidity `0.8.31` targeting the `Osaka` EV
 | Package / Dependency | Version | Architectural Responsibility |
 | :--- | :--- | :--- |
 | `solc` | `0.8.31` | Solidity compiler targeting Osaka EVM with 200 optimizer runs |
-| `hardhat` | `^3.14.0` | Smart contract testing, compilation, and coverage framework |
+| `hardhat` | `^3.14.0` | Smart contract testing, compilation, and native coverage framework |
 | `@nomicfoundation/hardhat-ignition` | `^3.1.8` | Declarative contract deployment and state management |
 | `@nomicfoundation/hardhat-toolbox-viem` | `^5.0.7` | Native Viem bindings for Hardhat test runners |
-| `forge-std` | `v1.16.2` | Foundry standard testing utilities |
 
 ### 3. Go High-Concurrency Backend (`backend/go.mod`)
 | Dependency | Version | Architectural Responsibility |
@@ -231,16 +230,8 @@ All smart contracts are compiled with Solidity `0.8.31` targeting the `Osaka` EV
 | `Go Runtime` | `1.25.0` | Concurrency runtime with native race detector (`-race`) support |
 | `github.com/jackc/pgx/v5` | `v5.11.0` | High-performance PostgreSQL connection pool driver |
 | `github.com/stripe/stripe-go/v78` | `v78.12.0` | Stripe payment checkout session and webhook processing |
+| `github.com/ethereum/go-ethereum` | `v1.16.9` | Cryptographic Keccak256 hashing, secp256k1 signature verification & EVM state encoding |
 | `github.com/joho/godotenv` | `v1.5.1` | Zero-plaintext runtime environment configuration management |
-
-### 4. Python AI Agent SDK (`requirements.txt`)
-| Dependency | Version | Architectural Responsibility |
-| :--- | :--- | :--- |
-| `Python Runtime` | `>=3.11` | Modern asynchronous Python execution environment |
-| `web3` | `>=6.15.0` | Python client for Monad EVM RPC nodes |
-| `eth-account` | `>=0.11.0` | Local key generation, EIP-712 structured data signing |
-| `pycryptodome` | `>=3.20.0` | Cryptographic primitives and Keccak256 computation |
-| `httpx` / `pydantic` | `>=0.27.0` / `>=2.6.0` | Asynchronous HTTP client and strict schema data models |
 
 ---
 
@@ -312,24 +303,58 @@ pnpm dev
 
 ---
 
+## Core Engine Deep Dives
+
+### 1. Deterministic Liquidation Parity Verification
+Koliance implements zero-drift liquidation parity across off-chain TypeScript models and on-chain Solidity contracts:
+- **Shared Canonical Test Vectors**: `tests/liquidation-parity.test.ts` and `contracts/test/perp/LiquidationParity.ts` replay identical market condition vectors across both execution runtimes.
+- **Identical Math Specification**: Both engines enforce integer basis points arithmetic with `BPS_DENOMINATOR = 10,000` and exact maintenance margin thresholds, eliminating edge-case drift between off-chain liquidation alerts and on-chain contract verdicts.
+- **Fail-Closed Gate**: The parity suite is enforced as part of mandatory Gate 1 and Gate 2 pre-commit gates in local CI.
+
+### 2. Full-Stack Perpetual DEX Engine
+- **PositionManager.sol**: High-concurrency position lifecycle management supporting up to 50x long/short leverage.
+- **Vault.sol**: SC-1 solvency-guaranteed liquidity pool where minting and redemption prices strictly track Net Asset Value (NAV) net of open liabilities.
+- **Block-by-Block Funding Rates**: Implements continuous funding accrual (ADR-003) adjusting per-block skew between long and short open interest.
+- **High-Frequency Liquidation Bot**: Automated Go daemon (`cmd/liquidator`) monitoring on-chain position margin ratios and executing batch liquidations.
+
+---
+
 ## API Reference
 
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/health` / `/healthz` | Canonical health probe and Monad contract connectivity |
-| `GET` | `/api/v1/stats` | Real-time TPS metrics, active identities, and trust totals |
-| `GET` | `/api/v1/game/steam/profile?id={id}` | Steam gameplay statistics and game library rankings |
-| `POST` | `/api/v1/game/steam/verify` | Server-side cryptographic Steam OpenID 2.0 verification |
-| `POST` | `/api/v1/game/proof` | Generates Keccak256 proof hash for Steam achievements |
-| `POST` | `/api/v1/developer/github/proof` | Issues Proof of BUIDL on-chain developer credential |
-| `POST` | `/api/v1/agentcard/generate` | Generates Luhn-validated 16-digit Visa virtual card |
-| `POST` | `/api/v1/agentcard/session-key` | Issues time-bounded, MCC-restricted EIP-712 Session Key |
-| `POST` | `/api/v1/agentcard/authorize` | Real-time transaction authorization engine |
-| `POST` | `/api/v1/agentcard/batch-settle` | Batches settled transactions for on-chain proof |
-| `GET` | `/api/v1/market/overview` | Alpaca paper trading balances and positions |
-| `GET` | `/api/v1/market/prices?symbol=NVDA` | Real-time stock quote feed with synthetic fallback |
-| `POST` | `/api/v1/market/trade` | Executes leveraged perpetual orders |
-| `POST` | `/api/v1/stripe/checkout-session` | Creates Stripe Checkout account credit top-up |
+Koliance mounts 28 high-concurrency RESTful endpoints in its modular monolith router (`backend/internal/httpapi/router.go`):
+
+| Method | Endpoint | Description | Auth & Security |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/health` / `/healthz` | Canonical health probe and Monad contract connectivity | Public |
+| `GET` | `/api/v1/stats` | Real-time network statistics (identities, trust attestations) | Public |
+| `GET` | `/api/v1/liquidations` | Real-time query of perpetual contract liquidation history | Public |
+| `GET` | `/api/v1/game/steam/profile?id={id}` | Steam gameplay statistics and game library rankings | Public |
+| `POST` | `/api/v1/game/proof` | Generates Keccak256 proof hash for Steam achievements | Database Gated |
+| `GET` | `/api/v1/developer/github/profile?username={u}` | GitHub developer profile metrics and BUIDL scoring | Public |
+| `POST` | `/api/v1/developer/github/proof` | Issues Proof of BUIDL on-chain developer credential | Database Gated |
+| `POST` | `/api/v1/developer/packages/claim-or-purchase` | Claims starter quota (300 free calls) or purchases packages | Bearer Token |
+| `POST` | `/api/v1/developer/keys` | Issues scoped developer API key with rate-limit tiers | Operator Token |
+| `GET` | `/api/v1/developer/stats` | Telemetry statistics for developer API consumption | Bearer Token |
+| `GET` | `/api/v1/developer/agents` | Lists registered AI agents and delegated session keys | Bearer Token |
+| `POST` | `/api/v1/agentcard/generate` | Generates Luhn-validated 16-digit Visa virtual card | Database Gated |
+| `GET` | `/api/v1/agentcard/cards/{id}` | Retrieves card view, balance, and last 4 digits | Bearer Token |
+| `POST` | `/api/v1/agentcard/session-key` | Issues time-bounded, MCC-restricted EIP-712 Session Key | Bearer Token |
+| `POST` | `/api/v1/agentcard/authorize` | Real-time Visa transaction authorization engine | Bearer Token |
+| `POST` | `/api/v1/agentcard/freeze` | Circuit breaker: instantly freezes session key | Public / Owner |
+| `POST` | `/api/v1/agentcard/revoke` | Permanently revokes delegated session key | Public / Owner |
+| `POST` | `/api/v1/agentcard/batch-settle` | Generates Keccak256 batch commitment for Monad | Operator Token |
+| `POST` | `/api/v1/agent/bind` | Binds autonomous AI agent to account wallet | Bearer Token |
+| `POST` | `/api/v1/agent/pay` | Executes agent-delegated autonomous payment | Bearer Token |
+| `GET` | `/api/v1/market/health` | Alpaca market data gateway connectivity status | Public |
+| `GET` | `/api/v1/market/overview` | Alpaca paper trading balances and active positions | Market Gateway |
+| `GET` | `/api/v1/market/prices?symbol={sym}` | Live stock quotes (Strict fail-closed: 503 if provider down; no synthetic fallback) | Market Gateway |
+| `GET` | `/api/v1/market/bars?symbol={sym}` | Historical candlestick bar series for chart rendering | Market Gateway |
+| `GET` | `/api/v1/market/movers` | Top gainers and losers ranked by 24h percentage change | Market Gateway |
+| `POST` | `/api/v1/market/trade` | Submits leveraged paper perpetual orders | Operator Token |
+| `POST` | `/api/v1/market/close` | Closes open perpetual paper positions | Operator Token |
+| `POST` | `/api/v1/stripe/checkout-session` | Creates Stripe Checkout credit top-up session | Public |
+| `POST` | `/api/v1/stripe/customer` | Manages customer billing profiles | Operator Token |
+| `POST` | `/api/v1/verifier/verify` | Cryptographic proof verification endpoint | Public |
 
 ---
 
