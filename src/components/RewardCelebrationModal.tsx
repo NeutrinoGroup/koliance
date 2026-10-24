@@ -47,6 +47,11 @@ export function playCelebrationAudio() {
       osc.start(startAt);
       osc.stop(startAt + 0.7);
     });
+
+    // Clean up AudioContext resources after chimes conclude
+    setTimeout(() => {
+      ctx.close().catch(() => {});
+    }, 1200);
   } catch {
     // Audio autoplay restrictions gracefully handled
   }
