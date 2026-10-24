@@ -20,8 +20,8 @@
 
 <!-- CI / CD & Quality -->
 [![CI 流水线状态](https://github.com/moonhotline/koliance/actions/workflows/ci.yml/badge.svg)](https://github.com/moonhotline/koliance/actions/workflows/ci.yml)
-[![合约测试覆盖率](https://img.shields.io/badge/合约测试覆盖率-90.12%25-brightgreen.svg)](contracts/coverage)
-[![前端单元测试通过](https://img.shields.io/badge/Vitest测试-76%2F76_全绿-brightgreen.svg)](tests/)
+[![合约测试覆盖率](https://img.shields.io/badge/合约覆盖率-88%25_CI门槛-brightgreen.svg)](contracts/scripts/check-coverage.ts)
+[![前端单元测试通过](https://img.shields.io/badge/Vitest测试-389全通过-brightgreen.svg)](tests/)
 [![代码安全审计](https://img.shields.io/badge/安全审计-Gitleaks零泄漏-2ea44f.svg)](.github/workflows/ci.yml)
 [![开源许可](https://img.shields.io/badge/开源协议-MIT-blue.svg)](LICENSE)
 
@@ -148,12 +148,12 @@ flowchart TB
         CardEngine["AgentCard 生成与 Luhn 算法校验"]
         SteamEngine["Steam OpenID 2.0 密码学校验引擎"]
         MarketEngine["Alpaca 行情引擎与 Pyth Hermes 中继"]
-        StripeEngine["Stripe Connect 与 Checkout 支付"]
+        StripeEngine["Stripe Checkout API 支付服务"]
     end
 
     subgraph PersistenceLayer ["数据持久化与边缘基础设施"]
         PostgreSQL["Supabase PostgreSQL (pgxpool + RLS 行级安全)"]
-        EdgeProxy["Cloudflare CDN & DDoS 防护网"]
+        EdgeProxy["Edge CDN 与全球 Anycast 网络"]
     end
 
     subgraph OnChainLayer ["Monad 并行 EVM (链 ID: 10143)"]
@@ -217,10 +217,9 @@ flowchart TB
 | 依赖组件 | 版本 | 架构设计职责 |
 | :--- | :--- | :--- |
 | `solc` | `0.8.31` | 面向 Osaka EVM 规范编译，启用 200 次优化运行 |
-| `hardhat` | `^3.14.0` | 现代智能合约编译、测试与代码覆盖率运行框架 |
+| `hardhat` | `^3.14.0` | 现代智能合约编译、测试与原生代码覆盖率运行框架 |
 | `@nomicfoundation/hardhat-ignition` | `^3.1.8` | 声明式智能合约部署与生命周期状态锁机制 |
 | `@nomicfoundation/hardhat-toolbox-viem` | `^5.0.7` | 面向 Hardhat 测试套件的原生 Viem 绑定 |
-| `forge-std` | `v1.16.2` | Foundry 标准断言库与测试辅助工具 |
 
 ### 3. Go 语言高并发后端微服务 (`backend/go.mod`)
 | 依赖组件 | 版本 | 架构设计职责 |
@@ -228,16 +227,8 @@ flowchart TB
 | `Go 运行时` | `1.25.0` | 原生支持数据竞态探测 (`-race`) 的现代高并发运行时 |
 | `github.com/jackc/pgx/v5` | `v5.11.0` | 高性能并发安全的 PostgreSQL 数据库连接池驱动 |
 | `github.com/stripe/stripe-go/v78` | `v78.12.0` | Stripe 全球支付结账会话与 Webhook 签名处理 |
+| `github.com/ethereum/go-ethereum` | `v1.16.9` | 密码学 Keccak256 哈希计算、secp256k1 验签与 EVM 状态编码 |
 | `github.com/joho/godotenv` | `v1.5.1` | 零明文硬编码的运行时动态环境变量载入工具 |
-
-### 4. Python AI Agent 工具包 (`requirements.txt`)
-| 依赖组件 | 版本 | 架构设计职责 |
-| :--- | :--- | :--- |
-| `Python 运行时` | `>=3.11` | 现代异步 Python 执行环境 |
-| `web3` | `>=6.15.0` | 连接 Monad 并行 EVM RPC 节点的专业 SDK |
-| `eth-account` | `>=0.11.0` | 客户端离线私钥生成与 EIP-712 结构化数据签名 |
-| `pycryptodome` | `>=3.20.0` | Keccak256 与基础密码学原语实现库 |
-| `httpx` / `pydantic` | `>=0.27.0` / `>=2.6.0` | 异步高性能网络请求与强类型数据验证模型 |
 
 ---
 
@@ -309,24 +300,58 @@ pnpm dev
 
 ---
 
-## API 接口速查
+## 核心引擎深度剖析 (Core Engine Deep Dives)
 
-| 请求方法 | 路由地址 | 接口功能与描述 |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/health` / `/healthz` | 权威健康状态检查与 Monad 合约连通性探测 |
-| `GET` | `/api/v1/stats` | 实时 TPS 吞吐、全网身份总数与信任存证计数 |
-| `GET` | `/api/v1/game/steam/profile?id={id}` | Steam 玩家个人主页数据与游戏成就等级榜 |
-| `POST` | `/api/v1/game/steam/verify` | 服务端 Steam OpenID 2.0 密码学校验并存证 |
-| `POST` | `/api/v1/game/proof` | 生成 Steam 游戏时长与成就的 Keccak256 存证哈希 |
-| `POST` | `/api/v1/developer/github/proof` | 生成 GitHub Proof of BUIDL 链上开发者资信凭证 |
-| `POST` | `/api/v1/agentcard/generate` | 签发符合 Luhn 算法检验的 16 位 Visa 虚拟卡 |
-| `POST` | `/api/v1/agentcard/session-key` | 签发带时效与 MCC 类目限制的 EIP-712 会话委托密钥 |
-| `POST` | `/api/v1/agentcard/authorize` | 实时微额交易鉴权与风控引擎 |
-| `POST` | `/api/v1/agentcard/batch-settle` | 批量归集结算记录并生成 Monad 链上验证证明 |
-| `GET` | `/api/v1/market/overview` | Alpaca 模拟美股持仓与资金状态看板 |
-| `GET` | `/api/v1/market/prices?symbol=NVDA` | 实时股票报价喂价与自动平滑降级 |
-| `POST` | `/api/v1/market/trade` | 执行杠杆永续合约开仓与平仓交易 |
-| `POST` | `/api/v1/stripe/checkout-session` | 创建 Stripe Checkout 授信余额充值会话 |
+### 1. 确定性清算对齐验证 (Deterministic Liquidation Parity)
+Koliance 在链下 TypeScript 计算模型与链上 Solidity 智能合约之间实现了零漂移清算一致性：
+- **共用权威测试向量集**：`tests/liquidation-parity.test.ts` 与 `contracts/test/perp/LiquidationParity.ts` 在两个独立运行时中双向回放完全相同的市场波动与爆仓向量。
+- **数学精度绝对一致**：双方均基于基点定点数（`BPS_DENOMINATOR = 10,000`）与绝对精度维持保证金阈值，彻底消除链下清算预警与链上合约裁决之间的边界漂移。
+- **Fail-Closed 门禁守卫**：清算对齐测试集已被纳入 CI 门禁与 pre-commit 验证矩阵。
+
+### 2. 永续合约全栈撮合与清算引擎 (Full-Stack Perpetual DEX Engine)
+- **PositionManager.sol**：支持最高 50 倍多空杠杆的高并发仓位生命周期状态机。
+- **Vault.sol**：基于 SC-1 偿付能力守卫的金库，LP 存取款价格严格按剔除未平仓负债后的净值 (NAV) 定价，杜绝首存稀释攻击与挤兑套利。
+- **逐块动态资金费率**：实施 ADR-003 逐块累积资金费模型，根据多空持仓偏差动态调控平衡。
+- **高频自动化清算 Bot**：Go 语言后台守护进程 (`cmd/liquidator`)，全天候监听链上保证金率并毫秒级触发批量清算。
+
+---
+
+## API 接口速查 (API Reference)
+
+Koliance 在 Go 模块化单体网关 (`backend/internal/httpapi/router.go`) 中挂载了 28 条高并发 RESTful 路由：
+
+| 请求方法 | 路由地址 | 接口功能与描述 | 鉴权与安全约束 |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/v1/health` / `/healthz` | 权威健康状态检查与 Monad 合约连通性探测 | 公开接口 |
+| `GET` | `/api/v1/stats` | 实时网络统计（链上身份总数、信任存证条数） | 公开接口 |
+| `GET` | `/api/v1/liquidations` | 实时查询永续合约爆仓清算事件记录 | 公开接口 |
+| `GET` | `/api/v1/game/steam/profile?id={id}` | Steam 玩家个人主页数据与游戏成就等级榜 | 公开接口 |
+| `POST` | `/api/v1/game/proof` | 生成 Steam 游戏时长与成就的 Keccak256 存证哈希 | 数据库守卫 (withDB) |
+| `GET` | `/api/v1/developer/github/profile?username={u}` | GitHub 开发者个人资信与 BUIDL 评分查询 | 公开接口 |
+| `POST` | `/api/v1/developer/github/proof` | 生成 GitHub Proof of BUIDL 链上开发者资信凭证 | 数据库守卫 (withDB) |
+| `POST` | `/api/v1/developer/packages/claim-or-purchase` | 领取 Starter Pack 体验配额 (300次免费调用) 或购买套餐 | Bearer 密钥认证 |
+| `POST` | `/api/v1/developer/keys` | 签发带调用频率与额度梯队的开发者 API Key | 运维令牌 (Operator) |
+| `GET` | `/api/v1/developer/stats` | 开发者自身 API 调用的实时监控与消耗计量数据 | Bearer 密钥认证 |
+| `GET` | `/api/v1/developer/agents` | 列出当前开发者绑定的自主 AI Agent 与委托密钥 | Bearer 密钥认证 |
+| `POST` | `/api/v1/agentcard/generate` | 签发符合 Luhn 算法检验的 16 位 Visa 虚拟卡 | 数据库守卫 (withDB) |
+| `GET` | `/api/v1/agentcard/cards/{id}` | 查询虚拟卡余额、状态与卡号末四位 (PAN/CVV 绝不泄露) | Bearer 密钥认证 |
+| `POST` | `/api/v1/agentcard/session-key` | 签发带时效与 MCC 类目限制的 EIP-712 会话委托密钥 | Bearer 密钥认证 |
+| `POST` | `/api/v1/agentcard/authorize` | 实时微额交易鉴权与风控引擎 | Bearer 密钥认证 |
+| `POST` | `/api/v1/agentcard/freeze` | 紧急熔断：瞬时冻结指定 Session Key，阻断一切代扣 | 公开/持卡人 |
+| `POST` | `/api/v1/agentcard/revoke` | 永久撤销会话密钥授权 | 公开/持卡人 |
+| `POST` | `/api/v1/agentcard/batch-settle` | 批量归集结算记录并生成 Keccak256 状态承诺 | 运维令牌 (Operator) |
+| `POST` | `/api/v1/agent/bind` | 绑定自主 AI Agent 至用户钱包 | Bearer 密钥认证 |
+| `POST` | `/api/v1/agent/pay` | 执行自主 AI Agent 授权委托支付 | Bearer 密钥认证 |
+| `GET` | `/api/v1/market/health` | Alpaca 行情服务网关连通性探测 | 公开接口 |
+| `GET` | `/api/v1/market/overview` | Alpaca 模拟美股持仓与资金状态看板 | 行情网关接入 |
+| `GET` | `/api/v1/market/prices?symbol={sym}` | 实时股票报价喂价（严格 fail-closed：无上游凭证时返回 503，严禁伪造数据） | 行情网关接入 |
+| `GET` | `/api/v1/market/bars?symbol={sym}` | Alpaca 历史 K 线蜡烛图时序数据 | 行情网关接入 |
+| `GET` | `/api/v1/market/movers` | 美股 24 小时涨幅榜与跌幅榜标的排行 | 行情网关接入 |
+| `POST` | `/api/v1/market/trade` | 提交杠杆永续模拟交易委托 | 运维令牌 (Operator) |
+| `POST` | `/api/v1/market/close` | 平仓指定标的永续持仓 | 运维令牌 (Operator) |
+| `POST` | `/api/v1/stripe/checkout-session` | 创建 Stripe Checkout 授信余额充值会话 | 公开接口 |
+| `POST` | `/api/v1/stripe/customer` | 管理 Stripe 客户账单配置 | 运维令牌 (Operator) |
+| `POST` | `/api/v1/verifier/verify` | 密码学证明校验端点 | 公开接口 |
 
 ---
 
