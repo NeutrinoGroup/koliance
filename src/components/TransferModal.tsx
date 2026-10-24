@@ -40,6 +40,7 @@ export interface TransferModalProps {
   senderAddress: string;
   balance: string; // Native MON balance
   initialCurrency?: "KOL" | "MON";
+  defaultRecipient?: string;
   onSuccess?: (txHash: string) => void;
 }
 
@@ -49,11 +50,12 @@ export function TransferModal({
   senderAddress,
   balance,
   initialCurrency = "KOL",
+  defaultRecipient,
   onSuccess,
 }: TransferModalProps) {
   const [currency, setCurrency] = useState<"KOL" | "MON">(initialCurrency);
   const [kolBalance, setKolBalance] = useState<string>("0.00");
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(defaultRecipient || "");
   const [amount, setAmount] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +75,10 @@ export function TransferModal({
 
   useEffect(() => {
     setCurrency(initialCurrency);
-  }, [initialCurrency, isOpen]);
+    if (defaultRecipient) {
+      setRecipient(defaultRecipient);
+    }
+  }, [initialCurrency, defaultRecipient, isOpen]);
 
   // Fetch friends list from /api/user/friends
   const fetchFriends = React.useCallback(async () => {

@@ -171,7 +171,7 @@ export function Providers({ children }: { children: ReactNode }) {
               "wallet_connect",
             ],
           },
-          loginMethods: ["wallet", "google", "github", "email"],
+          loginMethods: ["email", "wallet"],
           embeddedWallets: {
             ethereum: {
               createOnLogin: "users-without-wallets",

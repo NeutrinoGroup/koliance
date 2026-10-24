@@ -8,25 +8,34 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/"],
+        disallow: ["/api/auth/", "/api/user/"],
       },
       {
-        // 针对主流大模型与 AI 搜索引擎抓取代理开放访问
+        // Generative Engine Optimization (GEO): Full public index access for leading AI crawlers
         userAgent: [
           "GPTBot",
           "ChatGPT-User",
+          "OAI-SearchBot",
           "ClaudeBot",
           "anthropic-ai",
+          "Claude-Web",
           "PerplexityBot",
           "Google-Extended",
+          "GoogleOther",
           "Applebot-Extended",
           "cohere-ai",
-          "OAI-SearchBot",
+          "Meta-ExternalAgent",
+          "FacebookBot",
+          "DuckAssistBot",
+          "Amazonbot",
+          "Bytespider",
+          "CCBot",
         ],
-        allow: "/",
-        disallow: ["/api/"],
+        allow: ["/", "/pricing", "/docs", "/terms", "/privacy", "/refund", "/market", "/perp", "/agentcard", "/token", "/llms.txt", "/llms-full.txt"],
+        disallow: ["/api/auth/", "/api/user/"],
       },
     ],
     sitemap: `${baseUrl}/sitemap.xml`,
+    host: baseUrl,
   };
 }

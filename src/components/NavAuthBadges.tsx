@@ -23,6 +23,8 @@ import {
   MessageSquare,
 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { createPublicClient, formatEther } from "viem";
 import { GOOGLE_CLIENT_ID, OAUTH_REDIRECT_URI } from "@/lib/authConfig";
 import { EditProfileModal, UserProfileData } from "@/components/EditProfileModal";
@@ -126,6 +128,7 @@ export function NavAuthBadges({
   } = useKolianceAuth();
   const { state, unlink, signOut } = useKolianceAccount();
   const { lang, t } = useLanguage();
+  const pathname = usePathname();
 
   /**
    * Issue #30. A wallet click has two different meanings and they must not be
@@ -328,20 +331,15 @@ export function NavAuthBadges({
     if (privyAuthenticated && privyUser && linkGoogle) { linkGoogle(); return; } privyLogin();
   };
 
-  // 2. GitHub 1-Click Login Trigger (Privy-aware with OAuth fallback)
+  // 2. GitHub 1-Click Login Trigger (Native Official GitHub OAuth 2.0)
+  //
+  // Decoupled from Privy: direct connection to /api/auth/github/start ensures
+  // 100% reliable login via our server-side OAuth without third-party SDK restrictions.
   const handleGithubLogin = () => {
     releaseUnlinkedIdentity();
-    if (isPrivyEnabled) {
-      if (privyAuthenticated && privyUser && linkGithub) {
-        linkGithub();
-        return;
-      }
-      privyLogin();
-      return;
-    }
-    // Server route sets the httpOnly CSRF nonce cookie, then redirects to GitHub.
     const qs = new URLSearchParams({ path: window.location.pathname || "/" });
     window.location.href = `/api/auth/github/start?${qs.toString()}`;
+    if (privyAuthenticated && privyUser && linkGithub) { linkGithub(); return; } privyLogin();
   };
 
   // 3. Steam OpenID 2.0 1-Click Redirect
@@ -417,20 +415,19 @@ export function NavAuthBadges({
 
   return (
     <div className="relative flex items-center gap-1.5">
-      {/* Top Bar Direct IM & Contacts Shortcut Button */}
-      {(identity || effectiveWallet) && (
-        <button
-          type="button"
-          onClick={() => {
-            setTransferCurrency("KOL");
-            setTransferModalOpen(true);
-          }}
-          className="flex items-center justify-center w-8 h-8 rounded-md bg-[#141824] hover:bg-[#1a2032] border border-white/20 hover:border-cyan-400 text-slate-300 hover:text-[#00f2fe] transition-all shadow-md active:scale-95 cursor-pointer"
-          title="好友通讯录与IM聊天 (Contacts & Direct Chat)"
-        >
-          <MessageSquare className="w-4 h-4" />
-        </button>
-      )}
+      {/* Top Bar Direct IM & Contacts Shortcut Button (Always visible at login area) */}
+      <Link
+        href="/im"
+        className={`relative flex items-center justify-center h-9 w-9 shrink-0 rounded-md transition-all shadow-md active:scale-95 cursor-pointer ${
+          pathname === "/im"
+            ? "border border-[#00f2fe] bg-[#162035] text-[#00f2fe] shadow-[0_0_12px_rgba(0,242,254,0.35)]"
+            : "border border-white/20 hover:border-[#00f2fe]/60 bg-[#141824] hover:bg-[#1a2032] text-slate-300 hover:text-[#00f2fe]"
+        }`}
+        title="实时IM消息与通讯录 (Real-time IM Chat)"
+      >
+        <MessageSquare className="w-4 h-4" />
+        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-sm bg-[#00f2fe] animate-pulse pointer-events-none" />
+      </Link>
 
       {/* Top-Right Account Button (Solid, 100% Opaque High-End Tech Dark) */}
       <button
@@ -547,6 +544,19 @@ export function NavAuthBadges({
                   )}
                 </div>
 
+                {/* Direct IM Chat Entry in Account Center (Always reachable in dropdown) */}
+                <Link
+                  href="/im"
+                  onClick={() => setDropdownOpen(false)}
+                  className="w-full py-1.5 px-2.5 rounded-md bg-[#162035] hover:bg-[#1f2d4a] border border-[#00f2fe]/40 text-[#00f2fe] text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-[#00f2fe]" />
+                  <span>实时IM消息与通讯录</span>
+                  <span className="text-[9px] px-1 py-0.2 rounded-sm bg-[#00f2fe]/20 text-[#00f2fe] font-mono">
+                    [OPEN]
+                  </span>
+                </Link>
+
                 {/* Sign Out: the counterpart to the Sign In button, and the only
                     control that clears every rail at once. */}
                 {identity && (
@@ -648,16 +658,14 @@ export function NavAuthBadges({
                     </div>
 
                     <div className="grid grid-cols-2 gap-1.5 pt-1">
-                      <button
-                        onClick={() => {
-                          setDropdownOpen(false);
-                          setTransferModalOpen(true);
-                        }}
+                      <Link
+                        href="/im"
+                        onClick={() => setDropdownOpen(false)}
                         className="py-1.5 px-2 rounded-md bg-[#162035] hover:bg-[#1f2d4a] border border-[#00f2fe]/40 text-[#00f2fe] text-[11px] font-mono font-semibold transition flex items-center justify-center gap-1 shadow-md active:scale-95 cursor-pointer"
                       >
                         <MessageSquare className="w-3 h-3 text-[#00f2fe]" />
                         <span>好友与IM消息</span>
-                      </button>
+                      </Link>
                       <button
                         onClick={() => {
                           setDropdownOpen(false);
