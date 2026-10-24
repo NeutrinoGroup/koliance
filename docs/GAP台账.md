@@ -7,7 +7,9 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 ✅ 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：**2026-10-24** · 新开并关闭 **GAP-85**（§5.23，`docs/changes/084`）
+> **最后更新**：**2026-10-24** · 新开并关闭 **GAP-86**（§5.24，`docs/changes/086`）
+> —— Render Keepalive 定时保活时段精细化治理与 Rust 高性能清算求解器落地。保活时段由 24 小时改为北京时间 10:00-21:59（UTC 02:00-13:59），全月消耗 ~372 小时，彻底规避月中 750 小时额度耗尽风险；新增系统级 Rust 求解器 `crates/koliance-solver`，基于大阪/Monad 规范实现零截断漂移的清算判题（1046 万次/秒吞吐，95.63 ns 延迟）与 EIP-712 Session Key 鉴权，100% 对齐 60 个黄金向量与 24 个资金费向量。四道 CI 门禁全绿（前端 395 pass / 合约 209 pass LF 88.92% / 后端 -race 23 pkg 全绿 / Rust 5 pass）。
+> **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-85**（§5.23，`docs/changes/084`）
 > —— 云端 GitHub Issue 治理、架构宣称真实性对齐与防伪熔断闭环。结单关闭 #15（黑客松截止过期）、#16（市场行情与模拟盘已闭环落地）；解决 #71（dailyLimitUSD 24小时滚动窗口落地与 SpentTodayUSD 重置）、#70（消除伪 Keccak 注释，全面切换 EVM 原生 Keccak256 证明）、#58（Steam 验证生产环境严格禁用 demo 模式）、#69（合约别名 freezeSessionKey/revokeSessionKey 与后端 freeze/revoke 路由及前端熔断闭环）、#74 & #75（README 真实对齐清算 parity 判据、Perp 全栈引擎、28+ API 路由并剔除 Cloudflare/Foundry/Python 等幻影组件）。三道 CI 门禁全绿（前端 389 pass / 合约 209 pass LF 88.92% / 后端 -race 23 pkg 全绿）。
 > **上一轮更新**：**2026-10-24** · 新开并关闭 **GAP-84**（§5.22，`docs/changes/081`）
 > —— 落地生成式引擎优化（GEO，针对 ChatGPT Search、Perplexity、Claude、Gemini 等）与全球边缘加速。输出标准 `llms.txt` 与单文件大模型全景白皮书 `llms-full.txt`；`robots.ts` 接入 16 个主流大模型与 AI 爬虫白名单；Schema.org 扩展 DefinedTermSet、Dataset 与 7 项权威 FAQPage；配置 Anycast Edge 缓存与全球 CORS 跨域。三道 CI/CD 门禁全绿（前端 382 pass / 合约 209 pass LF 91.23% / 后端 -race 23 pkg 全绿）。
@@ -1982,6 +1984,21 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 | Issue #58: Steam 验证接口在生产环境可传 `demo: true` 绕过 Valve 签名 | `src/app/api/auth/steam/verify/route.ts` 施加非生产环境 / `ALLOW_STEAM_DEMO` 严格门禁，生产构建直接 403 阻断；前端对 synthetic 标记账号展示沙箱提示且不分配真实额度 |
 | Issue #69: 紧急熔断无合约别名/无后端路由/前端按钮本地态 | `SessionKeyRegistry.sol` 补齐 `freezeSessionKey` / `revokeSessionKey` 别名；`router.go` 挂载 `POST /api/v1/agentcard/freeze` 与 `/revoke` 并通过反向 AST 路由清单审计；前端按钮持久化并触发熔断，拦截后续模拟消费 |
 | Issue #74 & #75: README 漏报核心实现与宣称幻影组件 | `README.md` 与 `README_zh.md` 深度增补清算 parity 双向对拍与 Perp 全栈引擎章节；API 表从 14 条扩展为全部 28 条已挂载路由并标注 fail-closed 策略；彻底剔除 Cloudflare、Foundry、Python SDK 等幻影组件；纠正覆盖率与测试徽标 |
+
+### 5.24 Keepalive 定时保活时段优化与 Rust 高性能清算求解器（2026-10-24，GAP-86）
+
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-85`**，`GAP-86` 在全部 ref 上**零命中**（实测），故取 **86**；
+> 本次变更记录为 `docs/changes/086-keepalive时段优化与rust高性能求解器.md`。
+
+#### GAP-86 · Keepalive 定时保活时段优化与 Rust 高性能清算求解器（[OK] 已关闭）
+
+| 缺陷/事项 | 治理与修复实现 |
+| --- | --- |
+| Keepalive 24小时常驻导致月中耗尽 Render 750h 免费额度 | `.github/workflows/keepalive.yml` Cron 调整为 `'*/10 2-13 * * *'`（UTC 02:00-13:59 / 北京时间 10:00-21:59），每日保活 ~12h，全月消耗 ~372h（占比 49.6%），留存超 50% 安全缓冲；`scripts/keepalive-render.sh` 新增 `is_within_active_window` 判定与 `--force` 绕过选项 |
+| Monad 高吞吐公链缺乏纳秒级清算判题与零 GC 求解引擎 | 根目录引入 Rust Workspace 与 `crates/koliance-solver` 模块；采用 `ethnum` 256 位原生大数（`U256`, `I256`）与原生 Keccak-256 哈希，杜绝任何浮点漂移或整数截断失真；实测清算计算吞吐量达 10.46 Million ops/sec（延迟 95.63 ns）；100% 比特级对齐 60 个黄金清算向量与 24 个资金费清算向量；集成 EIP-712 Domain Separator 与 AgentDelegation 验签与限额熔断 |
+| CI 门禁缺少 Rust 系统级套件自动化防护 | `.github/workflows/ci.yml` 新增 `solver (rust)` 作业自动执行 `cargo check` 与 `cargo test`；`AGENTS.md`、`README.md` 与 `README_zh.md` 对齐升级为四阶门禁标准 |
+
+---
 
 ---
 

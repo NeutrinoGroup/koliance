@@ -213,3 +213,17 @@ jobs:
       # contracts floor records after its own first CI failure.
       - name: Enforce coverage floors
         run: go run ./scripts/coverage-gate
+
+  solver:
+    name: solver (rust)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust Check
+        run: cargo check
+
+      - name: Rust Test Suite & Parity Vectors
+        run: cargo test

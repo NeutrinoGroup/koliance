@@ -102,6 +102,10 @@ npx tsx scripts/check-coverage.ts
 cd ../backend
 go vet ./...
 go test -race ./...
+
+# Gate 4: Rust Settlement & Parity Engine
+cd ..
+cargo test
 ```
 
 ---

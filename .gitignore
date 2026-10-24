@@ -48,3 +48,7 @@ yarn-error.log*
 .agents/skills/*
 
 video/public/audio/*
+
+# Rust build artifacts
+target/
+Cargo.lock
