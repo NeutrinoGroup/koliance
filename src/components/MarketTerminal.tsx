@@ -413,9 +413,9 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
 
     const areaD = `${pathD} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
 
-    const isTwoObservationFallback = !marketData.chart.closes || marketData.chart.closes.length < 2;
+    const isTwoObservationPair = !marketData.chart.closes || marketData.chart.closes.length < 2;
 
-    return { points, pathD, areaD, min, max, width, height, isTwoObservationFallback };
+    return { points, pathD, areaD, min, max, width, height, isTwoObservationPair };
   }, [marketData]);
 
   // Sign of the selected symbol's change, or null when the upstream published
@@ -657,7 +657,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
               <FailureNotice failure={quoteFailure} context={selectedSymbol} code={quoteEnvelope?.code} requestId={quoteEnvelope?.requestId} />
             ) : chartCoordinates ? (
               <div className="w-full h-full relative flex items-center justify-center">
-                {chartCoordinates.isTwoObservationFallback && (
+                {chartCoordinates.isTwoObservationPair && (
                   <div className="absolute top-2 right-2 z-10 text-[10px] font-mono text-slate-400 bg-black/60 border border-white/10 px-2 py-0.5 rounded-md backdrop-blur-sm pointer-events-none">
                     [INFO] 双观测点走势（前收 {formatUsd(marketData?.meta.regularMarketPrice ? marketData.meta.regularMarketPrice - (marketData.meta.regularMarketChange ?? 0) : null)} → 现价 {quotePrice}）
                   </div>
