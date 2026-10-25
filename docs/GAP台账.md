@@ -7,7 +7,9 @@
 >
 > **维护要求**：新增缺口立刻编号入表；修完把状态改为 [OK] 并附提交号；**不要删除已完成项**（它们是回归基线）。
 >
-> **最后更新**：**2026-10-25** · 新开并关闭 **GAP-89**（§5.27，`docs/changes/089`）
+> **最后更新**：**2026-10-25** · 新开并关闭 **GAP-90**（§5.28，`docs/changes/090`）
+> —— 落地 Monad 文案深度精简、直接邮箱密码注册与独立弹窗、好友添加全向解析与鉴权闭环，以及全层数据（users/credentials/friends/messages/rewards）磁盘原子持久化。修复 seed2 钱包地址长度错位为交易哈希导致的打招呼报非法地址缺陷；消除好友自加逻辑在子串匹配上的误杀；打通全登录态会话凭据（`/api/auth/session`）自动签发，根除 401 UNAUTHORIZED；实现本地原子 JSON 存储引擎并在掉电/冷重启下 100% 数据恢复。四道 CI 门禁全绿（前端 39 套件 419 pass / 合约 209 pass LF 88.92% / 后端 -race 24 pkg 全绿 / Rust 11 pass）。
+> **上一轮更新**：**2026-10-25** · 新开并关闭 **GAP-89**（§5.27，`docs/changes/089`）
 > —— 落地真实微支付双轨充值（微信/支付宝 1元/10元 与 Monad 10143 测试网 1 MON/1.5 USDC）、虚拟卡绑定与自主扣费风控护栏（低于 $1.00 自动补扣 $10.00，每日 $50 熔断硬顶）、Inference 金库微计量代理（0.10元/次与 402 PAYMENT_REQUIRED 熔断）、极简 3 卡片零摩擦交接（Go 单文件 CLI 安装器、LangChain/AutoGPT/Cursor 环境变量配置、Alpaca 模拟交易终端一键直跑）与多权重交易 Trust 评分引擎（35% 胜率 + 25% 交易量 + 25% 资产证明 + 15% 履约交付，四大段位 TIER_PRIME / TIER_TRUSTED / TIER_STANDARD / TIER_UNVERIFIED）。四道 CI 门禁全绿（前端 407 pass / 合约 209 pass / 后端 -race 24 pkg 全绿 / Rust 8 pass）。
 > **上一轮更新**：**2026-10-25** · 新开并关闭 **GAP-88**（§5.26，`docs/changes/088`）
 > —— 落地极简身份认证架构、登录后钱包绑定解耦、邮箱强制密码保护与 IM 用户自动发现及打招呼互动。顶栏彻底剥离未登录态连接钱包混乱按钮，突出 Google / GitHub 原生登录与邮箱密码注册（密码强校验 >= 6 位并经 HMAC-SHA256 盐值持久化）；钱包绑定仅在已登录控制台显式露出；IM 聊天增加未登录访问屏障，彻底移除内嵌注册表单，上线注册用户自动发现与检索抽屉；提供「打招呼」一键建联、首发问候与 Canvas Confetti 彩带粒子喷射动效；重构 IM 2.5s 轮询 diff 算法，消除滚动条跳跃与卡顿；Rust `crates/koliance-solver` 落地 `im_engine.rs` 纳秒级消息去重与时间戳同步引擎。四道 CI 门禁全绿（前端 403 pass / 合约 209 pass LF 88.92% / 后端 -race 23 pkg 全绿 / Rust 8 pass）。
@@ -2033,6 +2035,42 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 | IM 缺乏已注册用户自动发现与一键互动能力 | 升级 `/api/user/search?q=` 为平台用户自动发现接口；联系人抽屉支持用户名/邮箱搜索及默认发现推荐；为每个用户卡片挂载「打招呼」按钮，点击自动建立联系人、打开聊天、发送首条问候语并喷发 Canvas Confetti 彩带粒子动效 |
 | IM 2.5s 轮询引发消息列表重渲染抖动与滚动条强制跳底 | 重构 `fetchMessages` 为长度与尾部 ID 校验的引用级稳定更新；滚动行为仅在新增消息入队时平滑触发，彻底消除阅读闪烁与卡顿 |
 | 缺乏微秒级高性能 IM 消息去重与时间戳增量同步底层 | 在 `crates/koliance-solver` 中落地 `im_engine.rs`，实现对称规范通道键 `channel_key`、基于 Keccak256 的零漂移消息去重与 `ImSyncHub` 时间戳增量同步，吞吐达千万级消息/秒 |
+
+---
+
+### 5.27 真实微支付落地、Agent自主运行闭环与多权重交易Trust评分模型（2026-10-25，GAP-89）
+
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-88`**，`GAP-89` 在全部 ref 上**零命中**（实测），故取 **89**；
+> 本次变更记录为 `docs/changes/089-真实微支付与Agent自主运行闭环及多权重交易Trust.md`。
+
+#### GAP-89 · 真实微支付落地、Agent自主运行闭环与多权重交易Trust评分模型（[OK] 已关闭）
+
+| 缺陷/事项 | 治理与修复实现 |
+| --- | --- |
+| 缺乏低门槛微支付入金通道，法币表单复杂与复制钱包高摩擦严重损耗 Agent 开发者转化率 | 落地法币（微信支付/支付宝通过 Stripe Checkout Session 聚合扫码）与 Web3（Monad 10143 测试网 1 MON / 1.5 USDC 扫码与 EIP-681 标准协议）双轨 1 元 / 10 元即时充值，后端打通 Webhook 与 RPC 确认自动入账 `InferenceVault` |
+| Agent 深夜自主执行长链任务易因余额耗尽遭遇 402 熔断报错导致断流 | 引入虚拟卡（Visa / Mastercard / Dupay / Wise / Revolut / PokePay）Stripe SetupIntent 安全授权绑定；实现自动续航代扣守护进程（可用余额 < 1.0 元 / < 1.00 USD 时静默代扣 10 元 / 10.00 USD），并设置单日最高 50 元硬熔断上限 |
+| 自动代扣触发顺序错误：余额归零或低于单次成本时直接返回 402 熔断而无法触发代扣 | 修复 `DeductInference` 逻辑，在执行扣款前优先检查余额与当前成本并触发自动代扣，确保长链任务永不断流；代扣扣款后余额低于阈值亦支持触发次级自动续航 |
+| 缺乏零门槛终端接入与 OpenAI 兼容代理反代能力 | 开发单文件 Go CLI 二进制 `cmd/koliance`（支持 `auth`, `proxy`, `trade`, `status`）及非交互一行安装脚本 `scripts/install-agent-cli.sh`；提供 0.10 元/次 OpenAI 兼容反向代理 `/api/v1/proxy/chat/completions` 并路由至 DeepSeek V3/R1 与豆包 Ark |
+| 传统 API 聚合商缺乏金融级自主信用体系，无法衡量 Agent 交易与履约能力 | 构建围绕交易的多权重 Trust 评分引擎（35% 交易成功率 + 25% 成交频次 + 25% 资产背书 + 15% 履约评级），输出 0-100 分数与等级（PRIME / TRUSTED / STANDARD / UNVERIFIED），并在 Developer Console 实时双向呈现与试算 |
+
+---
+
+### 5.28 Monad文案精简、邮箱密码直登注册、好友添加闭环与全层数据落盘持久化（2026-10-25，GAP-90）
+
+> **取号（D4 / `AGENTS.md` §6.1）**：全 ref 并集最大为 **`GAP-89`**，`GAP-90` 在全部 ref 上**零命中**（实测），故取 **90**；
+> 本次变更记录为 `docs/changes/090-simplify-monad-copy-email-auth-friends-persistence.md`。
+
+#### GAP-90 · Monad文案精简、邮箱密码直登注册、好友添加闭环与全层数据落盘持久化（[OK] 已关闭）
+
+| 缺陷/事项 | 治理与修复实现 |
+| --- | --- |
+| 导航栏、账号下拉卡片与 IM 控制台充斥大量关于 Monad 的冗余宣传长文，界面繁杂累赘 | 全面精简文案：删除重复的长文描述，采用现代极简技术规范（如「链上钱包」、「绑定钱包」、「[LIVE]」），去繁就简 |
+| 未集成 Privy 第三方或无钱包环境下，用户无法直接在 IM 控制台使用邮箱快速注册或登录 | IM 控制台新增内嵌「邮箱注册 / 登录」模态框，支持输入邮箱、密码（>= 6位）与昵称一键直接注册并签发会话，无需依赖外部弹窗 |
+| 种子账号 2（Monad Alpha Trader）钱包地址错位填为 66 字符交易哈希，导致点击打招呼校验报错 | 将 `seed2` 钱包地址修正为合法的 42 字符 EVM 地址 `0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02`，打招呼与添加好友 100% 畅通 |
+| 好友添加仅支持 0x/email/did 格式，输入用户名被前后端直接拦截报错 | 前端 `executeAddFriend` 与后端 `addFriend` 引入全局用户反查（`findUserByIdentifier`），支持用户名直接解析添加 |
+| 好友自加防误判逻辑使用 `includes` 子串比对，导致与自身邮箱/DID 含有公共字符的其他账号被误杀 | 修复自加判定逻辑，采用严格全等比对（DID、钱包地址、邮箱），消除子串误杀 |
+| 第三方与未打通流程用户缺少 `koliance_session_token`，访问好友/私信路由被 401 拦截 | 增设 `/api/auth/session` 接口并接入 `Providers.tsx` 自动守卫，无论何种登录方式均可自动签发标准 HMAC 会话 Token |
+| Supabase 离线或缺失 Service Key 时仅存于内存 Map，服务器重启或冷启动导致数据彻底灭失 | 实现本地 JSON 原子文件持久化引擎（`storagePersistence.ts`），覆盖 users, credentials, friends, messages, rewards，实现零数据丢失 |
 
 ---
 

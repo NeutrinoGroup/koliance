@@ -269,3 +269,45 @@ func TestInferenceMeteringLogs(t *testing.T) {
 	}
 }
 
+func TestAutoRechargeWhenBalanceZeroOrBelowCost(t *testing.T) {
+	svc := NewService(nil)
+	wallet := "0x71C8360f3E118A7cD87A0cf633a69a089d4c20b2"
+
+	// Bind card with auto recharge enabled
+	_, err := svc.BindVaultCard(wallet, CardBindRequest{
+		WalletAddress:       wallet,
+		CustomerID:          "cus_guardrail",
+		PaymentMethodID:     "pm_visa_auto",
+		CardLast4:           "8888",
+		CardBrand:           "visa",
+		AutoRechargeEnabled: true,
+		DailyLimitUSD:       50.0,
+	})
+	if err != nil {
+		t.Fatalf("failed to bind card: %v", err)
+	}
+
+	// Force balance down to 0.05 CNY (below 0.10 CNY cost)
+	v := svc.GetOrCreateVault(wallet)
+	svc.mu.Lock()
+	v.BalanceCNY = 0.05
+	v.BalanceUSD = 0.007
+	v.SpentTodayUSD = 0.0
+	svc.mu.Unlock()
+
+	// Calling DeductInference for 0.10 CNY should auto-recharge FIRST and succeed!
+	vAfter, autoRecharged, err := svc.DeductInference(wallet, 0.10)
+	if err != nil {
+		t.Fatalf("expected auto-recharge to prevent ErrInsufficientBalance, got err: %v", err)
+	}
+	if !autoRecharged {
+		t.Fatalf("expected autoRecharged to be true")
+	}
+	if vAfter.SpentTodayUSD != 10.0 {
+		t.Fatalf("expected spentTodayUSD = 10.0, got %v", vAfter.SpentTodayUSD)
+	}
+	if vAfter.BalanceCNY < 70.0 {
+		t.Fatalf("expected balance to be topped up (+72 CNY - 0.10 CNY), got %v", vAfter.BalanceCNY)
+	}
+}
+

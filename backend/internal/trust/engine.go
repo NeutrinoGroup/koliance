@@ -70,7 +70,7 @@ func NewEngine() *Engine {
 func Calculate(metrics RawMetrics) ScoreBreakdown {
 	// 1. Success Rate (35%): clamped to [0.0, 1.0]
 	sr := metrics.SuccessRate
-	if sr < 0 {
+	if math.IsNaN(sr) || math.IsInf(sr, 0) || sr < 0 {
 		sr = 0
 	} else if sr > 1.0 {
 		sr = 1.0
@@ -78,26 +78,30 @@ func Calculate(metrics RawMetrics) ScoreBreakdown {
 	successScore := math.Round(sr*WeightSuccessRate*100.0*10) / 10
 
 	// 2. Trade Count / Frequency (25%): 50 completed trades saturates full 25 points
-	countRatio := float64(metrics.TradeCount) / 50.0
+	tradeCount := metrics.TradeCount
+	if tradeCount < 0 {
+		tradeCount = 0
+	}
+	countRatio := float64(tradeCount) / 50.0
 	if countRatio > 1.0 {
 		countRatio = 1.0
-	} else if countRatio < 0 {
-		countRatio = 0
 	}
 	volumeScore := math.Round(countRatio*WeightTradeVolume*100.0*10) / 10
 
 	// 3. Asset Proof / Collateral (25%): $1,000 USD saturates full 25 points
-	assetRatio := metrics.AssetUSD / 1000.0
+	assetUSD := metrics.AssetUSD
+	if math.IsNaN(assetUSD) || math.IsInf(assetUSD, 0) || assetUSD < 0 {
+		assetUSD = 0
+	}
+	assetRatio := assetUSD / 1000.0
 	if assetRatio > 1.0 {
 		assetRatio = 1.0
-	} else if assetRatio < 0 {
-		assetRatio = 0
 	}
 	assetScore := math.Round(assetRatio*WeightAssetProof*100.0*10) / 10
 
 	// 4. Fulfillment Rating (15%): 5.0 scale
 	rating := metrics.Rating
-	if rating < 0 {
+	if math.IsNaN(rating) || math.IsInf(rating, 0) || rating < 0 {
 		rating = 0
 	} else if rating > 5.0 {
 		rating = 5.0
@@ -111,8 +115,8 @@ func Calculate(metrics RawMetrics) ScoreBreakdown {
 		RatingScore:      ratingScore,
 		RawMetrics: RawMetrics{
 			SuccessRate: math.Round(sr*1000) / 1000,
-			TradeCount:  metrics.TradeCount,
-			AssetUSD:    math.Round(metrics.AssetUSD*100) / 100,
+			TradeCount:  tradeCount,
+			AssetUSD:    math.Round(assetUSD*100) / 100,
 			Rating:      math.Round(rating*10) / 10,
 		},
 	}
@@ -120,6 +124,11 @@ func Calculate(metrics RawMetrics) ScoreBreakdown {
 
 // DetermineTier maps total score to trust tier and leverage parameters.
 func DetermineTier(score float64) (tier string, maxLeverage int, creditLimitUSD float64, recommendation string) {
+	if math.IsNaN(score) || math.IsInf(score, 0) || score < 0 {
+		score = 0
+	} else if score > 100.0 {
+		score = 100.0
+	}
 	switch {
 	case score >= 80.0:
 		return TierPrime, 20, 5000.00, "[PRIME] High-frequency autonomous agent trading permitted. Maximum leverage unlocked."

@@ -545,8 +545,23 @@ func (s *Service) DeductInference(walletAddress string, costCNY float64) (*Infer
 		v.LastResetDay = today
 	}
 
+	autoRecharged := false
+	// Auto-topup guardrail: triggers when balance < 1.0 USD (or < 7.2 CNY / < 1.0 CNY) or balance < costCNY
+	// and card is bound and daily spending limit is not exceeded.
+	if v.AutoRechargeEnabled && (v.BalanceUSD < 1.0 || v.BalanceCNY < 1.0 || v.BalanceCNY < costCNY) {
+		if v.SpentTodayUSD+10.0 <= v.DailyLimitUSD {
+			// Automatically execute $10 topup (72.0 CNY)
+			v.SpentTodayUSD += 10.0
+			v.BalanceUSD += 10.0
+			v.BalanceCNY += 72.0
+			v.TotalDepositedUSD += 10.0
+			v.LastRechargedAt = time.Now().UTC()
+			autoRecharged = true
+		}
+	}
+
 	if v.BalanceCNY < costCNY {
-		return v, false, ErrInsufficientBalance
+		return v, autoRecharged, ErrInsufficientBalance
 	}
 
 	// Deduct balance
@@ -559,11 +574,9 @@ func (s *Service) DeductInference(walletAddress string, costCNY float64) (*Infer
 		v.BalanceUSD = 0
 	}
 
-	autoRecharged := false
-	// Auto-topup guardrail: triggers when balance < 1.0 USD (or < 7.2 CNY) and card is bound
-	if v.BalanceUSD < 1.0 && v.AutoRechargeEnabled {
+	// If balance fell below threshold after deduction and hasn't auto-recharged yet
+	if !autoRecharged && v.AutoRechargeEnabled && (v.BalanceUSD < 1.0 || v.BalanceCNY < 1.0) {
 		if v.SpentTodayUSD+10.0 <= v.DailyLimitUSD {
-			// Automatically execute $10 topup (72.0 CNY)
 			v.SpentTodayUSD += 10.0
 			v.BalanceUSD += 10.0
 			v.BalanceCNY += 72.0
@@ -586,14 +599,21 @@ func (s *Service) BindVaultCard(walletAddress string, req CardBindRequest) (*Inf
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	v.StripeCustomerID = req.CustomerID
+	custID := req.CustomerID
+	if custID == "" {
+		custID = fmt.Sprintf("cus_%s", walletAddress[2:min(10, len(walletAddress))])
+	}
+	dailyLimit := req.DailyLimitUSD
+	if dailyLimit <= 0 {
+		dailyLimit = 50.00
+	}
+
+	v.StripeCustomerID = custID
 	v.PaymentMethodID = req.PaymentMethodID
 	v.CardLast4 = req.CardLast4
 	v.CardBrand = req.CardBrand
 	v.AutoRechargeEnabled = req.AutoRechargeEnabled
-	if req.DailyLimitUSD > 0 {
-		v.DailyLimitUSD = req.DailyLimitUSD
-	}
+	v.DailyLimitUSD = dailyLimit
 
 	return v, nil
 }

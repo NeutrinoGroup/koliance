@@ -256,4 +256,46 @@ func TestProxyChatCompletions(t *testing.T) {
 	if rr.Code != http.StatusPaymentRequired {
 		t.Fatalf("expected 402 Payment Required when balance exhausted, got %d: %s", rr.Code, rr.Body.String())
 	}
+
+	// 4. Test Auto-Recharge triggers when balance is low (< 0.10 CNY) and auto-recharge is enabled
+	v.BalanceCNY = 0.05
+	v.BalanceUSD = 0.007
+	v.AutoRechargeEnabled = true
+	v.SpentTodayUSD = 0.0
+	v.DailyLimitUSD = 50.0
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/proxy/chat/completions", bytes.NewReader(chatPayload))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+rawKey)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK after auto-recharge, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var successResp map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &successResp); err != nil {
+		t.Fatalf("failed to parse success resp: %v", err)
+	}
+	meta := successResp["koliance_meta"].(map[string]interface{})
+	if meta["auto_recharged"] != true {
+		t.Fatalf("expected auto_recharged: true in meta, got %v", meta["auto_recharged"])
+	}
+
+	// 5. Test GET /api/v1/proxy/models
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/proxy/models", nil)
+	req.Header.Set("Authorization", "Bearer "+rawKey)
+	rr = httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 for proxy models, got %d: %s", rr.Code, rr.Body.String())
+	}
+	var modelsResp struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rr.Body.Bytes(), &modelsResp); err != nil || len(modelsResp.Data) == 0 {
+		t.Fatalf("expected models list, got err=%v resp=%+v", err, modelsResp)
+	}
 }

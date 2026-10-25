@@ -139,10 +139,108 @@ export default function ImPage() {
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Email Auth Modal states
+  const [emailAuthModalOpen, setEmailAuthModalOpen] = useState(false);
+  const [emailModalMode, setEmailModalMode] = useState<"register" | "login">("register");
+  const [emailModalEmail, setEmailModalEmail] = useState("");
+  const [emailModalPassword, setEmailModalPassword] = useState("");
+  const [emailModalName, setEmailModalName] = useState("");
+  const [emailModalError, setEmailModalError] = useState<string | null>(null);
+  const [emailModalLoading, setEmailModalLoading] = useState(false);
+
   // Resolve auth token
   const authToken = activeAddress
     ? getWalletSessionToken(activeAddress) || getSessionToken()
     : getSessionToken();
+
+  // Helper to ensure valid session token exists
+  const ensureValidAuthToken = async (): Promise<string | null> => {
+    const existing = activeAddress
+      ? getWalletSessionToken(activeAddress) || getSessionToken()
+      : getSessionToken();
+    if (existing) return existing;
+    if (!isLoggedIn) return null;
+
+    try {
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentSenderId,
+          email: userEmail || undefined,
+          name: userName || undefined,
+          walletAddress: activeAddress || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.sessionToken) {
+        setSessionToken(data.sessionToken);
+        return data.sessionToken;
+      }
+    } catch (err) {
+      console.warn("[IM] Auto session mint notice:", err);
+    }
+    return null;
+  };
+
+  const handleEmailModalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailModalError(null);
+    const cleanEmail = emailModalEmail.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      setEmailModalError("请输入有效的邮箱地址");
+      return;
+    }
+    if (emailModalPassword.length < 6) {
+      setEmailModalError("密码不得少于 6 位");
+      return;
+    }
+
+    setEmailModalLoading(true);
+    try {
+      const res = await fetch("/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: emailModalMode,
+          email: cleanEmail,
+          password: emailModalPassword,
+          name: emailModalName.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.sessionToken) {
+          setSessionToken(data.sessionToken);
+        }
+        if (data.profile) {
+          writeAccountState("google", {
+            googleId: data.profile.id,
+            email: data.profile.email,
+            emailVerified: true,
+            name: data.profile.name,
+            picture: data.profile.picture,
+            bio: data.profile.bio,
+            walletAddress: data.profile.walletAddress || null,
+            trustTier: data.profile.trustTier,
+            creditAllowanceUSD: data.profile.creditAllowanceUSD || 600,
+          });
+        }
+        setEmailModalEmail("");
+        setEmailModalPassword("");
+        setEmailModalName("");
+        setEmailAuthModalOpen(false);
+        window.dispatchEvent(new Event("koliance:login"));
+      } else {
+        setEmailModalError(data.error || "认证失败，请重试");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setEmailModalError(msg || "网络请求失败");
+    } finally {
+      setEmailModalLoading(false);
+    }
+  };
 
   const handleSelectView = (view: NavView) => {
     if (view === "IM") return;
@@ -363,8 +461,10 @@ export default function ImPage() {
 
   // Say Hi greeting interaction with confetti animation
   const handleSayHi = async (targetUser: PublicUserSearchResult) => {
-    if (!authToken || !isLoggedIn) {
-      login();
+    const token = await ensureValidAuthToken();
+    if (!token || !isLoggedIn) {
+      setEmailModalMode("register");
+      setEmailAuthModalOpen(true);
       return;
     }
 
@@ -384,7 +484,7 @@ export default function ImPage() {
       try {
         const res = await fetch("/api/user/friends", {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...authHeaders(authToken) },
+          headers: { "Content-Type": "application/json", ...authHeaders(token) },
           body: JSON.stringify({
             friend_wallet: targetId,
             friend_name: targetName,
@@ -427,7 +527,7 @@ export default function ImPage() {
     try {
       const msgRes = await fetch("/api/user/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders(authToken) },
+        headers: { "Content-Type": "application/json", ...authHeaders(token) },
         body: JSON.stringify({
           recipient: targetId,
           msg_type: "TEXT",
@@ -466,16 +566,48 @@ export default function ImPage() {
   const executeAddFriend = async (targetIdentifier: string, displayName?: string) => {
     setFriendError(null);
     const clean = targetIdentifier.trim();
+    if (!clean) {
+      setFriendError("请输入有效的用户名、邮箱或 0x 钱包地址");
+      return;
+    }
+
+    const token = await ensureValidAuthToken();
+    if (!token || !isLoggedIn) {
+      setFriendError("请先登录账号后添加好友");
+      return;
+    }
+
+    let resolvedTarget = clean;
+    let resolvedDisplayName = displayName?.trim() || newFriendName.trim() || undefined;
+
     const isWallet = isAddress(clean);
     const isEmail = EMAIL_REGEX.test(clean);
     const isDid = clean.startsWith("did:");
 
     if (!isWallet && !isEmail && !isDid) {
-      setFriendError("请输入有效的 0x 钱包地址、邮箱或从搜索结果中选择用户");
-      return;
+      // Query search API to resolve username / nickname
+      try {
+        const searchRes = await fetch(`/api/user/search?q=${encodeURIComponent(clean)}`, {
+          headers: authHeaders(token),
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (Array.isArray(searchData.users) && searchData.users.length > 0) {
+            const matched = searchData.users[0];
+            resolvedTarget = matched.wallet_address || matched.email || matched.id;
+            if (!resolvedDisplayName) resolvedDisplayName = matched.name;
+          } else {
+            setFriendError("未找到该用户，请输入有效用户名、邮箱或 0x 钱包地址");
+            return;
+          }
+        }
+      } catch {
+        setFriendError("未检索到匹配用户，请重试");
+        return;
+      }
     }
 
-    const normTarget = clean.toLowerCase();
+    const normTarget = resolvedTarget.toLowerCase();
     if (
       normTarget === currentSenderId.toLowerCase() ||
       (activeAddress && normTarget === activeAddress.toLowerCase()) ||
@@ -489,15 +621,18 @@ export default function ImPage() {
     try {
       const res = await fetch("/api/user/friends", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders(authToken) },
+        headers: { "Content-Type": "application/json", ...authHeaders(token) },
         body: JSON.stringify({
-          friend_wallet: clean,
-          friend_name: displayName?.trim() || newFriendName.trim() || undefined,
+          friend_wallet: resolvedTarget,
+          friend_name: resolvedDisplayName,
         }),
       });
       const data = await res.json();
       if (res.ok && data.friend) {
-        setFriends((prev) => [data.friend, ...prev]);
+        setFriends((prev) => {
+          const exists = prev.some((f) => f.friend_wallet.toLowerCase() === data.friend.friend_wallet.toLowerCase());
+          return exists ? prev : [data.friend, ...prev];
+        });
         setSelectedPeer(data.friend);
         setShowAddFriend(false);
         setNewFriendInput("");
@@ -719,11 +854,11 @@ export default function ImPage() {
               <div className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
                 <span>实时通讯录与企业级即时消息</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#2b2d31] border border-[#3e4147] text-zinc-300">
-                  [LIVE · MONAD TESTNET]
+                  [LIVE]
                 </span>
               </div>
               <div className="text-xs text-zinc-400 font-sans">
-                支持用户名与邮箱搜索 · 实时图文通信 · 0x 地址防误转 · 链上凭证直达
+                支持邮箱与用户名搜索 · 实时通信 · 0x 地址防误转 · 链上凭证直达
               </div>
             </div>
           </div>
@@ -764,7 +899,7 @@ export default function ImPage() {
                   type="button"
                   onClick={() => login()}
                   className="px-2.5 py-1.5 rounded-md bg-[#2b2d31] hover:bg-[#35373c] border border-[#3e4147] text-zinc-300 text-xs font-mono transition flex items-center gap-1 cursor-pointer"
-                  title="绑定 Monad 钱包以启用链上转账"
+                  title="绑定钱包以启用转账"
                 >
                   <Wallet className="w-3.5 h-3.5 text-zinc-400" />
                   <span>连接钱包转账</span>
@@ -774,11 +909,22 @@ export default function ImPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => login()}
+                  onClick={() => {
+                    setEmailModalMode("register");
+                    setEmailAuthModalOpen(true);
+                  }}
                   className="px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
                 >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>邮箱注册</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => login()}
+                  className="px-3 py-1.5 rounded-md bg-[#2b2d31] hover:bg-[#35373c] border border-[#3e4147] text-zinc-300 text-xs font-mono transition flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
                   <LogIn className="w-3.5 h-3.5" />
-                  <span>登录 / 注册 Koliance</span>
+                  <span>第三方登录</span>
                 </button>
               </div>
             )}
@@ -1019,14 +1165,27 @@ export default function ImPage() {
                   <div className="text-[11px] text-zinc-400 font-sans leading-relaxed">
                     请先注册或登录 Koliance 账号后开启畅聊与好友发现
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => login()}
-                    className="w-full py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
-                  >
-                    <LogIn className="w-3.5 h-3.5" />
-                    <span>立即登录 / 注册</span>
-                  </button>
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailModalMode("register");
+                        setEmailAuthModalOpen(true);
+                      }}
+                      className="w-full py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
+                    >
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>邮箱注册 / 登录</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => login()}
+                      className="w-full py-2 rounded-md bg-[#35373c] hover:bg-[#404249] border border-[#44474f] text-zinc-200 text-xs font-mono font-medium transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>Google / GitHub 登录</span>
+                    </button>
+                  </div>
                 </div>
               ) : isLoadingFriends ? (
                 <div className="p-6 text-center text-zinc-400">
@@ -1495,19 +1654,30 @@ export default function ImPage() {
                     企业级端到端即时通讯与链上交互终端
                   </div>
                   <div className="text-xs text-zinc-400 leading-relaxed font-sans">
-                    支持用户名与邮箱搜索、富文本、Canvas 压缩图文、超链接识别、Monad 链上转账凭据与社交红包。
+                    支持邮箱与用户名搜索、富文本、图文通信、超链接识别、转账凭据与社交红包。
                   </div>
                 </div>
 
                 {!isLoggedIn ? (
-                  <div className="pt-2">
+                  <div className="pt-2 flex items-center gap-2.5 flex-wrap justify-center">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailModalMode("register");
+                        setEmailAuthModalOpen(true);
+                      }}
+                      className="px-5 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition active:scale-95 flex items-center gap-2 cursor-pointer shadow-sm"
+                    >
+                      <Mail className="w-4 h-4" />
+                      <span>邮箱注册 / 登录账号</span>
+                    </button>
                     <button
                       type="button"
                       onClick={() => login()}
-                      className="px-5 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition active:scale-95 flex items-center gap-2 cursor-pointer shadow-sm"
+                      className="px-4 py-2.5 rounded-md bg-[#35373c] hover:bg-[#404249] border border-[#44474f] text-zinc-200 text-xs font-mono font-medium transition active:scale-95 flex items-center gap-2 cursor-pointer"
                     >
                       <LogIn className="w-4 h-4" />
-                      <span>立即登录 / 注册 Koliance 账号</span>
+                      <span>第三方登录</span>
                     </button>
                   </div>
                 ) : (
@@ -1590,6 +1760,140 @@ export default function ImPage() {
             >
               <X className="w-5 h-5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Email Registration & Login Modal */}
+      {emailAuthModalOpen && (
+        <div
+          onClick={() => setEmailAuthModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-lg border border-[#383a40] bg-[#1c1d22] p-5 shadow-2xl space-y-4 text-white"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-md bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                  <Mail className="w-3.5 h-3.5" />
+                </div>
+                <h3 className="text-xs font-bold font-mono text-zinc-100">
+                  {emailModalMode === "register" ? "注册 Koliance 账号" : "邮箱登录 Koliance"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmailAuthModalOpen(false)}
+                className="text-zinc-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Mode Switcher */}
+            <div className="grid grid-cols-2 p-0.5 rounded-md bg-[#141519] border border-white/10 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailModalMode("register");
+                  setEmailModalError(null);
+                }}
+                className={`py-1 rounded text-center transition font-medium cursor-pointer ${
+                  emailModalMode === "register"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                注册新账号
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailModalMode("login");
+                  setEmailModalError(null);
+                }}
+                className={`py-1 rounded text-center transition font-medium cursor-pointer ${
+                  emailModalMode === "login"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                已有账号登录
+              </button>
+            </div>
+
+            {emailModalError && (
+              <div className="p-2 rounded-md bg-red-950/70 border border-red-500/50 text-[11px] text-red-300 font-mono">
+                {emailModalError}
+              </div>
+            )}
+
+            <form onSubmit={handleEmailModalSubmit} className="space-y-3">
+              {emailModalMode === "register" && (
+                <div>
+                  <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                    用户昵称 (选填)
+                  </label>
+                  <input
+                    type="text"
+                    value={emailModalName}
+                    onChange={(e) => setEmailModalName(e.target.value)}
+                    placeholder="输入您的昵称"
+                    className="w-full px-3 py-2 rounded-md bg-[#141519] border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400 font-sans"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  邮箱地址
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={emailModalEmail}
+                  onChange={(e) => setEmailModalEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full px-3 py-2 rounded-md bg-[#141519] border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400 font-sans"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  密码 (至少 6 位)
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={emailModalPassword}
+                  onChange={(e) => setEmailModalPassword(e.target.value)}
+                  placeholder="输入密码"
+                  className="w-full px-3 py-2 rounded-md bg-[#141519] border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400 font-sans"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={emailModalLoading}
+                className="w-full py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-mono font-medium transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+              >
+                {emailModalLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {emailModalLoading
+                    ? "处理中..."
+                    : emailModalMode === "register"
+                    ? "立即创建账号并登录"
+                    : "登录"}
+                </span>
+              </button>
+            </form>
           </div>
         </div>
       )}
