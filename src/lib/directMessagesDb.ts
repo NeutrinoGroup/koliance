@@ -1,4 +1,5 @@
 import { supabaseServer } from "@/lib/supabaseServer";
+import { loadPersistentCollection, savePersistentRecord } from "@/lib/storagePersistence";
 import crypto from "crypto";
 
 export type DirectMessageType = "TEXT" | "IMAGE" | "TRANSFER_RECEIPT" | "GIFT";
@@ -14,8 +15,8 @@ export interface DirectMessageRecord {
   created_at: string;
 }
 
-// In-memory fallback cache when Supabase database is offline or in local test environment
-const memoryMessages = new Map<string, DirectMessageRecord>();
+// Persistent fallback cache when Supabase database is offline or in local test environment
+const memoryMessages = loadPersistentCollection<DirectMessageRecord>("direct_messages");
 
 export function resetDirectMessagesDbForTests(): void {
   memoryMessages.clear();
@@ -151,5 +152,6 @@ export async function createDirectMessage(params: {
   }
 
   memoryMessages.set(id, record);
+  savePersistentRecord("direct_messages", id, record, memoryMessages);
   return { success: true, message: record };
 }

@@ -42,6 +42,7 @@ import {
   formatSignedUsd,
   formatUsd,
   moversRowCount,
+  round2,
   signClass,
   type SymbolPayload,
 } from "@/lib/marketFeed";
@@ -366,14 +367,31 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
 
   // SVG Chart points calculation.
   //
-  // Kept as-is, and it is not dead code: the backend publishes no series today,
-  // so `closes` is empty and this returns null — the note below the headline
-  // explains that. Should a series endpoint appear, the relayed points render
-  // here with nothing else to change.
+  // Renders the real bars series if returned by the backend. When the historical
+  // bars endpoint is unavailable or returns an empty series, derives the authentic
+  // two-observation session trajectory (previous close -> current price) from the
+  // live market quote, guaranteeing the chart remains visible and truthful.
   const chartCoordinates = useMemo(() => {
-    if (!marketData || !marketData.chart.closes.length) return null;
-    const closes = marketData.chart.closes;
-    if (closes.length < 2) return null;
+    if (!marketData) return null;
+    let closes = marketData.chart.closes;
+    let timestamps = marketData.chart.timestamps;
+
+    // When upstream bars endpoint returns no series (e.g. only latest & previous close were published),
+    // derive the two genuine observation points (previousClose -> regularMarketPrice).
+    if (
+      (!closes || closes.length < 2) &&
+      typeof marketData.meta.regularMarketPrice === "number" &&
+      typeof marketData.meta.regularMarketChange === "number"
+    ) {
+      const current = marketData.meta.regularMarketPrice;
+      const prev = round2(current - marketData.meta.regularMarketChange);
+      if (prev > 0 && current > 0) {
+        closes = [prev, current];
+        timestamps = [0, 1];
+      }
+    }
+
+    if (!closes || closes.length < 2) return null;
     const min = Math.min(...closes);
     const max = Math.max(...closes);
     const range = max - min || 1;
@@ -385,7 +403,7 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
     const points = closes.map((price, idx) => {
       const x = padding + (idx / (closes.length - 1)) * (width - padding * 2);
       const y = height - padding - ((price - min) / range) * (height - padding * 2);
-      return { x, y, price, timestamp: marketData.chart.timestamps[idx] };
+      return { x, y, price, timestamp: timestamps[idx] };
     });
 
     let pathD = `M ${points[0].x} ${points[0].y}`;
@@ -395,7 +413,9 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
 
     const areaD = `${pathD} L ${points[points.length - 1].x} ${height} L ${points[0].x} ${height} Z`;
 
-    return { points, pathD, areaD, min, max, width, height };
+    const isTwoObservationFallback = !marketData.chart.closes || marketData.chart.closes.length < 2;
+
+    return { points, pathD, areaD, min, max, width, height, isTwoObservationFallback };
   }, [marketData]);
 
   // Sign of the selected symbol's change, or null when the upstream published
@@ -636,21 +656,28 @@ export function MarketTerminal({ onTradeAction }: MarketTerminalProps) {
             ) : quoteFailure ? (
               <FailureNotice failure={quoteFailure} context={selectedSymbol} code={quoteEnvelope?.code} requestId={quoteEnvelope?.requestId} />
             ) : chartCoordinates ? (
-              <svg className="w-full h-full overflow-visible" viewBox="0 0 640 180">
-                <defs>
-                  <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={isPositive ? "#34d399" : "#f87171"} stopOpacity="0.25" />
-                    <stop offset="100%" stopColor={isPositive ? "#34d399" : "#f87171"} stopOpacity="0.0" />
-                  </linearGradient>
-                </defs>
-                <path d={chartCoordinates.areaD} fill="url(#areaGradient)" />
-                <path
-                  d={chartCoordinates.pathD}
-                  fill="none"
-                  stroke={isPositive ? "#34d399" : "#f87171"}
-                  strokeWidth="2.5"
-                />
-              </svg>
+              <div className="w-full h-full relative flex items-center justify-center">
+                {chartCoordinates.isTwoObservationFallback && (
+                  <div className="absolute top-2 right-2 z-10 text-[10px] font-mono text-slate-400 bg-black/60 border border-white/10 px-2 py-0.5 rounded-md backdrop-blur-sm pointer-events-none">
+                    [INFO] 双观测点走势（前收 {formatUsd(marketData?.meta.regularMarketPrice ? marketData.meta.regularMarketPrice - (marketData.meta.regularMarketChange ?? 0) : null)} → 现价 {quotePrice}）
+                  </div>
+                )}
+                <svg className="w-full h-full overflow-visible" viewBox="0 0 640 180">
+                  <defs>
+                    <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={isPositive ? "#34d399" : "#f87171"} stopOpacity="0.25" />
+                      <stop offset="100%" stopColor={isPositive ? "#34d399" : "#f87171"} stopOpacity="0.0" />
+                    </linearGradient>
+                  </defs>
+                  <path d={chartCoordinates.areaD} fill="url(#areaGradient)" />
+                  <path
+                    d={chartCoordinates.pathD}
+                    fill="none"
+                    stroke={isPositive ? "#34d399" : "#f87171"}
+                    strokeWidth="2.5"
+                  />
+                </svg>
+              </div>
             ) : (
               <p className="text-[11px] font-mono text-slate-400 leading-relaxed border border-white/10 rounded-md bg-black/30 px-3 py-2">
                 {NO_SERIES_NOTE}

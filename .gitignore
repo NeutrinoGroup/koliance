@@ -55,5 +55,8 @@ video/public/audio/*
 target/
 Cargo.lock
 
+# Local persistence storage
+data/
+
 # Go binaries
 bin/

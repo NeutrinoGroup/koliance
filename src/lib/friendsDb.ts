@@ -1,5 +1,11 @@
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isValidWalletAddress } from "@/lib/session";
+import { findUserByIdentifier } from "@/lib/db";
+import {
+  loadPersistentCollection,
+  savePersistentRecord,
+  deletePersistentRecord,
+} from "@/lib/storagePersistence";
 import crypto from "crypto";
 
 export interface FriendRecord {
@@ -10,8 +16,8 @@ export interface FriendRecord {
   created_at: string;
 }
 
-// In-memory fallback cache when Supabase database is offline or in local test environment
-const memoryFriends = new Map<string, FriendRecord>();
+// Persistent fallback cache when Supabase database is offline or in local test environment
+const memoryFriends = loadPersistentCollection<FriendRecord>("friends");
 
 export function resetFriendsDbForTests(): void {
   memoryFriends.clear();
@@ -60,32 +66,48 @@ export async function addFriend(
   }
 
   const raw = (friendWallet || "").trim();
+  let resolvedWallet = raw;
+  let resolvedName = friendName;
+
   const isWallet = isValidWalletAddress(raw);
   const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(raw);
   const isDid = raw.startsWith("did:");
 
   if (!isWallet && !isEmail && !isDid) {
-    return { success: false, error: "Invalid 0x EVM wallet address, email, or user identifier" };
+    // Attempt resolving by username, name, or github handle
+    const resolvedUser = await findUserByIdentifier(raw);
+    if (resolvedUser) {
+      resolvedWallet = resolvedUser.wallet_address || resolvedUser.email || resolvedUser.id;
+      if (!resolvedName) resolvedName = resolvedUser.name;
+    } else {
+      return { success: false, error: "Invalid 0x EVM wallet address, email, or user identifier" };
+    }
   }
 
-  const normalizedWallet = raw.toLowerCase();
+  const normalizedWallet = resolvedWallet.toLowerCase();
   const normalizedUser = userId.toLowerCase();
+
+  // Robust self-addition detection
   if (
     normalizedUser === normalizedWallet ||
-    normalizedUser.endsWith(`:${normalizedWallet}`) ||
-    (normalizedUser.startsWith("did:koliance:") && normalizedUser.includes(normalizedWallet))
+    normalizedUser === `did:koliance:email:${normalizedWallet}` ||
+    normalizedUser === `did:koliance:wallet:${normalizedWallet}` ||
+    (normalizedUser.startsWith("did:koliance:email:") &&
+      normalizedUser.replace("did:koliance:email:", "") === normalizedWallet) ||
+    (normalizedUser.startsWith("did:koliance:wallet:") &&
+      normalizedUser.replace("did:koliance:wallet:", "") === normalizedWallet)
   ) {
     return { success: false, error: "Cannot add your own wallet address as a friend" };
   }
 
-  let defaultName = `Friend-${normalizedWallet.slice(2, 6)}`;
-  if (isEmail) {
+  let defaultName = `Friend-${normalizedWallet.slice(0, 6)}`;
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/i.test(normalizedWallet)) {
     defaultName = normalizedWallet.split("@")[0];
-  } else if (isDid) {
+  } else if (normalizedWallet.startsWith("did:")) {
     defaultName = normalizedWallet.split(":").pop() || "User";
   }
 
-  const name = (friendName && friendName.trim()) || defaultName;
+  const name = (resolvedName && resolvedName.trim()) || defaultName;
   const id = `fr_${crypto.randomBytes(12).toString("hex")}`;
   const now = new Date().toISOString();
 
@@ -122,6 +144,7 @@ export async function addFriend(
   }
 
   memoryFriends.set(id, record);
+  savePersistentRecord("friends", id, record, memoryFriends);
   return { success: true, friend: record };
 }
 
@@ -153,6 +176,7 @@ export async function removeFriend(userId: string, friendWallet: string): Promis
   }
   if (foundKey) {
     memoryFriends.delete(foundKey);
+    deletePersistentRecord("friends", foundKey, memoryFriends);
     return true;
   }
   return false;

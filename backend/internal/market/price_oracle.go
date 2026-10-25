@@ -393,8 +393,8 @@ func mapRangeToAlpacaParams(rangeParam string) (timeframe string, start string, 
 	now := time.Now().UTC()
 	switch strings.ToLower(strings.TrimSpace(rangeParam)) {
 	case "1d":
-		// 15-minute intraday bars over the last 3 days to guarantee coverage across weekends/holidays.
-		return "15Min", now.AddDate(0, 0, -3).Format("2006-01-02"), 100
+		// 15-minute intraday bars over the last 5 days to guarantee coverage across long weekends/holidays.
+		return "15Min", now.AddDate(0, 0, -5).Format("2006-01-02"), 200
 	case "5d":
 		// 1-hour bars over the last 7 days.
 		return "1Hour", now.AddDate(0, 0, -7).Format("2006-01-02"), 100
