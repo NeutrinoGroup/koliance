@@ -16,15 +16,17 @@ import (
 )
 
 var (
-	ErrUnauthorized         = errors.New("missing or invalid API key credential")
-	ErrQuotaExhausted       = errors.New("API call quota exhausted, please claim or recharge packages")
-	ErrRateLimited          = errors.New("rate limit exceeded, please back off and retry")
-	ErrFreeClaimsExhausted  = errors.New("all 3 free starter package claims have been exhausted")
-	ErrInvalidWalletAddress = errors.New("invalid EVM wallet address format")
-	ErrInvalidAmount        = errors.New("amount must be a finite positive number")
-	ErrInvalidQuantity      = errors.New("quantity must be at least 1")
-	ErrInvalidPaymentMethod = errors.New("unsupported payment method: must be crypto, bank, or stripe")
-	ErrInvalidTier          = errors.New("unknown package tier")
+	ErrUnauthorized            = errors.New("missing or invalid API key credential")
+	ErrQuotaExhausted          = errors.New("API call quota exhausted, please claim or recharge packages")
+	ErrRateLimited             = errors.New("rate limit exceeded, please back off and retry")
+	ErrFreeClaimsExhausted     = errors.New("all 3 free starter package claims have been exhausted")
+	ErrInvalidWalletAddress    = errors.New("invalid EVM wallet address format")
+	ErrInvalidAmount           = errors.New("amount must be a finite positive number")
+	ErrInvalidQuantity         = errors.New("quantity must be at least 1")
+	ErrInvalidPaymentMethod    = errors.New("unsupported payment method: must be crypto, bank, or stripe")
+	ErrInvalidTier             = errors.New("unknown package tier")
+	ErrInsufficientBalance     = errors.New("insufficient inference vault balance (requires at least 0.10 CNY / $0.014 USD)")
+	ErrDailyTopupLimitExceeded = errors.New("daily auto-recharge limit ($50.00 max) reached; circuit breaker active")
 )
 
 type TokenBucket struct {
@@ -75,6 +77,8 @@ type Service struct {
 	rateLimiters  map[string]*TokenBucket
 	callCount24h  int
 	db            *database.DB
+	vaults        map[string]*InferenceVault
+	meteringLogs  []*InferenceMeteringLog
 }
 
 func NewService(db *database.DB) *Service {
@@ -86,6 +90,8 @@ func NewService(db *database.DB) *Service {
 		paymentList:   make([]*PaymentOrderView, 0),
 		rateLimiters:  make(map[string]*TokenBucket),
 		db:            db,
+		vaults:        make(map[string]*InferenceVault),
+		meteringLogs:  make([]*InferenceMeteringLog, 0),
 	}
 }
 
@@ -461,3 +467,161 @@ func (s *Service) ListBoundAgentsForWallet(walletAddress string) []*AgentBinding
 	}
 	return agents
 }
+
+// GetOrCreateVault retrieves or initializes the inference vault for a given wallet.
+func (s *Service) GetOrCreateVault(walletAddress string) *InferenceVault {
+	walletAddress = strings.ToLower(strings.TrimSpace(walletAddress))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	v, exists := s.vaults[walletAddress]
+	if !exists {
+		v = &InferenceVault{
+			WalletAddress:       walletAddress,
+			BalanceUSD:          1.50, // Initial starter inference trial balance ($1.50 ~ 10 CNY)
+			BalanceCNY:          10.80,
+			TotalDepositedUSD:   1.50,
+			AutoRechargeEnabled: false,
+			DailyLimitUSD:       50.00,
+			SpentTodayUSD:       0.00,
+			LastRechargedAt:     time.Now().UTC(),
+			LastResetDay:        today,
+		}
+		s.vaults[walletAddress] = v
+	}
+
+	// Reset daily spent limit if day has changed
+	if v.LastResetDay != today {
+		v.SpentTodayUSD = 0.00
+		v.LastResetDay = today
+	}
+
+	return v
+}
+
+// CreditVault adds funds to a wallet's inference vault.
+func (s *Service) CreditVault(walletAddress string, amountUSD, amountCNY float64, reason string) (*InferenceVault, error) {
+	if err := ValidateWallet(walletAddress); err != nil {
+		return nil, err
+	}
+	if amountUSD <= 0 && amountCNY <= 0 {
+		return nil, ErrInvalidAmount
+	}
+	if amountUSD > 0 && amountCNY <= 0 {
+		amountCNY = amountUSD * 7.2
+	} else if amountCNY > 0 && amountUSD <= 0 {
+		amountUSD = amountCNY / 7.2
+	}
+
+	v := s.GetOrCreateVault(walletAddress)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v.BalanceUSD += amountUSD
+	v.BalanceCNY += amountCNY
+	v.TotalDepositedUSD += amountUSD
+	v.LastRechargedAt = time.Now().UTC()
+
+	return v, nil
+}
+
+// DeductInference deducts cost for an inference call, triggering auto-recharge guardrails if needed.
+func (s *Service) DeductInference(walletAddress string, costCNY float64) (*InferenceVault, bool, error) {
+	if err := ValidateWallet(walletAddress); err != nil {
+		return nil, false, err
+	}
+	if costCNY <= 0 {
+		costCNY = 0.10 // Default micro-charge: 0.10 CNY (~$0.014)
+	}
+
+	v := s.GetOrCreateVault(walletAddress)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	if v.LastResetDay != today {
+		v.SpentTodayUSD = 0.00
+		v.LastResetDay = today
+	}
+
+	if v.BalanceCNY < costCNY {
+		return v, false, ErrInsufficientBalance
+	}
+
+	// Deduct balance
+	v.BalanceCNY -= costCNY
+	v.BalanceUSD -= (costCNY / 7.2)
+	if v.BalanceCNY < 0 {
+		v.BalanceCNY = 0
+	}
+	if v.BalanceUSD < 0 {
+		v.BalanceUSD = 0
+	}
+
+	autoRecharged := false
+	// Auto-topup guardrail: triggers when balance < 1.0 USD (or < 7.2 CNY) and card is bound
+	if v.BalanceUSD < 1.0 && v.AutoRechargeEnabled {
+		if v.SpentTodayUSD+10.0 <= v.DailyLimitUSD {
+			// Automatically execute $10 topup (72.0 CNY)
+			v.SpentTodayUSD += 10.0
+			v.BalanceUSD += 10.0
+			v.BalanceCNY += 72.0
+			v.TotalDepositedUSD += 10.0
+			v.LastRechargedAt = time.Now().UTC()
+			autoRecharged = true
+		}
+	}
+
+	return v, autoRecharged, nil
+}
+
+// BindVaultCard configures credit/virtual card auto-topup with daily limit guardrails.
+func (s *Service) BindVaultCard(walletAddress string, req CardBindRequest) (*InferenceVault, error) {
+	if err := ValidateWallet(walletAddress); err != nil {
+		return nil, err
+	}
+	v := s.GetOrCreateVault(walletAddress)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	v.StripeCustomerID = req.CustomerID
+	v.PaymentMethodID = req.PaymentMethodID
+	v.CardLast4 = req.CardLast4
+	v.CardBrand = req.CardBrand
+	v.AutoRechargeEnabled = req.AutoRechargeEnabled
+	if req.DailyLimitUSD > 0 {
+		v.DailyLimitUSD = req.DailyLimitUSD
+	}
+
+	return v, nil
+}
+
+// RecordInferenceMetering persists an inference metering log.
+func (s *Service) RecordInferenceMetering(log *InferenceMeteringLog) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.meteringLogs = append(s.meteringLogs, log)
+	s.callCount24h++
+}
+
+// GetInferenceLogs returns recent metering logs for a wallet.
+func (s *Service) GetInferenceLogs(walletAddress string, limit int) []*InferenceMeteringLog {
+	walletAddress = strings.ToLower(strings.TrimSpace(walletAddress))
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if limit <= 0 {
+		limit = 50
+	}
+	res := make([]*InferenceMeteringLog, 0)
+	for i := len(s.meteringLogs) - 1; i >= 0 && len(res) < limit; i-- {
+		l := s.meteringLogs[i]
+		if walletAddress == "" || strings.ToLower(l.WalletAddress) == walletAddress {
+			res = append(res, l)
+		}
+	}
+	return res
+}
+

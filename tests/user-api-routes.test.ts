@@ -274,7 +274,12 @@ describe("User API Routes: Friends, Messages & Rewards", () => {
       const emailReq = new NextRequest("http://localhost/api/auth/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "tester.charlie@monad.xyz", name: "Charlie" }),
+        body: JSON.stringify({
+          action: "register",
+          email: "tester.charlie@monad.xyz",
+          password: "password123",
+          name: "Charlie",
+        }),
       });
       const res = await emailAuthPOST(emailReq);
       expect(res.status).toBe(200);
@@ -283,16 +288,50 @@ describe("User API Routes: Friends, Messages & Rewards", () => {
       expect(data.sessionToken).toBeDefined();
       expect(data.profile.email).toBe("tester.charlie@monad.xyz");
       expect(data.profile.name).toBe("Charlie");
+
+      // Verify login with correct password works
+      const loginReq = new NextRequest("http://localhost/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "login",
+          email: "tester.charlie@monad.xyz",
+          password: "password123",
+        }),
+      });
+      const loginRes = await emailAuthPOST(loginReq);
+      expect(loginRes.status).toBe(200);
+
+      // Verify login with wrong password fails
+      const badPassReq = new NextRequest("http://localhost/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "login",
+          email: "tester.charlie@monad.xyz",
+          password: "wrongpassword",
+        }),
+      });
+      const badPassRes = await emailAuthPOST(badPassReq);
+      expect(badPassRes.status).toBe(401);
     });
 
     it("rejects invalid email in email auth", async () => {
       const badReq = new NextRequest("http://localhost/api/auth/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "invalid-email" }),
+        body: JSON.stringify({ email: "invalid-email", password: "password123" }),
       });
       const res = await emailAuthPOST(badReq);
       expect(res.status).toBe(400);
+
+      const shortPassReq = new NextRequest("http://localhost/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: "valid@example.com", password: "123" }),
+      });
+      const shortRes = await emailAuthPOST(shortPassReq);
+      expect(shortRes.status).toBe(400);
     });
 
     it("searches registered users by username and email", async () => {
@@ -300,12 +339,22 @@ describe("User API Routes: Friends, Messages & Rewards", () => {
       await emailAuthPOST(new NextRequest("http://localhost/api/auth/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "alice.search@example.com", name: "Alice Searcher" }),
+        body: JSON.stringify({
+          action: "register",
+          email: "alice.search@example.com",
+          password: "alicepassword",
+          name: "Alice Searcher",
+        }),
       }));
       await emailAuthPOST(new NextRequest("http://localhost/api/auth/email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "bob.dev@example.com", name: "Bob Developer" }),
+        body: JSON.stringify({
+          action: "register",
+          email: "bob.dev@example.com",
+          password: "bobpassword",
+          name: "Bob Developer",
+        }),
       }));
 
       // Search by name "Searcher"
@@ -325,7 +374,18 @@ describe("User API Routes: Friends, Messages & Rewards", () => {
       const res2 = await searchGET(searchReq2);
       expect(res2.status).toBe(200);
       const data2 = await res2.json();
+      expect(data2.success).toBe(true);
       expect(data2.users.some((u: { email: string }) => u.email === "bob.dev@example.com")).toBe(true);
+
+      // Auto-discovery with empty query
+      const discReq = new NextRequest("http://localhost/api/user/search?q=", {
+        headers: authHeader,
+      });
+      const discRes = await searchGET(discReq);
+      expect(discRes.status).toBe(200);
+      const discData = await discRes.json();
+      expect(discData.success).toBe(true);
+      expect(discData.users.length).toBeGreaterThan(0);
     });
   });
 });

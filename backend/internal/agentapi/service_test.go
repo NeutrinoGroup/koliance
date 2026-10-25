@@ -163,3 +163,109 @@ func TestProcessPayment(t *testing.T) {
 		t.Fatalf("expected volume %.2f, got %.2f", expectedVolume, stats.TotalVolumeUSD)
 	}
 }
+
+func TestInferenceVaultAndAutoRechargeGuardrail(t *testing.T) {
+	svc := NewService(nil)
+	wallet := "0x71C8360f3E118A7cD87A0cf633a69a089d4c20b2"
+
+	// 1. Initial vault has default starter balance
+	vault := svc.GetOrCreateVault(wallet)
+	if vault.BalanceUSD <= 0 || vault.BalanceCNY <= 0 {
+		t.Fatalf("expected positive initial balance, got USD=%v CNY=%v", vault.BalanceUSD, vault.BalanceCNY)
+	}
+
+	// 2. Credit vault (e.g. 10 CNY deposit)
+	updated, err := svc.CreditVault(wallet, 0, 10.0, "WeChat Pay Deposit")
+	if err != nil {
+		t.Fatalf("failed to credit vault: %v", err)
+	}
+	if updated.BalanceCNY < 20.0 {
+		t.Fatalf("expected balance to increase, got %v", updated.BalanceCNY)
+	}
+
+	// 3. Deduct micro-inference cost
+	_, autoRecharged, err := svc.DeductInference(wallet, 0.10)
+	if err != nil {
+		t.Fatalf("deduct failed: %v", err)
+	}
+	if autoRecharged {
+		t.Fatalf("autoRecharge should be false when balance is plentiful")
+	}
+
+	// 4. Bind card and test auto-recharge guardrail
+	_, err = svc.BindVaultCard(wallet, CardBindRequest{
+		WalletAddress:       wallet,
+		CustomerID:          "cus_test123",
+		PaymentMethodID:     "pm_test123",
+		CardLast4:           "4242",
+		CardBrand:           "visa",
+		AutoRechargeEnabled: true,
+		DailyLimitUSD:       50.0,
+	})
+	if err != nil {
+		t.Fatalf("failed to bind card: %v", err)
+	}
+
+	// Force balance down to below $1.00 (below 7.2 CNY)
+	svc.mu.Lock()
+	vault.BalanceCNY = 1.0 // 1 CNY (~$0.14)
+	vault.BalanceUSD = 0.14
+	svc.mu.Unlock()
+
+	// Next deduction should trigger auto-recharge (+ $10.00 / 72.0 CNY)
+	vAfter, recharged, err := svc.DeductInference(wallet, 0.10)
+	if err != nil {
+		t.Fatalf("deduction failed: %v", err)
+	}
+	if !recharged {
+		t.Fatalf("expected auto-recharge to trigger")
+	}
+	if vAfter.SpentTodayUSD != 10.0 {
+		t.Fatalf("expected spentTodayUSD = 10.0, got %v", vAfter.SpentTodayUSD)
+	}
+	if vAfter.BalanceUSD < 9.0 {
+		t.Fatalf("expected balance to increase after auto-recharge, got %v", vAfter.BalanceUSD)
+	}
+
+	// 5. Test daily limit circuit breaker
+	svc.mu.Lock()
+	vAfter.SpentTodayUSD = 50.0 // Exhaust daily limit
+	vAfter.BalanceCNY = 0.05
+	vAfter.BalanceUSD = 0.01
+	svc.mu.Unlock()
+
+	// Should fail with ErrInsufficientBalance because balance is insufficient and daily limit reached
+	_, recharged2, err := svc.DeductInference(wallet, 0.10)
+	if err != ErrInsufficientBalance {
+		t.Fatalf("expected ErrInsufficientBalance when balance depleted and limit hit, got %v", err)
+	}
+	if recharged2 {
+		t.Fatalf("auto-recharge must NOT trigger when daily limit reached")
+	}
+}
+
+func TestInferenceMeteringLogs(t *testing.T) {
+	svc := NewService(nil)
+	wallet := "0x71C8360f3E118A7cD87A0cf633a69a089d4c20b2"
+
+	log1 := &InferenceMeteringLog{
+		ID:               "log-1",
+		WalletAddress:    wallet,
+		Model:            "deepseek-chat",
+		PromptTokens:     120,
+		CompletionTokens: 350,
+		TotalTokens:      470,
+		CostCNY:          0.10,
+		CostUSD:          0.014,
+	}
+	svc.RecordInferenceMetering(log1)
+
+	logs := svc.GetInferenceLogs(wallet, 10)
+	if len(logs) != 1 {
+		t.Fatalf("expected 1 log, got %d", len(logs))
+	}
+	if logs[0].Model != "deepseek-chat" || logs[0].TotalTokens != 470 {
+		t.Fatalf("unexpected log content: %+v", logs[0])
+	}
+}
+

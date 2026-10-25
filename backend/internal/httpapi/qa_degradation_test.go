@@ -86,6 +86,15 @@ var qaRouteInventory = []qaRouteExpectation{
 	{http.MethodPost, "/api/v1/agent/bind", `{}`, "", 401, "unguarded by DB; no bearer token is now a 401 (issue #35 P0-4)"},
 	{http.MethodPost, "/api/v1/agent/pay", `{}`, "", 401, "unguarded by DB; no bearer token is now a 401 (issue #35 P0-4)"},
 	{http.MethodPost, "/api/v1/developer/packages/claim-or-purchase", `{}`, "", 403, "unguarded by DB; a non-free tier without operator token is refused (issue #35 P0-4)"},
+	{http.MethodGet, "/api/v1/trust/score?wallet=0x0000000000000000000000000000000000000001", "", "", 200, "unguarded: in-memory multi-weighted trust evaluation"},
+	{http.MethodPost, "/api/v1/trust/evaluate", `{}`, "", 400, "unguarded: wallet is required"},
+	{http.MethodPost, "/api/v1/deposit/checkout", `{}`, "", 400, "unguarded: wallet_address is required"},
+	{http.MethodPost, "/api/v1/deposit/webhook", `{}`, "", 400, "unguarded: wallet_address is required"},
+	{http.MethodPost, "/api/v1/deposit/web3-verify", `{}`, "", 400, "unguarded: wallet_address is required"},
+	{http.MethodPost, "/api/v1/card/setup-intent", `{}`, "", 200, "unguarded: Stripe SetupIntent creation"},
+	{http.MethodPost, "/api/v1/card/bind", `{}`, "", 400, "unguarded: wallet_address is required"},
+	{http.MethodGet, "/api/v1/inference/vault", "", "", 401, "unguarded by DB, but requires an API key"},
+	{http.MethodPost, "/api/v1/proxy/chat/completions", `{}`, "", 401, "unguarded by DB, but requires an API key"},
 
 	// ---- no database needed, but the upstream is the failure mode ----
 	// Driven against the closed local port this harness points Alpaca at, so the

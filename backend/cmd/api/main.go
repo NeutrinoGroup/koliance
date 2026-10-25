@@ -20,6 +20,7 @@ import (
 	"github.com/koliance/backend/internal/market"
 	"github.com/koliance/backend/internal/platform/database"
 	"github.com/koliance/backend/internal/platform/stripeclient"
+	"github.com/koliance/backend/internal/trust"
 	"github.com/koliance/backend/internal/verifier"
 )
 
@@ -102,6 +103,7 @@ func run(cfg *config.Config) error {
 		Verifier:     proofVerifier,
 		Liquidations: liquidation.NewPG(db.Pool),
 		AgentAPI:     agentAPIService,
+		TrustEngine:  trust.NewEngine(),
 		Logger:       logger,
 	})
 

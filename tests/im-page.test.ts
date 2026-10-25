@@ -71,12 +71,15 @@ describe("GAP-83 Real-time IM Chat Page & Login Area Entry Icon", () => {
     expect(imPageContent).not.toContain("shadow-[0_0_");
   });
 
-  it("verifies support for user search by username/email and quick email login in /im", () => {
+  it("verifies support for user search, auto-discovery, greeting, and no in-page registration in /im", () => {
     const imPageContent = readFileSync(imPagePath, "utf-8");
     expect(imPageContent).toContain("/api/user/search");
-    expect(imPageContent).toContain("/api/auth/email");
     expect(imPageContent).toContain("searchResults");
-    expect(imPageContent).toContain("handleQuickEmailLogin");
+    expect(imPageContent).toContain("discoveredUsers");
+    expect(imPageContent).toContain("handleSayHi");
+    expect(imPageContent).toContain("canvas-confetti");
+    // Verifies in-page quick email registration form is removed per concise auth & registered-only chat directive
+    expect(imPageContent).not.toContain("handleQuickEmailLogin");
   });
 
   it("verifies geometric compliance: strictly rounded-md on buttons and no rounded-full on cards/buttons", () => {
