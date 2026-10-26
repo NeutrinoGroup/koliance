@@ -23,8 +23,8 @@ import (
 // UpdateProvider supplies the pythUpdateData bytes for one feed. The demo path
 // (DemoOracle) returns nothing: PositionManager.priceUpdater is zero, so
 // _pushPrices no-ops before reading the on-chain DemoOracle price
-// (PositionManager.sol:790-793). The Hermes production path needs real signed
-// updates and is deferred (GAP-39).
+// (PositionManager.sol:790-793). The Hermes path returns the signed update
+// fetched from Hermes immediately before the transaction (GAP-39).
 type UpdateProvider func(ctx context.Context, feedID string) [][]byte
 
 // noUpdates is the demo-path UpdateProvider.
@@ -128,6 +128,26 @@ func New(ctx context.Context, cfg Config, log *slog.Logger, obs liquidation.Stor
 	}
 
 	table := position.NewTable()
+
+	// Hermes mode must not fall back to noUpdates: on a Pyth deployment
+	// an empty pythUpdateData reverts on chain, so a silent fallback
+	// would turn every liquidation attempt into a wasted transaction.
+	// The feed built above is a *oracle.HermesFeed in hermes mode;
+	// in any other mode, or with a non-Hermes feed, keep noUpdates and
+	// let scanAndLiquidate skip hermes batches with no data.
+	updates := UpdateProvider(noUpdates)
+	if cfg.Feed == "hermes" {
+		if hf, ok := feed.(*oracle.HermesFeed); ok {
+			updates = func(ctx context.Context, feedID string) [][]byte {
+				data, err := hf.UpdateData(ctx, feedID)
+				if err != nil {
+					return nil
+				}
+				return data
+			}
+		}
+	}
+
 	b := &Bot{
 		cfg:       cfg,
 		log:       log,
@@ -138,7 +158,7 @@ func New(ctx context.Context, cfg Config, log *slog.Logger, obs liquidation.Stor
 		mmrBps:    mmrBps,
 		sender:    sender,
 		nonce:     mgr,
-		updates:   noUpdates,
+		updates:   updates,
 		obs:       obs,
 		watermark: wm,
 	}
@@ -282,6 +302,10 @@ func (b *Bot) scanAndLiquidate(ctx context.Context) {
 	for _, batch := range batches {
 		ids := toBigIntIDs(batch.PositionIDs)
 		updates := b.updates(ctx, batch.FeedID)
+		if b.cfg.Feed == "hermes" && len(updates) == 0 {
+			b.log.Error("skipping liquidation: no hermes update data", "feed", batch.FeedID, "count", len(ids))
+			continue
+		}
 		for _, chunk := range chunkIDs(ids, b.cfg.MaxPositionsPerCall) {
 			hash, err := b.sender.Liquidate(ctx, chunk, updates)
 			if err != nil {

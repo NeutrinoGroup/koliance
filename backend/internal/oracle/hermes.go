@@ -2,6 +2,7 @@ package oracle
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -14,11 +15,16 @@ import (
 // HermesFeed reads the latest Pyth price from hermes.pyth.network and
 // normalizes it to 18-decimal USD.
 //
-// This is the production narrative path, deliberately kept minimal so the demo
-// is not blocked on it: it performs a per-call latest-price REST GET. The real
-// production path — SSE/WS streaming ticks, a staleness bound mirroring
-// PythOracleAdapter.getPriceNoOlderThan, and batch/confidence handling — is
-// deferred (GAP-39).
+// UpdateData closes GAP-39 for the liquidator: it returns the signed
+// binary price update for one feed, which is what PositionManager needs
+// as pythUpdateData on a PythOracleAdapter deployment. The REST latest
+// price alone is not enough on chain, because the adapter only trusts
+// prices pushed through updatePriceFeeds.
+//
+// What is still deferred: SSE/WS streaming ticks, a staleness bound
+// mirroring PythOracleAdapter.getPriceNoOlderThan, and confidence
+// handling. Callers must fetch an update immediately before submitting
+// a transaction, and must not submit when UpdateData fails.
 type HermesFeed struct {
 	baseURL string
 	client  *http.Client
@@ -46,8 +52,75 @@ func (f *HermesFeed) Price(ctx context.Context, feedID string) (*big.Int, bool) 
 }
 
 func (f *HermesFeed) latestPrice(ctx context.Context, feedID string) (*big.Int, error) {
+	out, err := f.latestUpdate(ctx, feedID, "")
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range out.Parsed {
+		if normalizeFeedID(p.ID) != normalizeFeedID(feedID) {
+			continue
+		}
+		price, err := strconv.ParseInt(p.Price.Price, 10, 64)
+		if err != nil {
+			return nil, fmt.Errorf("oracle: hermes feed %s price %q: %w", feedID, p.Price.Price, err)
+		}
+		return NormalizeHermesPrice(price, p.Price.Expo)
+	}
+	return nil, fmt.Errorf("oracle: hermes: feed %s not in response", feedID)
+}
+
+// UpdateData returns the signed binary price updates for one feed, in
+// the form PositionManager.liquidate and openPosition expect as
+// pythUpdateData. The feed id is treated as an opaque key: this
+// function never hardcodes BTC, ETH, or any other symbol.
+//
+// A failure must be treated by the caller as "do not submit": on a
+// Pyth deployment an empty or stale update reverts on chain, so
+// submitting anyway only burns gas and a nonce.
+func (f *HermesFeed) UpdateData(ctx context.Context, feedID string) ([][]byte, error) {
+	out, err := f.latestUpdate(ctx, feedID, "hex")
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for _, p := range out.Parsed {
+		if normalizeFeedID(p.ID) == normalizeFeedID(feedID) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("oracle: hermes: feed %s not in response", feedID)
+	}
+	if len(out.Binary.Data) == 0 {
+		return nil, fmt.Errorf("oracle: hermes: no update data for feed %s", feedID)
+	}
+	data := make([][]byte, 0, len(out.Binary.Data))
+	for _, s := range out.Binary.Data {
+		hexStr := strings.TrimSpace(s)
+		hexStr = strings.TrimPrefix(hexStr, "0x")
+		hexStr = strings.TrimPrefix(hexStr, "0X")
+		if hexStr == "" {
+			return nil, fmt.Errorf("oracle: hermes: empty update data for feed %s", feedID)
+		}
+		b, err := hex.DecodeString(hexStr)
+		if err != nil {
+			return nil, fmt.Errorf("oracle: decode hermes update data for feed %s: %w", feedID, err)
+		}
+		if len(b) == 0 {
+			return nil, fmt.Errorf("oracle: hermes: empty update data for feed %s", feedID)
+		}
+		data = append(data, b)
+	}
+	return data, nil
+}
+
+func (f *HermesFeed) latestUpdate(ctx context.Context, feedID string, encoding string) (*hermesLatestResponse, error) {
 	v := url.Values{}
 	v.Add("ids[]", feedID)
+	if encoding != "" {
+		v.Add("encoding", encoding)
+	}
 	u := f.baseURL + "/v2/updates/price/latest?" + v.Encode()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -67,27 +140,28 @@ func (f *HermesFeed) latestPrice(ctx context.Context, feedID string) (*big.Int, 
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("oracle: decode hermes response: %w", err)
 	}
-	for _, p := range out.Parsed {
-		if !strings.EqualFold(p.ID, feedID) {
-			continue
-		}
-		price, err := strconv.ParseInt(p.Price.Price, 10, 64)
-		if err != nil {
-			return nil, fmt.Errorf("oracle: hermes feed %s price %q: %w", feedID, p.Price.Price, err)
-		}
-		return NormalizeHermesPrice(price, p.Price.Expo)
-	}
-	return nil, fmt.Errorf("oracle: hermes: feed %s not in response", feedID)
+	return &out, nil
+}
+
+func normalizeFeedID(id string) string {
+	id = strings.TrimSpace(id)
+	id = strings.TrimPrefix(id, "0x")
+	id = strings.TrimPrefix(id, "0X")
+	return strings.ToLower(id)
 }
 
 // hermesLatestResponse models the subset of the Hermes
 // /v2/updates/price/latest response this package consumes.
 type hermesLatestResponse struct {
+	Binary struct {
+		Data []string `json:"data"`
+	} `json:"binary"`
 	Parsed []struct {
 		ID    string `json:"id"`
 		Price struct {
-			Price string `json:"price"`
-			Expo  int32  `json:"expo"`
+			Price       string `json:"price"`
+			Expo        int32  `json:"expo"`
+			PublishTime int64  `json:"publish_time"`
 		} `json:"price"`
 	} `json:"parsed"`
 }
