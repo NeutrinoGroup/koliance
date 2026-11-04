@@ -466,12 +466,8 @@ describe("3. the ranking is the backend's, and the market surface adds no orderi
     }
   });
 
-  it("api.ts's only Math.random() is outside the market section", () => {
-    // `generateDeveloperProof` builds a *simulated* proof hash and is labelled
-    // as such in its own name; it is not a market number. The scan is scoped to
-    // the banner-delimited MARKET section for exactly that reason — the same
-    // scoping the delivered guard documents. What this adds is the assertion
-    // that the section boundary really does exclude every hit.
+  it("api.ts market section excludes random calls", () => {
+    // Only the MARKET section defines this price-integrity boundary.
     const raw = readFileSync(resolve(ROOT, "src/lib/api.ts"), "utf8");
     const marker = "// ==================== MARKET ====================";
     const start = raw.indexOf(marker);
