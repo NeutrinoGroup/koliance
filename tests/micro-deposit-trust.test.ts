@@ -69,6 +69,16 @@ describe("GAP-88: Trading-Centric Trust Model & Micro-Payment Infrastructure", (
     expect(content).toContain("koliance trade --symbol=NVDA --side=buy --amount=100 --leverage=2");
   });
 
+  it("verifies DeveloperConsole integrates with live backend vault and trust endpoints", () => {
+    const consolePath = path.resolve(process.cwd(), "src/components/DeveloperConsole.tsx");
+    const content = fs.readFileSync(consolePath, "utf-8");
+
+    expect(content).toContain("/api/v1/inference/vault");
+    expect(content).toContain("/api/v1/trust/score");
+    expect(content).toContain("/api/v1/deposit/webhook");
+    expect(content).toContain("/api/v1/card/bind");
+  });
+
   it("verifies that install-agent-cli.sh is non-interactive and handles key flag correctly", () => {
     const scriptPath = path.resolve(process.cwd(), "scripts/install-agent-cli.sh");
     const script = fs.readFileSync(scriptPath, "utf-8");

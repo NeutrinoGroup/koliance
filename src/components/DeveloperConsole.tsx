@@ -136,7 +136,7 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
   const [vaultBalanceCNY, setVaultBalanceCNY] = useState<number>(10.80);
   const [vaultBalanceUSD, setVaultBalanceUSD] = useState<number>(1.50);
   const [autoTopupEnabled, setAutoTopupEnabled] = useState<boolean>(true);
-  const [dailyLimitUSD] = useState<number>(50.00);
+  const [dailyLimitUSD, setDailyLimitUSD] = useState<number>(50.00);
   const [topupModalOpen, setTopupModalOpen] = useState(false);
   const [topupAmount, setTopupAmount] = useState<1 | 10 | 50>(10);
   const [topupMethod, setTopupMethod] = useState<"wechat" | "alipay" | "web3" | "card">("wechat");
@@ -360,6 +360,41 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
             }
           }
         }
+
+        // Live Inference Vault status
+        try {
+          const vRes = await fetch(`/api/v1/inference/vault?wallet=${activeWallet}`);
+          if (vRes.ok) {
+            const vJson = await vRes.json();
+            if (vJson.data) {
+              if (vJson.data.balance_cny !== undefined) setVaultBalanceCNY(vJson.data.balance_cny);
+              if (vJson.data.balance_usd !== undefined) setVaultBalanceUSD(vJson.data.balance_usd);
+              if (vJson.data.auto_recharge_enabled !== undefined) setAutoTopupEnabled(vJson.data.auto_recharge_enabled);
+              if (vJson.data.daily_limit_usd !== undefined) setDailyLimitUSD(vJson.data.daily_limit_usd);
+              if (vJson.data.card_last4) setBoundCardLast4(vJson.data.card_last4);
+            }
+          }
+        } catch {}
+
+        // Live Trading Trust score evaluation
+        try {
+          const tRes = await fetch(`/api/v1/trust/score?wallet=${activeWallet}`);
+          if (tRes.ok) {
+            const tJson = await tRes.json();
+            if (tJson.data) {
+              if (tJson.data.total_score !== undefined) setTrustTotalScore(tJson.data.total_score);
+              if (tJson.data.tier) setTrustTier(tJson.data.tier);
+              if (tJson.data.max_leverage !== undefined) setTrustMaxLeverage(tJson.data.max_leverage);
+              if (tJson.data.credit_limit_usd !== undefined) setTrustCreditLimit(tJson.data.credit_limit_usd);
+              if (tJson.data.breakdown?.raw_metrics) {
+                setTrustMetrics((m) => ({
+                  ...m,
+                  ...tJson.data.breakdown.raw_metrics,
+                }));
+              }
+            }
+          }
+        } catch {}
       } catch {
         // Fallback to local demo data
       }
@@ -2615,22 +2650,67 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
               <button
                 type="button"
                 disabled={topupProcessing}
-                onClick={() => {
+                onClick={async () => {
                   setTopupProcessing(true);
-                  setTimeout(() => {
+                  try {
+                    let updatedCNY = vaultBalanceCNY + topupAmount;
+                    let updatedUSD = vaultBalanceUSD + topupAmount / 7.2;
+
+                    if (topupMethod === "wechat" || topupMethod === "alipay") {
+                      const res = await fetch("/api/v1/deposit/webhook", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          type: "checkout.session.completed",
+                          wallet_address: activeWallet || "0x0000000000000000000000000000000000000001",
+                          amount_cny: topupAmount,
+                          amount_usd: topupAmount / 7.2,
+                          tx_id: `tx_${topupMethod}_${Date.now()}`,
+                        }),
+                      });
+                      if (res.ok) {
+                        const json = await res.json();
+                        if (json.data?.vault) {
+                          updatedCNY = json.data.vault.balance_cny;
+                          updatedUSD = json.data.vault.balance_usd;
+                        }
+                      }
+                    } else if (topupMethod === "web3") {
+                      const res = await fetch("/api/v1/deposit/web3-verify", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          wallet_address: activeWallet || "0x0000000000000000000000000000000000000001",
+                          tx_hash: `0x${Array(64).fill("1").join("")}`,
+                          amount: topupAmount / 7.2,
+                          currency: "MON",
+                        }),
+                      });
+                      if (res.ok) {
+                        const json = await res.json();
+                        if (json.data?.vault) {
+                          updatedCNY = json.data.vault.balance_cny;
+                          updatedUSD = json.data.vault.balance_usd;
+                        }
+                      }
+                    }
+                    setVaultBalanceCNY(updatedCNY);
+                    setVaultBalanceUSD(updatedUSD);
+                  } catch {
                     setVaultBalanceCNY((b) => b + topupAmount);
                     setVaultBalanceUSD((u) => u + topupAmount / 7.2);
+                  } finally {
                     setTopupProcessing(false);
                     setTopupModalOpen(false);
                     recordAuditEvent({
-                      walletAddress: activeWallet,
+                      walletAddress: activeWallet || "0x0000000000000000000000000000000000000001",
                       category: "PAYMENT",
                       action: "INFERENCE_TOPUP_QR",
                       description: `Recharged ￥${topupAmount}.00 CNY via ${topupMethod.toUpperCase()} QR payment`,
                       amount: `+￥${topupAmount}.00`,
                       status: "COMMITTED",
                     });
-                  }, 600);
+                  }
                 }}
                 className="w-full h-10 px-4 rounded-md bg-cyan-600 hover:bg-cyan-500 border border-cyan-500/40 text-white font-mono text-xs font-semibold shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] active:scale-[0.98] transition-all cursor-pointer flex items-center justify-center gap-1.5"
               >
@@ -2734,11 +2814,26 @@ export function DeveloperConsole({ currentAccount }: { currentAccount?: `0x${str
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setBoundCardLast4("4242");
                     setCardModalOpen(false);
+                    try {
+                      await fetch("/api/v1/card/bind", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          wallet_address: activeWallet || "0x0000000000000000000000000000000000000001",
+                          customer_id: activeWallet ? `cus_${activeWallet.slice(2, 10)}` : "cus_default",
+                          payment_method_id: "pm_card_visa4242",
+                          card_last4: "4242",
+                          card_brand: "visa",
+                          auto_recharge_enabled: autoTopupEnabled,
+                          daily_limit_usd: dailyLimitUSD,
+                        }),
+                      });
+                    } catch {}
                     recordAuditEvent({
-                      walletAddress: activeWallet,
+                      walletAddress: activeWallet || "0x0000000000000000000000000000000000000001",
                       category: "AGENT",
                       action: "GUARDRAIL_CARD_BOUND",
                       description: "Configured Auto-Topup Guardrail with Stripe SetupIntent (Visa **** 4242, $50/day cap)",

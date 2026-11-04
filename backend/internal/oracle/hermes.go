@@ -15,7 +15,7 @@ import (
 // HermesFeed reads the latest Pyth price from hermes.pyth.network and
 // normalizes it to 18-decimal USD.
 //
-// UpdateData closes GAP-39 for the liquidator: it returns the signed
+// UpdateData implements the signed-update part of GAP-39 for the liquidator: it returns the signed
 // binary price update for one feed, which is what PositionManager needs
 // as pythUpdateData on a PythOracleAdapter deployment. The REST latest
 // price alone is not enough on chain, because the adapter only trusts
@@ -74,9 +74,9 @@ func (f *HermesFeed) latestPrice(ctx context.Context, feedID string) (*big.Int, 
 // pythUpdateData. The feed id is treated as an opaque key: this
 // function never hardcodes BTC, ETH, or any other symbol.
 //
-// A failure must be treated by the caller as "do not submit": on a
-// Pyth deployment an empty or stale update reverts on chain, so
-// submitting anyway only burns gas and a nonce.
+// A failure must be treated by the caller as "do not submit". The contract
+// skips empty updates and catches updater failures, then reads its cached
+// oracle price; that read remains subject to the on-chain freshness check.
 func (f *HermesFeed) UpdateData(ctx context.Context, feedID string) ([][]byte, error) {
 	out, err := f.latestUpdate(ctx, feedID, "hex")
 	if err != nil {

@@ -61,6 +61,11 @@ fi
 
 # Locate repository or pre-built binary
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." 2>/dev/null && pwd || true)"
+if [ -z "${REPO_ROOT}" ] || [ ! -d "${REPO_ROOT}" ]; then
+  if [ -d "$(pwd)/backend/cmd/koliance" ]; then
+    REPO_ROOT="$(pwd)"
+  fi
+fi
 INSTALLED=false
 
 if [ -n "${REPO_ROOT}" ] && [ -f "${REPO_ROOT}/bin/koliance" ]; then

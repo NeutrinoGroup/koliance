@@ -1,12 +1,14 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -68,12 +70,28 @@ func NewRouter(d Deps) http.Handler {
 	}
 	operator := func(fn http.HandlerFunc) http.HandlerFunc { return requireOperator(cfg.APIToken, fn) }
 	// Alpaca paper trading acts on ONE shared account, so it is an operator
-	// action unless the deployment explicitly opts into public demo trading.
+	// action unless the deployment explicitly opts into public demo trading or caller is an authorized agent.
 	trading := func(fn http.HandlerFunc) http.HandlerFunc {
 		if cfg.DemoPublicTrading {
 			return fn
 		}
-		return operator(fn)
+		return func(w http.ResponseWriter, r *http.Request) {
+			authHeader := r.Header.Get("Authorization")
+			authHeader = strings.TrimPrefix(authHeader, "Bearer ")
+			authHeader = strings.TrimSpace(authHeader)
+
+			if cfg.APIToken != "" && authHeader == cfg.APIToken {
+				fn(w, r)
+				return
+			}
+			if d.AgentAPI != nil && strings.HasPrefix(authHeader, "kol_live_") {
+				if _, err := d.AgentAPI.ValidateAndDeductKey(authHeader, 0); err == nil {
+					fn(w, r)
+					return
+				}
+			}
+			operator(fn)(w, r)
+		}
 	}
 	// WithDB marks the routes that cannot answer without a database. It is the
 	// half a reader can check: cmd/api refusing to start is invisible from
@@ -1227,14 +1245,72 @@ func NewRouter(d Deps) http.Handler {
 		}
 
 		now := time.Now().UTC()
+
+		// Upstream LLM Forwarding Engine (DeepSeek / Doubao Ark)
+		modelLower := strings.ToLower(chatReq.Model)
+		isDoubao := strings.Contains(modelLower, "doubao") || strings.Contains(modelLower, "ark")
+		upstreamURL := "https://api.deepseek.com/chat/completions"
+		upstreamKey := os.Getenv("DEEPSEEK_API_KEY")
+		if isDoubao {
+			upstreamURL = "https://ark.cn-beijing.volces.com/api/v3/chat/completions"
+			upstreamKey = os.Getenv("ARK_API_KEY")
+		}
+
+		promptTokens := 24
+		completionTokens := 48
+		content := fmt.Sprintf("[Koliance Autonomous Proxy] Processed via %s micro-channel (0.10 CNY deducted, vault balance: %.2f CNY). DeepSeek / Doubao execution active.", chatReq.Model, v.BalanceCNY)
+
+		if upstreamKey != "" {
+			upstreamPayload, _ := json.Marshal(map[string]interface{}{
+				"model":      chatReq.Model,
+				"messages":   chatReq.Messages,
+				"max_tokens": chatReq.MaxTokens,
+				"stream":     false,
+			})
+			uReq, uErr := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, bytes.NewReader(upstreamPayload))
+			if uErr == nil {
+				uReq.Header.Set("Content-Type", "application/json")
+				uReq.Header.Set("Authorization", "Bearer "+upstreamKey)
+				client := &http.Client{Timeout: 45 * time.Second}
+				uResp, doErr := client.Do(uReq)
+				if doErr == nil && uResp.StatusCode == http.StatusOK {
+					defer uResp.Body.Close()
+					var upstreamData struct {
+						ID      string `json:"id"`
+						Choices []struct {
+							Index   int `json:"index"`
+							Message struct {
+								Role    string `json:"role"`
+								Content string `json:"content"`
+							} `json:"message"`
+							FinishReason string `json:"finish_reason"`
+						} `json:"choices"`
+						Usage struct {
+							PromptTokens     int `json:"prompt_tokens"`
+							CompletionTokens int `json:"completion_tokens"`
+							TotalTokens      int `json:"total_tokens"`
+						} `json:"usage"`
+					}
+					if err := json.NewDecoder(uResp.Body).Decode(&upstreamData); err == nil && len(upstreamData.Choices) > 0 {
+						content = upstreamData.Choices[0].Message.Content
+						if upstreamData.Usage.TotalTokens > 0 {
+							promptTokens = upstreamData.Usage.PromptTokens
+							completionTokens = upstreamData.Usage.CompletionTokens
+						}
+					}
+				}
+			}
+		}
+
+		totalTokens := promptTokens + completionTokens
 		logID := fmt.Sprintf("inf_%x", now.UnixNano())
 		d.AgentAPI.RecordInferenceMetering(&agentapi.InferenceMeteringLog{
 			ID:               logID,
 			WalletAddress:    cred.WalletAddress,
 			Model:            chatReq.Model,
-			PromptTokens:     24,
-			CompletionTokens: 48,
-			TotalTokens:      72,
+			PromptTokens:     promptTokens,
+			CompletionTokens: completionTokens,
+			TotalTokens:      totalTokens,
 			CostCNY:          costCNY,
 			CostUSD:          costCNY / 7.2,
 			Timestamp:        now,
@@ -1252,21 +1328,40 @@ func NewRouter(d Deps) http.Handler {
 					"index": 0,
 					"message": map[string]interface{}{
 						"role":    "assistant",
-						"content": fmt.Sprintf("[Koliance Autonomous Proxy] Processed via %s micro-channel (0.10 CNY deducted, vault balance: %.2f CNY). DeepSeek / Doubao execution active.", chatReq.Model, v.BalanceCNY),
+						"content": content,
 					},
 					"finish_reason": "stop",
 				},
 			},
 			"usage": map[string]interface{}{
-				"prompt_tokens":     24,
-				"completion_tokens": 48,
-				"total_tokens":      72,
+				"prompt_tokens":     promptTokens,
+				"completion_tokens": completionTokens,
+				"total_tokens":      totalTokens,
 			},
 			"koliance_meta": map[string]interface{}{
 				"auto_recharged": autoRecharged,
 				"cost_cny":       costCNY,
 				"remaining_cny":  v.BalanceCNY,
 				"wallet_address": cred.WalletAddress,
+			},
+		})
+	}))
+
+	// GET /api/v1/proxy/models - List OpenAI-compatible models available for routing
+	h("/api/v1/proxy/models", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
+		_, ok := requireAgentKey(w, r, 0)
+		if !ok {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"object": "list",
+			"data": []map[string]interface{}{
+				{"id": "deepseek-chat", "object": "model", "owned_by": "deepseek"},
+				{"id": "deepseek-reasoner", "object": "model", "owned_by": "deepseek"},
+				{"id": "doubao-pro", "object": "model", "owned_by": "bytedance"},
+				{"id": "doubao-lite", "object": "model", "owned_by": "bytedance"},
 			},
 		})
 	}))

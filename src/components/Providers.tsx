@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { PrivyProvider, usePrivy, User } from "@privy-io/react-auth";
 import { WagmiProvider as PrivyWagmiProvider } from "@privy-io/wagmi";
 import {
@@ -14,6 +14,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { privyWagmiConfig, fallbackWagmiConfig } from "@/lib/wagmi";
 import { monadTestnet } from "@/lib/contract";
 import type { WalletOnlyLoginOptions } from "@/lib/walletLogin";
+import { getSessionToken, setSessionToken, clearSessionTokens } from "@/lib/sessionClient";
 
 export interface KolianceAuthContextValue {
   isPrivyEnabled: boolean;
@@ -73,8 +74,45 @@ function PrivyAuthBridge({ children }: { children: ReactNode }) {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
 
+  useEffect(() => {
+    if (!ready || !authenticated || !user) return;
+    const existing = getSessionToken();
+    if (existing) return;
+
+    const privyEmail = user.email?.address || user.google?.email || "";
+    const privyWallet = (address || user.wallet?.address || null) as string | null;
+    const privyName =
+      user.google?.name ||
+      (privyEmail ? privyEmail.split("@")[0] : null) ||
+      user.github?.username ||
+      "Koliance User";
+
+    fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: user.id,
+        email: privyEmail || undefined,
+        name: privyName,
+        walletAddress: privyWallet || undefined,
+        githubUsername: user.github?.username || undefined,
+      }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && data.sessionToken) {
+          setSessionToken(data.sessionToken);
+          window.dispatchEvent(new Event("koliance:login"));
+        }
+      })
+      .catch((err) => {
+        console.warn("[AuthBridge] Session mint notice:", err);
+      });
+  }, [ready, authenticated, user, address]);
+
   const handleLogout = async () => {
     disconnect();
+    clearSessionTokens();
     await privyLogout();
   };
 

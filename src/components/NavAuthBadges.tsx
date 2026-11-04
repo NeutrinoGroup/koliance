@@ -897,15 +897,15 @@ export function NavAuthBadges({
                       <div className="space-y-2">
                         <p className="text-[11px] text-slate-300 font-sans">
                           {lang === "en"
-                            ? "Bind your Monad wallet for on-chain transfers, asset staking, and credit endorsement."
-                            : "绑定 Monad 链上钱包以启用资产充提、KOL 代币结算与信用背书。"}
+                            ? "Bind your wallet for on-chain transfers, asset staking, and credit endorsement."
+                            : "绑定链上钱包以启用转账与结算。"}
                         </p>
                         <button
                           onClick={handleWalletRail}
                           className="w-full py-2 rounded-md bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs font-mono transition flex items-center justify-center gap-1.5 shadow-md active:scale-95 cursor-pointer border border-purple-400/50"
                         >
                           <Wallet className="w-3.5 h-3.5 text-white" />
-                          <span>{lang === "en" ? "Bind Monad Wallet" : "绑定 Monad 钱包"}</span>
+                          <span>{lang === "en" ? "Bind Wallet" : "绑定钱包"}</span>
                         </button>
                       </div>
                     ) : null}

@@ -37,10 +37,12 @@ func TestHermesUpdateData(t *testing.T) {
 
 func TestHermesUpdateDataErrors(t *testing.T) {
 	for name, body := range map[string]string{
-		"no binary":      `{"binary":{"data":[]},"parsed":[{"id":"` + hermesFeed + `","price":{"price":"1","expo":-8}}]}`,
-		"bad hex":        `{"binary":{"data":["0xzzzz"]},"parsed":[{"id":"` + hermesFeed + `","price":{"price":"1","expo":-8}}]}`,
-		"feed missing":   `{"binary":{"data":["0xdeadbeef"]},"parsed":[]}`,
-		"no 0x prefix":   `{"binary":{"data":["deadbeef"]},"parsed":[{"id":"` + hermesFeed + `","price":{"price":"1","expo":-8}}]}`,
+		"no binary":    `{"binary":{"data":[]},"parsed":[{"id":"` + hermesFeed + `","price":{"price":"1","expo":-8}}]}`,
+		"empty hex":    `{"binary":{"data":["0x"]},"parsed":[{"id":"` + hermesFeed + `"}]}`,
+		"odd hex":      `{"binary":{"data":["0xabc"]},"parsed":[{"id":"` + hermesFeed + `"}]}`,
+		"bad hex":      `{"binary":{"data":["0xzzzz"]},"parsed":[{"id":"` + hermesFeed + `","price":{"price":"1","expo":-8}}]}`,
+		"feed missing": `{"binary":{"data":["0xdeadbeef"]},"parsed":[]}`,
+		"no 0x prefix": `{"binary":{"data":["deadbeef"]},"parsed":[{"id":"` + hermesFeed + `","price":{"price":"1","expo":-8}}]}`,
 	} {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")

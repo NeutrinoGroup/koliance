@@ -22,17 +22,18 @@ To fulfill Issue #28 ("Realize true micro-payments, Agent autonomous execution c
 1. **Multi-Weighted Trust Engine (`backend/internal/trust/engine.go`)**:
    - Implemented `Engine` with mathematical weights: Success Rate (0.35), Volume (0.25), Asset Proof (0.25), Fulfillment (0.15).
    - Normalized metrics dynamically and output structured breakdowns with tier attribution.
+   - Guarded against `NaN` and `Inf` inputs defensively.
    - Verified with unit tests (`engine_test.go`) covering prime, trusted, standard, unverified, and edge/zero cases.
 2. **Inference Vault & Auto-Topup Guardrail (`backend/internal/agentapi/`)**:
-   - `InferenceVault`: Tracks balance in CNY, currency, virtual card binding (`CardBrand`, `CardLast4`, `AutoTopupEnabled`, `AutoTopupThresholdCNY`, `AutoTopupAmountCNY`, `DailyTopupCapCNY`, `TopupSpentTodayCNY`, `TopupWindowStart`).
-   - `DeductInference`: Deducts 0.10 CNY per API call. If balance falls below threshold and auto-topup is active, triggers auto-topup bounded by the daily cap circuit breaker. Returns `ErrInsufficientBalance` (HTTP 402) if unbacked.
-   - `CreditVault` & `BindVaultCard`: Thread-safe operations with memory-store and database compatibility.
-   - `InferenceMeteringLog`: Logs agent ID, model, prompt/completion tokens, unit cost, and latency.
+   - `InferenceVault`: Tracks balance in CNY and USD, virtual card binding (`CardBrand`, `CardLast4`, `AutoRechargeEnabled`, `DailyLimitUSD`, `SpentTodayUSD`).
+   - `DeductInference`: Deducts 0.10 CNY per API call. If balance falls below threshold or call cost and auto-recharge is active, triggers auto-topup *before* deduction to ensure zero interruptions for long-running agents, bounded by the daily cap circuit breaker. Returns `ErrInsufficientBalance` (HTTP 402) if daily limit reached or card unconfigured.
+   - `CreditVault` & `BindVaultCard`: Thread-safe operations with default parameters.
+   - `InferenceMeteringLog`: Logs wallet address, model, prompt/completion tokens, unit cost, and latency.
 3. **Stripe Dual-Rail Checkout & SetupIntent (`backend/internal/platform/stripeclient/`)**:
    - `CreateDepositCheckoutSession`: Generates Stripe Checkout sessions configured for Alipay, WeChat Pay (with `wechat_pay.client = web`), and cards.
    - `CreateSetupIntent`: Prepares Stripe SetupIntent for off-session card authorization with mock fallbacks for offline testing.
 4. **Backend Router & Route Inventory (`backend/internal/httpapi/`)**:
-   - Registered 9 endpoints:
+   - Registered 10 endpoints:
      - `GET /api/v1/trust/score`
      - `POST /api/v1/trust/evaluate`
      - `POST /api/v1/deposit/checkout`
@@ -41,23 +42,27 @@ To fulfill Issue #28 ("Realize true micro-payments, Agent autonomous execution c
      - `POST /api/v1/card/setup-intent`
      - `POST /api/v1/card/bind`
      - `GET /api/v1/inference/vault`
-     - `POST /api/v1/proxy/chat/completions`
-   - Added all 9 routes to `qaRouteInventory` in `qa_degradation_test.go`, passing the AST reverse inventory gate (`GAP-70`).
-   - Added comprehensive tests in `inference_proxy_test.go` covering trust calculation, deposit flows, card binding, and proxy 402 degradation.
+     - `POST /api/v1/proxy/chat/completions` (with dynamic DeepSeek/Doubao upstream forwarding and token metering)
+     - `GET /api/v1/proxy/models` (OpenAI-compatible model list)
+   - Updated `trading` route wrapper so authorized agent keys (`kol_live_...`) can execute paper trades in addition to operator token.
+   - Added all routes to `qaRouteInventory` in `qa_degradation_test.go`, passing the AST reverse inventory gate (`GAP-70`).
 5. **Standalone Go Agent CLI (`backend/cmd/koliance/main.go`)**:
    - Implemented single-file CLI supporting:
      - `koliance auth`: Manage and verify API credentials.
-     - `koliance proxy`: Local micro-metered forward proxy (`127.0.0.1:8080`) metering requests at 0.10 CNY.
-     - `koliance trade`: Instant paper trading with Alpaca.
-     - `koliance status`: Real-time dashboard of Inference Vault balance, trust tier breakdown, and open positions.
+     - `koliance proxy`: Local micro-metered forward proxy (`127.0.0.1:8080`) metering requests at 0.10 CNY with OpenAI compatibility (`/v1/chat/completions`, `/v1/models`).
+     - `koliance trade`: Automated paper trading with Alpaca with transparent error handling.
+     - `koliance status`: Real-time dashboard of Inference Vault balance, trust tier breakdown, and open paper trading positions.
      - `koliance version`: CLI version and build metadata.
-   - Cross-platform build output to `bin/koliance`.
+   - Dynamic wallet address discovery when key is configured.
 6. **Non-Interactive Installer Script (`scripts/install-agent-cli.sh`)**:
    - Non-interactive script supporting `--key=...` flag.
    - Checks `sudo -n true` without prompting for passwords, cleanly falling back to `~/.local/bin`.
-   - Verified live execution without hanging.
+   - Supports pipe execution with `pwd` fallback.
 7. **Developer Console UI (`src/components/DeveloperConsole.tsx`)**:
    - Added `trust` tab to console with live 4-weight score evaluation cards, radar/bar visualizers, and an interactive weight simulator.
+   - Two-way live data synchronization with `/api/v1/inference/vault` and `/api/v1/trust/score`.
+   - Connected Dual-Rail QR modal to `/api/v1/deposit/webhook` and `/api/v1/deposit/web3-verify`.
+   - Connected Card Guardrail modal to `/api/v1/card/bind`.
    - Micro-topup strip offering instant 1元 and 10元 topup buttons opening the Dual-Rail QR Modal (WeChat Pay / Alipay / Monad 10143).
    - Card Guardrail Modal configuring virtual card binding (< $1.00 USD auto-topup $10.00 USD, $50.00 daily cap).
    - 3 Zero-Friction Hand-off Cards (Go CLI installer with copy command, `.env` snippet for LangChain/AutoGPT/Cursor, and 1-line Alpaca paper trading).

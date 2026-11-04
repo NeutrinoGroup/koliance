@@ -1,5 +1,6 @@
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isValidWalletAddress } from "@/lib/session";
+import { loadPersistentCollection, savePersistentRecord } from "@/lib/storagePersistence";
 import crypto from "crypto";
 
 export type RewardActionType =
@@ -19,8 +20,8 @@ export interface UserRewardRecord {
   created_at: string;
 }
 
-// In-memory fallback cache when Supabase database is offline or in local test environment
-const memoryRewards = new Map<string, UserRewardRecord>();
+// Persistent fallback cache when Supabase database is offline or in local test environment
+const memoryRewards = loadPersistentCollection<UserRewardRecord>("rewards");
 
 export function resetRewardsDbForTests(): void {
   memoryRewards.clear();
@@ -119,6 +120,7 @@ export async function recordUserReward(
   }
 
   memoryRewards.set(id, record);
+  savePersistentRecord("rewards", id, record, memoryRewards);
   return { reward: record, alreadyClaimed: false };
 }
 

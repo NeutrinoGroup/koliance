@@ -1,4 +1,10 @@
 import { supabaseServer } from "@/lib/supabaseServer";
+import crypto from "crypto";
+import {
+  loadPersistentCollection,
+  savePersistentRecord,
+  savePersistentCollection,
+} from "@/lib/storagePersistence";
 // Issue #35 P0-5: the unused anon client with a hard-coded project URL and
 // publishable key was removed; there are no credential fallbacks in this file.
 
@@ -27,9 +33,9 @@ export interface PublicUserSearchResult {
   github_username?: string | null;
 }
 
-// In-memory user cache for local environments and offline tests
-const memoryUsers = new Map<string, DbUserRecord>();
-const emailCredentials = new Map<string, { passwordHash: string; salt: string }>();
+// Persistent user cache with disk backing for durability across server restarts
+const memoryUsers = loadPersistentCollection<DbUserRecord>("users");
+const emailCredentials = loadPersistentCollection<{ email: string; passwordHash: string; salt: string }>("credentials");
 
 // Seed default platform accounts so auto-discovery always has active users
 function initDefaultSeedUsers() {
@@ -51,13 +57,14 @@ function initDefaultSeedUsers() {
       name: "Monad Alpha Trader",
       picture: "https://api.dicebear.com/7.x/bottts/svg?seed=monad-trader",
       bio: "High frequency algorithmic trader on Monad Perp DEX",
-      wallet_address: "0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02900592516c0053d6efb72799",
+      wallet_address: "0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a02",
       trust_tier: "VERIFIED HIGH FREQUENCY TRADER",
       credit_allowance_usd: 2500,
       created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
     };
     memoryUsers.set(seed1.id, seed1);
     memoryUsers.set(seed2.id, seed2);
+    savePersistentCollection("users", memoryUsers);
   }
 }
 initDefaultSeedUsers();
@@ -70,7 +77,6 @@ export function resetMemoryUsersForTests(): void {
 
 /** Hash password with salt using standard Node.js crypto */
 function hashPassword(password: string, salt: string): string {
-  const crypto = require("crypto");
   return crypto.createHmac("sha256", salt).update(password).digest("hex");
 }
 
@@ -79,10 +85,11 @@ export function registerEmailPassword(email: string, password: string): { succes
   if (emailCredentials.has(normEmail)) {
     return { success: false, error: "该邮箱已被注册，请直接登录" };
   }
-  const crypto = require("crypto");
   const salt = crypto.randomBytes(16).toString("hex");
   const passwordHash = hashPassword(password, salt);
-  emailCredentials.set(normEmail, { passwordHash, salt });
+  const credRecord = { email: normEmail, passwordHash, salt };
+  emailCredentials.set(normEmail, credRecord);
+  savePersistentRecord("credentials", normEmail, credRecord, emailCredentials);
   return { success: true };
 }
 
@@ -90,7 +97,6 @@ export function verifyEmailPassword(email: string, password: string): { success:
   const normEmail = email.trim().toLowerCase();
   const creds = emailCredentials.get(normEmail);
   if (!creds) {
-    // If not in memory store, allow demo/first-time fallback password verification or reject
     return { success: false, error: "该邮箱尚未注册或密码不正确，请先注册" };
   }
   const computedHash = hashPassword(password, creds.salt);
@@ -103,6 +109,39 @@ export function verifyEmailPassword(email: string, password: string): { success:
 export function isEmailRegistered(email: string): boolean {
   const normEmail = email.trim().toLowerCase();
   return emailCredentials.has(normEmail);
+}
+
+/**
+ * Finds user by ID, email, wallet address, name, or github username
+ */
+export async function findUserByIdentifier(identifier: string): Promise<DbUserRecord | null> {
+  const norm = (identifier || "").trim().toLowerCase();
+  if (!norm) return null;
+  initDefaultSeedUsers();
+
+  for (const u of memoryUsers.values()) {
+    if (
+      u.id.toLowerCase() === norm ||
+      (u.email && u.email.toLowerCase() === norm) ||
+      (u.wallet_address && u.wallet_address.toLowerCase() === norm) ||
+      (u.name && u.name.toLowerCase() === norm) ||
+      (u.github_username && u.github_username.toLowerCase() === norm)
+    ) {
+      return u;
+    }
+  }
+
+  try {
+    const { data } = await supabaseServer()
+      .from("users")
+      .select("*")
+      .or(`id.eq.${norm},email.eq.${norm},wallet_address.eq.${norm},name.ilike.${norm}`)
+      .limit(1)
+      .maybeSingle();
+    if (data) return data as DbUserRecord;
+  } catch {}
+
+  return null;
 }
 
 /**
@@ -150,6 +189,7 @@ export async function syncUserToDatabase(
     };
 
     memoryUsers.set(payload.id, payload);
+    savePersistentRecord("users", payload.id, payload, memoryUsers);
 
     const { data, error } = await supabaseServer()
       .from("users")

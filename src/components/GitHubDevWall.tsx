@@ -27,6 +27,7 @@ import {
 import { relayTarget } from "@/lib/oauthState";
 import { isGoogleOAuthCallback } from "@/lib/googleAuth";
 import { STORAGE_KEYS, writeAccountState } from "@/lib/authState";
+import { setSessionToken } from "@/lib/sessionClient";
 
 function githubStartUrl(path: string, customClientId?: string | null): string {
   const qs = new URLSearchParams({ path });
@@ -113,9 +114,13 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
 
       const data = await res.json();
       if (res.ok && data.success && data.stats) {
+        if (data.sessionToken) {
+          setSessionToken(data.sessionToken);
+        }
         setDevStats(data.stats);
         setGithubConnected(true);
         writeAccountState("github", data.stats.username);
+        window.dispatchEvent(new Event("koliance:login"));
         setNotice(`GitHub 官方授权登录成功！已绑定 @${data.stats.username}`);
         window.history.replaceState({}, document.title, window.location.pathname);
       } else {
