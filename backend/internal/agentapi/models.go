@@ -123,3 +123,54 @@ type ConsoleStatsView struct {
 	TotalVolumeUSD      float64                     `json:"total_volume_usd"`
 	RecentOrders        []*PaymentOrderView         `json:"recent_orders"`
 }
+
+// InferenceVault maintains a user's micro-payment inference fund pool and auto-topup guardrails.
+type InferenceVault struct {
+	WalletAddress       string    `json:"wallet_address"`
+	BalanceUSD          float64   `json:"balance_usd"`
+	BalanceCNY          float64   `json:"balance_cny"`
+	TotalDepositedUSD   float64   `json:"total_deposited_usd"`
+	AutoRechargeEnabled bool      `json:"auto_recharge_enabled"`
+	DailyLimitUSD       float64   `json:"daily_limit_usd"`
+	SpentTodayUSD       float64   `json:"spent_today_usd"`
+	StripeCustomerID    string    `json:"stripe_customer_id,omitempty"`
+	PaymentMethodID     string    `json:"payment_method_id,omitempty"`
+	CardLast4           string    `json:"card_last4,omitempty"`
+	CardBrand           string    `json:"card_brand,omitempty"`
+	LastRechargedAt     time.Time `json:"last_recharged_at"`
+	LastResetDay        string    `json:"last_reset_day"`
+}
+
+// DepositRequest specifies topup parameters.
+type DepositRequest struct {
+	WalletAddress string  `json:"wallet_address"`
+	AmountCNY     float64 `json:"amount_cny"`
+	Currency      string  `json:"currency"`       // "cny", "usd"
+	PaymentMethod string  `json:"payment_method"` // "wechat_pay", "alipay", "card", "crypto_mon"
+	TxHash        string  `json:"tx_hash,omitempty"`
+}
+
+// CardBindRequest configures virtual or physical card auto-recharge.
+type CardBindRequest struct {
+	WalletAddress       string  `json:"wallet_address"`
+	CustomerID          string  `json:"customer_id"`
+	PaymentMethodID     string  `json:"payment_method_id"`
+	CardLast4           string  `json:"card_last4"`
+	CardBrand           string  `json:"card_brand"`
+	AutoRechargeEnabled bool    `json:"auto_recharge_enabled"`
+	DailyLimitUSD       float64 `json:"daily_limit_usd"`
+}
+
+// InferenceMeteringLog records an autonomous agent inference deduction.
+type InferenceMeteringLog struct {
+	ID               string    `json:"id"`
+	WalletAddress    string    `json:"wallet_address"`
+	Model            string    `json:"model"`
+	PromptTokens     int       `json:"prompt_tokens"`
+	CompletionTokens int       `json:"completion_tokens"`
+	TotalTokens      int       `json:"total_tokens"`
+	CostCNY          float64   `json:"cost_cny"`
+	CostUSD          float64   `json:"cost_usd"`
+	Timestamp        time.Time `json:"timestamp"`
+}
+

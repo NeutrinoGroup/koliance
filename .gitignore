@@ -54,3 +54,9 @@ video/public/audio/*
 # Rust build artifacts
 target/
 Cargo.lock
+
+# Local persistence storage
+data/
+
+# Go binaries
+bin/

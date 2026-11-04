@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { corsHeadersFor } from "@/lib/cors";
 import { createSessionToken } from "@/lib/session";
-import { syncUserToDatabase } from "@/lib/db";
+import {
+  syncUserToDatabase,
+  registerEmailPassword,
+  verifyEmailPassword,
+  isEmailRegistered,
+} from "@/lib/db";
 
 const CORS_METHODS = "POST, OPTIONS";
 
@@ -14,12 +19,19 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export async function POST(request: NextRequest) {
   const corsHeaders = corsHeadersFor(request, CORS_METHODS);
   try {
-    let body: { email?: unknown; name?: unknown };
+    let body: {
+      action?: unknown;
+      email?: unknown;
+      password?: unknown;
+      name?: unknown;
+    };
     try {
       body = await request.json();
     } catch {
       return NextResponse.json({ error: "Invalid JSON body" }, { status: 400, headers: corsHeaders });
     }
+
+    const action = body.action === "register" ? "register" : "login";
 
     const rawEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     if (!rawEmail || !EMAIL_REGEX.test(rawEmail)) {
@@ -27,6 +39,33 @@ export async function POST(request: NextRequest) {
         { error: "请输入有效的邮箱地址 (如 user@example.com)" },
         { status: 400, headers: corsHeaders }
       );
+    }
+
+    const rawPassword = typeof body.password === "string" ? body.password : "";
+    if (!rawPassword || rawPassword.length < 6) {
+      return NextResponse.json(
+        { error: "密码长度不得少于 6 位" },
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    if (action === "register") {
+      const regRes = registerEmailPassword(rawEmail, rawPassword);
+      if (!regRes.success) {
+        return NextResponse.json(
+          { error: regRes.error || "注册失败，该邮箱可能已被占用" },
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    } else {
+      // login action
+      const verifyRes = verifyEmailPassword(rawEmail, rawPassword);
+      if (!verifyRes.success) {
+        return NextResponse.json(
+          { error: verifyRes.error || "邮箱或密码错误，请重试" },
+          { status: 401, headers: corsHeaders }
+        );
+      }
     }
 
     const defaultName = rawEmail.split("@")[0];

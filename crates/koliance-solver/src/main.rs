@@ -41,6 +41,12 @@ enum Commands {
         #[arg(long, default_value = "0x89b0b4676C7598816c8028f804791E44910cf947")]
         registry: String,
     },
+    /// Benchmark real-time IM message sync and deduplication throughput
+    ImBenchmark {
+        /// Number of messages
+        #[arg(short, long, default_value_t = 1_000_000)]
+        iterations: usize,
+    },
     /// Display active solver version and build metadata
     Version,
 }
@@ -176,6 +182,26 @@ fn main() {
             println!("[INFO] EIP-712 Domain Separator: 0x{}", hex::encode(domain_sep));
             println!("[INFO] AgentDelegation Struct Hash: 0x{}", hex::encode(struct_hash));
             println!("[SUCCESS] Full Signing Digest: 0x{}", hex::encode(digest));
+        }
+        Commands::ImBenchmark { iterations } => {
+            println!("[INFO] Running IM real-time sync benchmark for {} messages...", iterations);
+            let mut hub = koliance_solver::ImSyncHub::new(10_000);
+            let start = Instant::now();
+
+            for i in 0..iterations {
+                let sender = "0x89205a3a3b2a69de6dbf7f01ed13b2108b2c43e7";
+                let recipient = "0x6b6b83ff4e1f8009b9dbe6f46ad4e75f33f98a0290";
+                let content = "Hello from high-concurrency Monad IM channel";
+                let _ = hub.ingest_message(sender, recipient, "TEXT", content, i as u64);
+            }
+
+            let elapsed = start.elapsed();
+            let ns_per_msg = elapsed.as_nanos() as f64 / iterations as f64;
+            let msgs_per_sec = (iterations as f64 / elapsed.as_secs_f64()) / 1_000_000.0;
+
+            println!("[OK] IM sync benchmark completed in {:?}", elapsed);
+            println!("[INFO] Latency per message ingest & deduplication: {:.2} ns", ns_per_msg);
+            println!("[INFO] Throughput: {:.2} Million messages/sec (Capacity: {})", msgs_per_sec, hub.total_messages());
         }
     }
 }

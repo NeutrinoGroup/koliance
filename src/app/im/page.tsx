@@ -107,16 +107,11 @@ export default function ImPage() {
   const [friendError, setFriendError] = useState<string | null>(null);
   const [isAddingFriend, setIsAddingFriend] = useState(false);
 
-  // Live User Search (by username, email, or wallet)
+  // Live User Search and Auto-Discovery
   const [searchResults, setSearchResults] = useState<PublicUserSearchResult[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
-
-  // Quick Email Login Modal for easy testing across browser tabs
-  const [showEmailLogin, setShowEmailLogin] = useState(false);
-  const [loginEmailInput, setLoginEmailInput] = useState("");
-  const [loginNameInput, setLoginNameInput] = useState("");
-  const [isLoggingInWithEmail, setIsLoggingInWithEmail] = useState(false);
-  const [emailLoginError, setEmailLoginError] = useState<string | null>(null);
+  const [discoveredUsers, setDiscoveredUsers] = useState<PublicUserSearchResult[]>([]);
+  const [isLoadingDiscovered, setIsLoadingDiscovered] = useState(false);
 
   // Messages & Chat Stream State
   const [messages, setMessages] = useState<DirectMessageRecord[]>([]);
@@ -144,10 +139,108 @@ export default function ImPage() {
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Email Auth Modal states
+  const [emailAuthModalOpen, setEmailAuthModalOpen] = useState(false);
+  const [emailModalMode, setEmailModalMode] = useState<"register" | "login">("register");
+  const [emailModalEmail, setEmailModalEmail] = useState("");
+  const [emailModalPassword, setEmailModalPassword] = useState("");
+  const [emailModalName, setEmailModalName] = useState("");
+  const [emailModalError, setEmailModalError] = useState<string | null>(null);
+  const [emailModalLoading, setEmailModalLoading] = useState(false);
+
   // Resolve auth token
   const authToken = activeAddress
     ? getWalletSessionToken(activeAddress) || getSessionToken()
     : getSessionToken();
+
+  // Helper to ensure valid session token exists
+  const ensureValidAuthToken = async (): Promise<string | null> => {
+    const existing = activeAddress
+      ? getWalletSessionToken(activeAddress) || getSessionToken()
+      : getSessionToken();
+    if (existing) return existing;
+    if (!isLoggedIn) return null;
+
+    try {
+      const res = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: currentSenderId,
+          email: userEmail || undefined,
+          name: userName || undefined,
+          walletAddress: activeAddress || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success && data.sessionToken) {
+        setSessionToken(data.sessionToken);
+        return data.sessionToken;
+      }
+    } catch (err) {
+      console.warn("[IM] Auto session mint notice:", err);
+    }
+    return null;
+  };
+
+  const handleEmailModalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailModalError(null);
+    const cleanEmail = emailModalEmail.trim().toLowerCase();
+    if (!EMAIL_REGEX.test(cleanEmail)) {
+      setEmailModalError("请输入有效的邮箱地址");
+      return;
+    }
+    if (emailModalPassword.length < 6) {
+      setEmailModalError("密码不得少于 6 位");
+      return;
+    }
+
+    setEmailModalLoading(true);
+    try {
+      const res = await fetch("/api/auth/email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: emailModalMode,
+          email: cleanEmail,
+          password: emailModalPassword,
+          name: emailModalName.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        if (data.sessionToken) {
+          setSessionToken(data.sessionToken);
+        }
+        if (data.profile) {
+          writeAccountState("google", {
+            googleId: data.profile.id,
+            email: data.profile.email,
+            emailVerified: true,
+            name: data.profile.name,
+            picture: data.profile.picture,
+            bio: data.profile.bio,
+            walletAddress: data.profile.walletAddress || null,
+            trustTier: data.profile.trustTier,
+            creditAllowanceUSD: data.profile.creditAllowanceUSD || 600,
+          });
+        }
+        setEmailModalEmail("");
+        setEmailModalPassword("");
+        setEmailModalName("");
+        setEmailAuthModalOpen(false);
+        window.dispatchEvent(new Event("koliance:login"));
+      } else {
+        setEmailModalError(data.error || "认证失败，请重试");
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setEmailModalError(msg || "网络请求失败");
+    } finally {
+      setEmailModalLoading(false);
+    }
+  };
 
   const handleSelectView = (view: NavView) => {
     if (view === "IM") return;
@@ -239,7 +332,9 @@ export default function ImPage() {
     }
   }, [authToken]);
 
-  // Fetch Messages for active peer
+  const prevMsgCountRef = useRef(0);
+
+  // Fetch Messages for active peer with stable identity diffing
   const fetchMessages = useCallback(async () => {
     if (!selectedPeer || !authToken) return;
     try {
@@ -250,7 +345,16 @@ export default function ImPage() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.messages)) {
-          setMessages(data.messages);
+          setMessages((prev) => {
+            if (prev.length === data.messages.length) {
+              const prevLast = prev[prev.length - 1];
+              const newLast = data.messages[data.messages.length - 1];
+              if (prevLast?.id === newLast?.id && prevLast?.content === newLast?.content) {
+                return prev;
+              }
+            }
+            return data.messages;
+          });
         }
       }
     } catch (err) {
@@ -272,6 +376,33 @@ export default function ImPage() {
     return () => clearInterval(interval);
   }, [selectedPeer, authToken, fetchMessages]);
 
+  // Auto-discover registered platform users for discovery feed
+  const fetchDiscoveredUsers = useCallback(async () => {
+    if (!authToken) return;
+    setIsLoadingDiscovered(true);
+    try {
+      const res = await fetch("/api/user/search?q=", {
+        headers: authHeaders(authToken),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.users)) {
+          const filtered = data.users.filter(
+            (u: PublicUserSearchResult) =>
+              u.id.toLowerCase() !== currentSenderId &&
+              (!u.wallet_address || u.wallet_address.toLowerCase() !== currentSenderId) &&
+              (!u.email || u.email.toLowerCase() !== currentSenderId)
+          );
+          setDiscoveredUsers(filtered);
+        }
+      }
+    } catch (err) {
+      console.warn("[IM] Discovered users fetch notice:", err);
+    } finally {
+      setIsLoadingDiscovered(false);
+    }
+  }, [authToken, currentSenderId]);
+
   // Initial loads on auth change
   useEffect(() => {
     if (isLoggedIn) {
@@ -280,18 +411,28 @@ export default function ImPage() {
       }
       fetchRewardsBalance();
       fetchFriends();
+      fetchDiscoveredUsers();
     }
-  }, [isLoggedIn, activeAddress, fetchBalances, fetchRewardsBalance, fetchFriends]);
+  }, [isLoggedIn, activeAddress, fetchBalances, fetchRewardsBalance, fetchFriends, fetchDiscoveredUsers]);
 
-  // Scroll to bottom when messages list updates
+  // Reset scroll baseline on peer switch
   useEffect(() => {
+    prevMsgCountRef.current = 0;
     scrollToBottom();
+  }, [selectedPeer?.id]);
+
+  // Smooth scroll to bottom only when new message count increases
+  useEffect(() => {
+    if (messages.length > prevMsgCountRef.current) {
+      scrollToBottom();
+    }
+    prevMsgCountRef.current = messages.length;
   }, [messages]);
 
   // Live platform user search debounce
   useEffect(() => {
     const q = newFriendInput.trim();
-    if (q.length < 2 || !authToken) {
+    if (!q) {
       setSearchResults([]);
       return;
     }
@@ -318,59 +459,155 @@ export default function ImPage() {
     return () => clearTimeout(timer);
   }, [newFriendInput, authToken]);
 
-  // Direct Quick Email Login Handler
-  const handleQuickEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setEmailLoginError(null);
-    const cleanEmail = loginEmailInput.trim().toLowerCase();
-    if (!EMAIL_REGEX.test(cleanEmail)) {
-      setEmailLoginError("请输入有效的邮箱格式 (如 user@company.com)");
+  // Say Hi greeting interaction with confetti animation
+  const handleSayHi = async (targetUser: PublicUserSearchResult) => {
+    const token = await ensureValidAuthToken();
+    if (!token || !isLoggedIn) {
+      setEmailModalMode("register");
+      setEmailAuthModalOpen(true);
       return;
     }
 
-    setIsLoggingInWithEmail(true);
+    const targetId = targetUser.wallet_address || targetUser.email || targetUser.id;
+    const targetName = targetUser.name || targetUser.email || "Koliance 用户";
+    const greetingText = "你好！很高兴在 Koliance 与你打招呼！";
+
+    // 1. Ensure peer is in friends list
+    let peerRecord = friends.find(
+      (f) =>
+        f.friend_wallet.toLowerCase() === targetId.toLowerCase() ||
+        (targetUser.wallet_address && f.friend_wallet.toLowerCase() === targetUser.wallet_address.toLowerCase()) ||
+        (targetUser.email && f.friend_wallet.toLowerCase() === targetUser.email.toLowerCase())
+    );
+
+    if (!peerRecord) {
+      try {
+        const res = await fetch("/api/user/friends", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders(token) },
+          body: JSON.stringify({
+            friend_wallet: targetId,
+            friend_name: targetName,
+          }),
+        });
+        const data = await res.json();
+        if (res.ok && data.friend) {
+          peerRecord = data.friend;
+          setFriends((prev) => [data.friend, ...prev]);
+        }
+      } catch (err) {
+        console.warn("[IM] Auto-friend on greeting notice:", err);
+      }
+    }
+
+    // Set as active peer
+    const activePeer = peerRecord || {
+      id: `temp_${Date.now()}`,
+      user_id: currentSenderId,
+      friend_wallet: targetId,
+      friend_name: targetName,
+      created_at: new Date().toISOString(),
+    };
+    setSelectedPeer(activePeer);
+    setShowAddFriend(false);
+
+    // 2. Optimistic push greeting message
+    const tempMsgId = `greeting_${Date.now()}`;
+    const optimisticMsg: DirectMessageRecord = {
+      id: tempMsgId,
+      sender_id: currentSenderId,
+      recipient_id: targetId.toLowerCase(),
+      msg_type: "TEXT",
+      content: greetingText,
+      created_at: new Date().toISOString(),
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    // 3. Send greeting to server
     try {
-      const res = await fetch("/api/auth/email", {
+      const msgRes = await fetch("/api/user/messages", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders(token) },
         body: JSON.stringify({
-          email: cleanEmail,
-          name: loginNameInput.trim() || undefined,
+          recipient: targetId,
+          msg_type: "TEXT",
+          content: greetingText,
         }),
       });
-      const data = await res.json();
-      if (res.ok && data.success && data.sessionToken) {
-        setSessionToken(data.sessionToken);
-        writeAccountState("google", data.profile);
-        setShowEmailLogin(false);
-        setLoginEmailInput("");
-        setLoginNameInput("");
-        fetchFriends();
-        fetchRewardsBalance();
-      } else {
-        setEmailLoginError(data.error || "登录失败，请重试");
+      if (msgRes.ok) {
+        const msgData = await msgRes.json();
+        if (msgData.message) {
+          setMessages((prev) => prev.map((m) => (m.id === tempMsgId ? msgData.message : m)));
+        }
       }
-    } catch {
-      setEmailLoginError("网络异常，请重试");
-    } finally {
-      setIsLoggingInWithEmail(false);
+    } catch (err) {
+      console.warn("[IM] Send greeting error:", err);
     }
+
+    // 4. Trigger confetti burst
+    try {
+      const confetti = (await import("canvas-confetti")).default;
+      confetti({
+        particleCount: 90,
+        spread: 75,
+        origin: { y: 0.6 },
+        colors: ["#836EF9", "#00F2FE", "#10B981"],
+      });
+    } catch (err) {
+      console.warn("[IM] Confetti trigger notice:", err);
+    }
+
+    // 5. Dopamine audio feedback
+    playCelebrationAudio();
+    setTimeout(scrollToBottom, 120);
   };
 
   // Add friend execution helper
   const executeAddFriend = async (targetIdentifier: string, displayName?: string) => {
     setFriendError(null);
     const clean = targetIdentifier.trim();
+    if (!clean) {
+      setFriendError("请输入有效的用户名、邮箱或 0x 钱包地址");
+      return;
+    }
+
+    const token = await ensureValidAuthToken();
+    if (!token || !isLoggedIn) {
+      setFriendError("请先登录账号后添加好友");
+      return;
+    }
+
+    let resolvedTarget = clean;
+    let resolvedDisplayName = displayName?.trim() || newFriendName.trim() || undefined;
+
     const isWallet = isAddress(clean);
     const isEmail = EMAIL_REGEX.test(clean);
     const isDid = clean.startsWith("did:");
 
     if (!isWallet && !isEmail && !isDid) {
-      setFriendError("请输入有效的 0x 钱包地址、邮箱或从搜索结果中选择用户");
-      return;
+      // Query search API to resolve username / nickname
+      try {
+        const searchRes = await fetch(`/api/user/search?q=${encodeURIComponent(clean)}`, {
+          headers: authHeaders(token),
+        });
+        if (searchRes.ok) {
+          const searchData = await searchRes.json();
+          if (Array.isArray(searchData.users) && searchData.users.length > 0) {
+            const matched = searchData.users[0];
+            resolvedTarget = matched.wallet_address || matched.email || matched.id;
+            if (!resolvedDisplayName) resolvedDisplayName = matched.name;
+          } else {
+            setFriendError("未找到该用户，请输入有效用户名、邮箱或 0x 钱包地址");
+            return;
+          }
+        }
+      } catch {
+        setFriendError("未检索到匹配用户，请重试");
+        return;
+      }
     }
 
-    const normTarget = clean.toLowerCase();
+    const normTarget = resolvedTarget.toLowerCase();
     if (
       normTarget === currentSenderId.toLowerCase() ||
       (activeAddress && normTarget === activeAddress.toLowerCase()) ||
@@ -384,15 +621,18 @@ export default function ImPage() {
     try {
       const res = await fetch("/api/user/friends", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...authHeaders(authToken) },
+        headers: { "Content-Type": "application/json", ...authHeaders(token) },
         body: JSON.stringify({
-          friend_wallet: clean,
-          friend_name: displayName?.trim() || newFriendName.trim() || undefined,
+          friend_wallet: resolvedTarget,
+          friend_name: resolvedDisplayName,
         }),
       });
       const data = await res.json();
       if (res.ok && data.friend) {
-        setFriends((prev) => [data.friend, ...prev]);
+        setFriends((prev) => {
+          const exists = prev.some((f) => f.friend_wallet.toLowerCase() === data.friend.friend_wallet.toLowerCase());
+          return exists ? prev : [data.friend, ...prev];
+        });
         setSelectedPeer(data.friend);
         setShowAddFriend(false);
         setNewFriendInput("");
@@ -614,11 +854,11 @@ export default function ImPage() {
               <div className="text-sm font-semibold text-zinc-100 flex items-center gap-2">
                 <span>实时通讯录与企业级即时消息</span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#2b2d31] border border-[#3e4147] text-zinc-300">
-                  [LIVE · MONAD TESTNET]
+                  [LIVE]
                 </span>
               </div>
               <div className="text-xs text-zinc-400 font-sans">
-                支持用户名与邮箱搜索 · 实时图文通信 · 0x 地址防误转 · 链上凭证直达
+                支持邮箱与用户名搜索 · 实时通信 · 0x 地址防误转 · 链上凭证直达
               </div>
             </div>
           </div>
@@ -659,7 +899,7 @@ export default function ImPage() {
                   type="button"
                   onClick={() => login()}
                   className="px-2.5 py-1.5 rounded-md bg-[#2b2d31] hover:bg-[#35373c] border border-[#3e4147] text-zinc-300 text-xs font-mono transition flex items-center gap-1 cursor-pointer"
-                  title="绑定 Monad 钱包以启用链上转账"
+                  title="绑定钱包以启用转账"
                 >
                   <Wallet className="w-3.5 h-3.5 text-zinc-400" />
                   <span>连接钱包转账</span>
@@ -669,90 +909,27 @@ export default function ImPage() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setShowEmailLogin(true)}
-                  className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition flex items-center gap-1.5 cursor-pointer"
+                  onClick={() => {
+                    setEmailModalMode("register");
+                    setEmailAuthModalOpen(true);
+                  }}
+                  className="px-3.5 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition flex items-center gap-1.5 cursor-pointer shadow-sm active:scale-95"
                 >
                   <Mail className="w-3.5 h-3.5" />
-                  <span>邮箱登录 / 注册</span>
+                  <span>邮箱注册</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => login()}
-                  className="px-3 py-1.5 rounded-md bg-[#2b2d31] hover:bg-[#35373c] border border-[#3e4147] text-zinc-300 text-xs font-mono transition flex items-center gap-1 cursor-pointer"
+                  className="px-3 py-1.5 rounded-md bg-[#2b2d31] hover:bg-[#35373c] border border-[#3e4147] text-zinc-300 text-xs font-mono transition flex items-center gap-1.5 cursor-pointer active:scale-95"
                 >
                   <LogIn className="w-3.5 h-3.5" />
-                  <span>钱包登录</span>
+                  <span>第三方登录</span>
                 </button>
               </div>
             )}
           </div>
         </div>
-
-        {/* Quick Email Registration / Switcher Modal */}
-        {showEmailLogin && (
-          <div className="mb-4 p-4 rounded-lg bg-[#2b2d31] border border-[#383a40] space-y-3 shadow-md animate-in fade-in">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Mail className="w-4 h-4 text-blue-400" />
-                <span className="text-xs font-bold text-zinc-100 font-mono">
-                  邮箱快速登录 / 注册 (支持多账号切换测试 IM)
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowEmailLogin(false)}
-                className="text-zinc-400 hover:text-white"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <form onSubmit={handleQuickEmailLogin} className="space-y-2.5">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <input
-                  type="email"
-                  required
-                  placeholder="输入邮箱地址 (例如: user@company.com)"
-                  value={loginEmailInput}
-                  onChange={(e) => setLoginEmailInput(e.target.value)}
-                  className="px-3 py-1.5 rounded-md bg-[#1e1f22] border border-[#3e4147] text-xs font-mono text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500"
-                />
-                <input
-                  type="text"
-                  placeholder="用户名 / 昵称 (选填)"
-                  value={loginNameInput}
-                  onChange={(e) => setLoginNameInput(e.target.value)}
-                  className="px-3 py-1.5 rounded-md bg-[#1e1f22] border border-[#3e4147] text-xs font-mono text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500"
-                />
-              </div>
-              {emailLoginError && (
-                <div className="text-[11px] text-red-400 font-mono bg-red-950/40 p-1.5 rounded-md border border-red-800/40">
-                  {emailLoginError}
-                </div>
-              )}
-              <div className="flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowEmailLogin(false)}
-                  className="px-3 py-1 rounded-md bg-[#1e1f22] text-zinc-400 text-xs font-mono hover:text-white transition"
-                >
-                  取消
-                </button>
-                <button
-                  type="submit"
-                  disabled={isLoggingInWithEmail}
-                  className="px-4 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                >
-                  {isLoggingInWithEmail ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Check className="w-3.5 h-3.5" />
-                  )}
-                  <span>立即登入并同步通讯录</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
 
         {/* Main IM Workspace Console (Feishu / Slack / Discord Architecture) */}
         <div className="w-full h-[740px] max-h-[80vh] flex rounded-lg border border-[#383a40] overflow-hidden shadow-xl bg-[#2b2d31]">
@@ -788,9 +965,9 @@ export default function ImPage() {
                 <div className="text-[11px] font-mono text-zinc-300 font-semibold flex items-center justify-between">
                   <span className="flex items-center gap-1">
                     <Search className="w-3 h-3 text-blue-400" />
-                    <span>搜索平台用户或添加好友</span>
+                    <span>{newFriendInput.trim() ? "平台用户检索" : "发现已注册平台用户"}</span>
                   </span>
-                  {isSearchingUsers && (
+                  {(isSearchingUsers || isLoadingDiscovered) && (
                     <Loader2 className="w-3 h-3 animate-spin text-zinc-400" />
                   )}
                 </div>
@@ -804,18 +981,75 @@ export default function ImPage() {
                     className="w-full px-2.5 py-1.5 rounded-md bg-[#1e1f22] border border-[#3e4147] text-xs font-mono text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500"
                   />
 
-                  {/* Live Search Results Dropdown List */}
-                  {searchResults.length > 0 && (
-                    <div className="rounded-md border border-[#3e4147] bg-[#1e1f22] divide-y divide-[#35373c] max-h-40 overflow-y-auto">
-                      <div className="px-2 py-1 text-[10px] font-mono text-zinc-400 bg-[#25272c]">
-                        平台匹配用户 ({searchResults.length}):
+                  {/* Discovered Users / Search Results List */}
+                  {newFriendInput.trim().length > 0 ? (
+                    searchResults.length > 0 ? (
+                      <div className="rounded-md border border-[#3e4147] bg-[#1e1f22] divide-y divide-[#35373c] max-h-48 overflow-y-auto">
+                        <div className="px-2 py-1 text-[10px] font-mono text-zinc-400 bg-[#25272c] flex items-center justify-between">
+                          <span>平台检索匹配 ({searchResults.length})</span>
+                          <span className="text-[9px] text-zinc-400">点击打招呼即可互动</span>
+                        </div>
+                        {searchResults.map((usr) => (
+                          <div
+                            key={usr.id}
+                            className="p-2 flex items-center justify-between hover:bg-[#2b2d31] transition text-xs gap-2"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="font-semibold text-zinc-200 truncate flex items-center gap-1.5">
+                                <span>{usr.name || usr.email}</span>
+                                {usr.wallet_address && (
+                                  <span className="text-[9px] px-1 py-0.2 rounded-sm bg-[#35373c] text-zinc-300 font-mono">
+                                    {truncateAddress(usr.wallet_address)}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-zinc-400 font-mono truncate">
+                                {usr.email}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleSayHi(usr)}
+                                className="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-mono font-medium transition active:scale-95 cursor-pointer flex items-center gap-1 shadow-sm"
+                                title="发送问候并触发彩带动画"
+                              >
+                                <Sparkles className="w-3 h-3 text-blue-400" />
+                                <span>打招呼</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  executeAddFriend(
+                                    usr.wallet_address || usr.email || usr.id,
+                                    usr.name || usr.email
+                                  )
+                                }
+                                className="px-2 py-1 rounded-md bg-[#35373c] hover:bg-[#404249] text-zinc-300 text-[11px] font-mono transition cursor-pointer"
+                              >
+                                添加
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      {searchResults.map((usr) => (
+                    ) : !isSearchingUsers ? (
+                      <div className="p-2 rounded-md bg-[#1e1f22] border border-[#3e4147] text-[11px] text-zinc-400 font-mono text-center">
+                        未检索到匹配用户，可直接输入 0x 地址或邮箱并点击保存添加
+                      </div>
+                    ) : null
+                  ) : discoveredUsers.length > 0 ? (
+                    <div className="rounded-md border border-[#3e4147] bg-[#1e1f22] divide-y divide-[#35373c] max-h-48 overflow-y-auto">
+                      <div className="px-2 py-1 text-[10px] font-mono text-zinc-400 bg-[#25272c] flex items-center justify-between">
+                        <span>自动发现推荐用户 ({discoveredUsers.length})</span>
+                        <span className="text-[9px] text-zinc-400">点击打招呼即可互动</span>
+                      </div>
+                      {discoveredUsers.map((usr) => (
                         <div
                           key={usr.id}
-                          className="p-2 flex items-center justify-between hover:bg-[#2b2d31] transition text-xs"
+                          className="p-2 flex items-center justify-between hover:bg-[#2b2d31] transition text-xs gap-2"
                         >
-                          <div className="min-w-0 pr-2">
+                          <div className="min-w-0 flex-1">
                             <div className="font-semibold text-zinc-200 truncate flex items-center gap-1.5">
                               <span>{usr.name || usr.email}</span>
                               {usr.wallet_address && (
@@ -828,22 +1062,33 @@ export default function ImPage() {
                               {usr.email}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              executeAddFriend(
-                                usr.wallet_address || usr.email || usr.id,
-                                usr.name || usr.email
-                              )
-                            }
-                            className="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-mono shrink-0 cursor-pointer"
-                          >
-                            添加
-                          </button>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => handleSayHi(usr)}
+                              className="px-2 py-1 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-mono font-medium transition active:scale-95 cursor-pointer flex items-center gap-1 shadow-sm"
+                              title="发送问候并触发彩带动画"
+                            >
+                              <Sparkles className="w-3 h-3 text-blue-400" />
+                              <span>打招呼</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                executeAddFriend(
+                                  usr.wallet_address || usr.email || usr.id,
+                                  usr.name || usr.email
+                                )
+                              }
+                              className="px-2 py-1 rounded-md bg-[#35373c] hover:bg-[#404249] text-zinc-300 text-[11px] font-mono transition cursor-pointer"
+                            >
+                              添加
+                            </button>
+                          </div>
                         </div>
                       ))}
                     </div>
-                  )}
+                  ) : null}
 
                   <input
                     type="text"
@@ -867,7 +1112,7 @@ export default function ImPage() {
                         setFriendError(null);
                         setSearchResults([]);
                       }}
-                      className="px-2.5 py-1 rounded-md bg-[#1e1f22] text-zinc-400 text-xs font-mono hover:text-white transition"
+                      className="px-2.5 py-1 rounded-md bg-[#1e1f22] text-zinc-400 text-xs font-mono hover:text-white transition cursor-pointer"
                     >
                       取消
                     </button>
@@ -916,21 +1161,29 @@ export default function ImPage() {
               {!isLoggedIn ? (
                 <div className="p-6 text-center text-zinc-400 space-y-3">
                   <User className="w-8 h-8 text-zinc-500 mx-auto opacity-70" />
-                  <div className="text-xs font-sans">登录账号以同步常用联系人</div>
-                  <div className="flex justify-center gap-2">
+                  <div className="text-xs font-sans text-zinc-200 font-semibold">即时通讯仅对注册用户开放</div>
+                  <div className="text-[11px] text-zinc-400 font-sans leading-relaxed">
+                    请先注册或登录 Koliance 账号后开启畅聊与好友发现
+                  </div>
+                  <div className="space-y-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => setShowEmailLogin(true)}
-                      className="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition"
+                      onClick={() => {
+                        setEmailModalMode("register");
+                        setEmailAuthModalOpen(true);
+                      }}
+                      className="w-full py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95 shadow-sm"
                     >
-                      邮箱登录
+                      <Mail className="w-3.5 h-3.5" />
+                      <span>邮箱注册 / 登录</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => login()}
-                      className="px-3 py-1.5 rounded-md bg-[#35373c] hover:bg-[#404249] text-zinc-200 text-xs font-mono transition"
+                      className="w-full py-2 rounded-md bg-[#35373c] hover:bg-[#404249] border border-[#44474f] text-zinc-200 text-xs font-mono font-medium transition cursor-pointer flex items-center justify-center gap-1.5 active:scale-95"
                     >
-                      钱包连接
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>Google / GitHub 登录</span>
                     </button>
                   </div>
                 </div>
@@ -1366,17 +1619,18 @@ export default function ImPage() {
                     {/* Input Field */}
                     <input
                       type="text"
-                      placeholder="发送消息... (支持粘贴截图，按 Enter 发送)"
+                      disabled={!isLoggedIn}
+                      placeholder={isLoggedIn ? "发送消息... (支持粘贴截图，按 Enter 发送)" : "请先登录账号后发送消息"}
                       value={inputContent}
                       onChange={(e) => setInputContent(e.target.value)}
                       onPaste={handlePaste}
-                      className="flex-1 px-3 py-2 rounded-md bg-[#383a40] border border-[#44474f] text-xs font-sans text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500"
+                      className="flex-1 px-3 py-2 rounded-md bg-[#383a40] border border-[#44474f] text-xs font-sans text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
 
                     {/* Send Button */}
                     <button
                       type="submit"
-                      disabled={isSending || (!inputContent.trim() && !imagePreview)}
+                      disabled={!isLoggedIn || isSending || (!inputContent.trim() && !imagePreview)}
                       className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition disabled:opacity-40 flex items-center gap-1.5 active:scale-95 cursor-pointer"
                     >
                       {isSending ? (
@@ -1400,27 +1654,30 @@ export default function ImPage() {
                     企业级端到端即时通讯与链上交互终端
                   </div>
                   <div className="text-xs text-zinc-400 leading-relaxed font-sans">
-                    支持用户名与邮箱搜索、富文本、Canvas 压缩图文、超链接识别、Monad 链上转账凭据与社交红包。
+                    支持邮箱与用户名搜索、富文本、图文通信、超链接识别、转账凭据与社交红包。
                   </div>
                 </div>
 
                 {!isLoggedIn ? (
-                  <div className="pt-2 flex items-center gap-3">
+                  <div className="pt-2 flex items-center gap-2.5 flex-wrap justify-center">
                     <button
                       type="button"
-                      onClick={() => setShowEmailLogin(true)}
-                      className="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                      onClick={() => {
+                        setEmailModalMode("register");
+                        setEmailAuthModalOpen(true);
+                      }}
+                      className="px-5 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white text-xs font-mono font-medium transition active:scale-95 flex items-center gap-2 cursor-pointer shadow-sm"
                     >
                       <Mail className="w-4 h-4" />
-                      <span>邮箱快速登录 / 注册</span>
+                      <span>邮箱注册 / 登录账号</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => login()}
-                      className="px-4 py-2 rounded-md bg-[#35373c] hover:bg-[#404249] text-zinc-200 text-xs font-mono font-medium transition active:scale-95 flex items-center gap-1.5 cursor-pointer"
+                      className="px-4 py-2.5 rounded-md bg-[#35373c] hover:bg-[#404249] border border-[#44474f] text-zinc-200 text-xs font-mono font-medium transition active:scale-95 flex items-center gap-2 cursor-pointer"
                     >
                       <LogIn className="w-4 h-4" />
-                      <span>钱包登录</span>
+                      <span>第三方登录</span>
                     </button>
                   </div>
                 ) : (
@@ -1503,6 +1760,140 @@ export default function ImPage() {
             >
               <X className="w-5 h-5" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Email Registration & Login Modal */}
+      {emailAuthModalOpen && (
+        <div
+          onClick={() => setEmailAuthModalOpen(false)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-sm rounded-lg border border-[#383a40] bg-[#1c1d22] p-5 shadow-2xl space-y-4 text-white"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-md bg-blue-600/20 border border-blue-500/40 flex items-center justify-center text-blue-400">
+                  <Mail className="w-3.5 h-3.5" />
+                </div>
+                <h3 className="text-xs font-bold font-mono text-zinc-100">
+                  {emailModalMode === "register" ? "注册 Koliance 账号" : "邮箱登录 Koliance"}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEmailAuthModalOpen(false)}
+                className="text-zinc-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Mode Switcher */}
+            <div className="grid grid-cols-2 p-0.5 rounded-md bg-[#141519] border border-white/10 text-xs font-mono">
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailModalMode("register");
+                  setEmailModalError(null);
+                }}
+                className={`py-1 rounded text-center transition font-medium cursor-pointer ${
+                  emailModalMode === "register"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                注册新账号
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setEmailModalMode("login");
+                  setEmailModalError(null);
+                }}
+                className={`py-1 rounded text-center transition font-medium cursor-pointer ${
+                  emailModalMode === "login"
+                    ? "bg-blue-600 text-white shadow-sm"
+                    : "text-zinc-400 hover:text-white"
+                }`}
+              >
+                已有账号登录
+              </button>
+            </div>
+
+            {emailModalError && (
+              <div className="p-2 rounded-md bg-red-950/70 border border-red-500/50 text-[11px] text-red-300 font-mono">
+                {emailModalError}
+              </div>
+            )}
+
+            <form onSubmit={handleEmailModalSubmit} className="space-y-3">
+              {emailModalMode === "register" && (
+                <div>
+                  <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                    用户昵称 (选填)
+                  </label>
+                  <input
+                    type="text"
+                    value={emailModalName}
+                    onChange={(e) => setEmailModalName(e.target.value)}
+                    placeholder="输入您的昵称"
+                    className="w-full px-3 py-2 rounded-md bg-[#141519] border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400 font-sans"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  邮箱地址
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={emailModalEmail}
+                  onChange={(e) => setEmailModalEmail(e.target.value)}
+                  placeholder="user@example.com"
+                  className="w-full px-3 py-2 rounded-md bg-[#141519] border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400 font-sans"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1">
+                  密码 (至少 6 位)
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={emailModalPassword}
+                  onChange={(e) => setEmailModalPassword(e.target.value)}
+                  placeholder="输入密码"
+                  className="w-full px-3 py-2 rounded-md bg-[#141519] border border-white/15 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-blue-400 font-sans"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={emailModalLoading}
+                className="w-full py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-xs font-mono font-medium transition cursor-pointer flex items-center justify-center gap-1.5 shadow-sm active:scale-98"
+              >
+                {emailModalLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Check className="w-3.5 h-3.5" />
+                )}
+                <span>
+                  {emailModalLoading
+                    ? "处理中..."
+                    : emailModalMode === "register"
+                    ? "立即创建账号并登录"
+                    : "登录"}
+                </span>
+              </button>
+            </form>
           </div>
         </div>
       )}

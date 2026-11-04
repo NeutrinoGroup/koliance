@@ -5,6 +5,8 @@ import {
   stateMatchesCookie,
   isTrustedRelayOrigin,
 } from "@/lib/oauthState";
+import { createSessionToken } from "@/lib/session";
+import { syncUserToDatabase } from "@/lib/db";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -165,9 +167,32 @@ export async function POST(request: NextRequest) {
       creditUSD = 2500;
     }
 
+    const kolianceUserId = `did:koliance:github:${userData.login.toLowerCase()}`;
+    const userEmail = userData.email || `${userData.login.toLowerCase()}@users.noreply.github.com`;
+    await syncUserToDatabase(
+      {
+        id: kolianceUserId,
+        email: userEmail,
+        name: userData.name || userData.login,
+        picture: userData.avatar_url || null,
+        bio: userData.bio || "Verified GitHub Developer",
+        wallet_address: null,
+        trust_tier: tier,
+        credit_allowance_usd: creditUSD,
+        github_username: userData.login,
+      },
+      true
+    );
+
+    const sessionToken = createSessionToken({
+      userId: kolianceUserId,
+      walletAddress: null,
+    });
+
     const ok = NextResponse.json(
       {
         success: true,
+        sessionToken,
         stats: {
           username: userData.login,
           name: userData.name || userData.login,

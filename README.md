@@ -15,7 +15,7 @@
   <a href="#english-documentation"><b>English</b></a> &nbsp;|&nbsp;
   <a href="#chinese-documentation"><b>简体中文 (快速跳转)</b></a> &nbsp;|&nbsp;
   <a href="README_zh.md"><b>完整中文文档 (Full Chinese Docs)</b></a> &nbsp;|&nbsp;
-  <a href="https://koliance.oodai.space"><b>Live DApp</b></a> &nbsp;|&nbsp;
+  <a href="https://koliance.vercel.app"><b>Live DApp</b></a> &nbsp;|&nbsp;
   <a href="https://testnet.monadexplorer.com"><b>Monad Explorer</b></a>
 </p>
 

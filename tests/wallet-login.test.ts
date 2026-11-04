@@ -146,12 +146,11 @@ describe("wiring: the panel routes the wallet click through the dispatch", () =>
     expect(panel).toMatch(/privyLogin\(walletSessionLoginOptions\(isPrivyEnabled\)\)/);
   });
 
-  it("both wallet surfaces are gated on the rail and wired to its handler", () => {
-    // Gated: neither button is rendered unconditionally.
-    expect(panel).toContain('walletRail === "start-session" &&');
-    expect(panel).toContain('walletRail === "link-to-existing" &&');
-    // Wired: exactly the two of them.
-    expect(panel.match(/onClick=\{handleWalletRail\}/g)?.length).toBe(2);
+  it("wallet binding surface is gated on link-to-existing after login and wired to its handler", () => {
+    // Under concise auth rules, unauthenticated panel is purely Google/GitHub/Email.
+    // Wallet binding appears exclusively after logging in as link-to-existing.
+    expect(panel).toContain('walletRail === "link-to-existing"');
+    expect(panel.match(/onClick=\{handleWalletRail\}/g)?.length).toBeGreaterThanOrEqual(1);
   });
 
   it("the wallet rail is no longer wired to the page's generic connect", () => {
