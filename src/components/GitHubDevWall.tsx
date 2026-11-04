@@ -208,6 +208,7 @@ export function GitHubDevWall({ currentAccount, onProofMinted }: GitHubDevWallPr
     try {
       const wallet = currentAccount || "0x0000000000000000000000000000000000000000";
       const proof = await generateDeveloperProof(devStats.username, wallet);
+      if (!proof) { setNotice("开发者数据源暂不可用，未生成存证或授信，请稍后重试。"); return; }
       if (proof) {
         setBuidlProof(proof);
         if (onProofMinted) {

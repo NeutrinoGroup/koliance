@@ -885,7 +885,7 @@ export async function generateDeveloperProof(
   username: string,
   walletAddress: string
 ): Promise<DeveloperProof | null> {
-  // 1. Try Go backend
+  // Proofs require verified server data.
   try {
     const res = await fetch(`${GO_BACKEND_URL}/api/v1/developer/github/proof`, {
       method: "POST",
@@ -896,20 +896,7 @@ export async function generateDeveloperProof(
       return await res.json();
     }
   } catch {
-    // Proceed to client fallback
+    return null;
   }
-
-  // 2. Client-side hash generation fallback
-  const salt = Date.now();
-  const simulatedHash = `0x${Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join("")}`;
-  return {
-    proofHash: simulatedHash,
-    username,
-    targetWallet: walletAddress,
-    publicRepos: 13,
-    totalStars: 5,
-    tier: "CORE BUIDLER",
-    creditUnlockUSD: 1000,
-    generatedAt: new Date().toISOString(),
-  };
+  return null;
 }

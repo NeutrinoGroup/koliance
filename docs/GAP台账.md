@@ -2200,3 +2200,9 @@ N3（词表缺项 → P1 必红）· N4（死分支 → P3 必红）· N5（中�
 **其中三条只有真实 CI 才能发现** —— 本机怎么跑都是绿的。
 **这是"CI 到底值不值"这个问题的答案，由 CI 自己给出。**
 详见 `docs/changes/009-CI首跑修复.md`。
+
+## 2026-11-04 identity proof integrity follow-up
+
+Issue #55: remove fabricated Steam/GitHub profile, proof, and credit fallbacks; reject unverified upstream data and show retry notices. See changes/091-proof-upstream-fail-closed.md for scope and fresh validation. The card console no longer bundles a shared bearer or claims simulated charges/cashback as successful operations. Credential rotation remains outstanding.
+
+Issue #80: source inspection found no x402 redemption endpoint in backend/src/contracts. Keep open; future acceptance requires durable atomic consumption and concurrent/idempotent fulfillment tests.

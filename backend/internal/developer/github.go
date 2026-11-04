@@ -81,6 +81,8 @@ type DeveloperProofResponse struct {
 	GeneratedAt     time.Time `json:"generatedAt"`
 }
 
+func (c *GitHubClient) SetHTTPClient(client *http.Client) { c.httpClient = client }
+
 func (c *GitHubClient) makeRequest(url string, target interface{}) error {
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
@@ -112,6 +114,9 @@ func (c *GitHubClient) GetUserProfile(username string) (*GitHubUserProfile, erro
 	if err := c.makeRequest(url, &profile); err != nil {
 		return nil, err
 	}
+	if profile.Login == "" || profile.ID <= 0 {
+		return nil, fmt.Errorf("invalid GitHub profile")
+	}
 	return &profile, nil
 }
 
@@ -120,6 +125,9 @@ func (c *GitHubClient) GetUserRepos(username string) ([]GitHubRepoItem, error) {
 	var repos []GitHubRepoItem
 	if err := c.makeRequest(url, &repos); err != nil {
 		return nil, err
+	}
+	if repos == nil {
+		return nil, fmt.Errorf("invalid GitHub repositories")
 	}
 	return repos, nil
 }
@@ -135,37 +143,17 @@ func NewService(client *GitHubClient) *Service {
 func (s *Service) GetDeveloperStats(username string) (*DeveloperStatsResponse, error) {
 	username = strings.TrimSpace(username)
 	if username == "" {
-		username = "moonhotline"
+		return nil, fmt.Errorf("missing GitHub username")
 	}
 
 	profile, err := s.client.GetUserProfile(username)
 	if err != nil {
-		// Fallback data if GitHub rate-limits or network is unreachable
-		return &DeveloperStatsResponse{
-			Username:           username,
-			Name:               username,
-			AvatarURL:          "https://avatars.githubusercontent.com/u/228437717?v=4",
-			HTMLURL:            "https://github.com/" + username,
-			Bio:                "Perspective and attitude towards thing determine how far you can go.",
-			Company:            "AI Friendly",
-			Location:           "Earth",
-			PublicRepos:        13,
-			Followers:          3,
-			TotalStars:         5,
-			Languages:          []string{"TypeScript", "Go", "Solidity"},
-			TopRepos: []GitHubRepoItem{
-				{Name: "koliance", FullName: username + "/koliance", Language: "TypeScript", StargazersCount: 3, HTMLURL: "https://github.com/" + username + "/koliance"},
-				{Name: "token-bankcard", FullName: username + "/token-bankcard", Language: "Go", StargazersCount: 1, HTMLURL: "https://github.com/" + username + "/token-bankcard"},
-				{Name: "toy-factory", FullName: username + "/toy-factory", Language: "TypeScript", StargazersCount: 1, HTMLURL: "https://github.com/" + username + "/toy-factory"},
-			},
-			BUIDLTier:          "CORE BUIDLER",
-			CreditAllowanceUSD: 1000.0,
-		}, nil
+		return nil, err
 	}
 
 	repos, err := s.client.GetUserRepos(username)
 	if err != nil {
-		repos = []GitHubRepoItem{}
+		return nil, err
 	}
 
 	totalStars := 0

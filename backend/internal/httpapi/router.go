@@ -264,11 +264,16 @@ func NewRouter(d Deps) http.Handler {
 	h("/api/v1/game/steam/profile", methodOnly(http.MethodGet, withDB(func(w http.ResponseWriter, r *http.Request) {
 		identifier := r.URL.Query().Get("id")
 		if identifier == "" {
-			identifier = "76561198000000000" // Default fallback demo ID
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, game.ErrInvalidSteamID)
+			return
 		}
 		stats, err := d.Game.GetUserGameStats(identifier)
 		if err != nil {
-			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			if errors.Is(err, game.ErrInvalidSteamID) {
+				writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+				return
+			}
+			writeError(w, r, http.StatusServiceUnavailable, CodeUpstreamUnavailable, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, stats)
@@ -285,11 +290,11 @@ func NewRouter(d Deps) http.Handler {
 		}
 		proof, err := d.Game.GenerateGameplayProof(strings.TrimSpace(req.SteamID), strings.TrimSpace(req.WalletAddress), req.AppID)
 		if err != nil {
-			if errors.Is(err, game.ErrInvalidSteamID) || errors.Is(err, game.ErrInvalidWallet) {
+			if errors.Is(err, game.ErrInvalidSteamID) || errors.Is(err, game.ErrInvalidWallet) || errors.Is(err, game.ErrNoGameplay) {
 				writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
 				return
 			}
-			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
+			writeError(w, r, http.StatusServiceUnavailable, CodeUpstreamUnavailable, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)
@@ -300,7 +305,8 @@ func NewRouter(d Deps) http.Handler {
 	h("/api/v1/developer/github/profile", methodOnly(http.MethodGet, func(w http.ResponseWriter, r *http.Request) {
 		username := strings.TrimSpace(r.URL.Query().Get("username"))
 		if username == "" {
-			username = "moonhotline"
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("missing GitHub username"))
+			return
 		}
 		if !validGitHubUser(username) {
 			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("invalid GitHub username"))
@@ -308,7 +314,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		stats, err := d.Dev.GetDeveloperStats(username)
 		if err != nil {
-			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, err)
+			writeError(w, r, http.StatusServiceUnavailable, CodeUpstreamUnavailable, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, stats)
@@ -324,7 +330,8 @@ func NewRouter(d Deps) http.Handler {
 		}
 		req.Username = strings.TrimSpace(req.Username)
 		if req.Username == "" {
-			req.Username = "moonhotline"
+			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("missing GitHub username"))
+			return
 		}
 		if !validGitHubUser(req.Username) {
 			writeError(w, r, http.StatusBadRequest, CodeInvalidRequest, errors.New("invalid GitHub username"))
@@ -336,7 +343,7 @@ func NewRouter(d Deps) http.Handler {
 		}
 		proof, err := d.Dev.GenerateBUIDLProof(req.Username, strings.TrimSpace(req.WalletAddress))
 		if err != nil {
-			writeError(w, r, http.StatusInternalServerError, CodeInternalError, err)
+			writeError(w, r, http.StatusServiceUnavailable, CodeUpstreamUnavailable, err)
 			return
 		}
 		jsonResponse(w, http.StatusOK, proof)

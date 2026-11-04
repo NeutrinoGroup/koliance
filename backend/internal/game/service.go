@@ -100,8 +100,10 @@ var (
 	vanityRe = regexp.MustCompile(`^[A-Za-z0-9_-]{3,32}$`)
 	walletRe = regexp.MustCompile(`^0x[0-9a-fA-F]{40}$`)
 
-	ErrInvalidSteamID = errors.New("invalid Steam identifier: expected a 17-digit SteamID64 or a 3-32 character custom URL name")
-	ErrInvalidWallet  = errors.New("invalid wallet address: expected 0x followed by 40 hex characters")
+	ErrInvalidSteamID      = errors.New("invalid Steam identifier: expected a 17-digit SteamID64 or a 3-32 character custom URL name")
+	ErrUpstreamUnavailable = errors.New("Steam data unavailable")
+	ErrNoGameplay          = errors.New("no verified gameplay for requested game")
+	ErrInvalidWallet       = errors.New("invalid wallet address: expected 0x followed by 40 hex characters")
 )
 
 // ValidateSteamIdentifier accepts a SteamID64 or a vanity name (after the
@@ -159,40 +161,20 @@ func (s *Service) GetUserGameStats(rawIdentifier string) (*GameStatsResponse, er
 	}
 	if !isAllDigits && identifier != "" {
 		resolved, err := s.client.ResolveVanityURL(identifier)
-		if err == nil && resolved != "" {
-			steamID = resolved
+		if err != nil || !steamID64Re.MatchString(resolved) {
+			return nil, ErrUpstreamUnavailable
 		}
+		steamID = resolved
 	}
 
 	summary, err := s.client.GetPlayerSummary(steamID)
 	if err != nil {
-		// Resilient fallback for local testing when network to Steam servers is blocked
-		return &GameStatsResponse{
-			SteamID:        steamID,
-			PersonaName:    "SteamOperative_" + idSuffix(steamID),
-			Avatar:         "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg",
-			TotalPlayHours: 842.5,
-			TotalGames:     28,
-			TopGames: []GamePlayRank{
-				{AppID: 730, Name: "Counter-Strike 2", HoursPlayed: 456.2, IconURL: "https://media.steampowered.com/steamcommunity/public/images/apps/730/81541e2474cd344552467d5e46503e22625295c5.jpg"},
-				{AppID: 570, Name: "Dota 2", HoursPlayed: 231.8, IconURL: "https://media.steampowered.com/steamcommunity/public/images/apps/570/0bbb630d63266bb745032d3c69b30c5f6aaa7215.jpg"},
-				{AppID: 2358720, Name: "Black Myth: Wukong", HoursPlayed: 78.5, IconURL: "https://media.steampowered.com/steamcommunity/public/images/apps/2358720/1c313a268807d9d0607ee5ae2a5c48bdfb5c9284.jpg"},
-			},
-		}, nil
+		return nil, ErrUpstreamUnavailable
 	}
 
 	games, count, err := s.client.GetOwnedGames(steamID)
 	if err != nil {
-		return &GameStatsResponse{
-			SteamID:        steamID,
-			PersonaName:    summary.PersonaName,
-			Avatar:         summary.AvatarFull,
-			TotalPlayHours: 320.0,
-			TotalGames:     12,
-			TopGames: []GamePlayRank{
-				{AppID: 730, Name: "Counter-Strike 2", HoursPlayed: 220.0, IconURL: "https://media.steampowered.com/steamcommunity/public/images/apps/730/81541e2474cd344552467d5e46503e22625295c5.jpg"},
-			},
-		}, nil
+		return nil, ErrUpstreamUnavailable
 	}
 
 	totalMinutes := 0
@@ -239,12 +221,11 @@ func (s *Service) GenerateGameplayProof(steamID, walletAddress string, appID int
 		return nil, err
 	}
 	games, _, err := s.client.GetOwnedGames(steamID)
-	if err != nil || len(games) == 0 {
-		games = []OwnedGame{
-			{AppID: 730, Name: "Counter-Strike 2", PlaytimeForever: 14400},
-			{AppID: 570, Name: "Dota 2", PlaytimeForever: 7200},
-			{AppID: 2358720, Name: "Black Myth: Wukong", PlaytimeForever: 4500},
-		}
+	if err != nil {
+		return nil, ErrUpstreamUnavailable
+	}
+	if len(games) == 0 {
+		return nil, ErrNoGameplay
 	}
 
 	var targetGame *OwnedGame
@@ -255,11 +236,20 @@ func (s *Service) GenerateGameplayProof(steamID, walletAddress string, appID int
 		}
 	}
 
-	if targetGame == nil && len(games) > 0 {
+	if targetGame == nil && appID == 0 {
 		targetGame = &games[0]
 	}
 
-	achievements, _, _ := s.client.GetPlayerAchievements(steamID, targetGame.AppID)
+	if targetGame == nil {
+		return nil, ErrNoGameplay
+	}
+	var achievements []Achievement
+	if targetGame.HasCommunityVisibleStats {
+		achievements, _, err = s.client.GetPlayerAchievements(steamID, targetGame.AppID)
+		if err != nil {
+			return nil, ErrUpstreamUnavailable
+		}
+	}
 	unlockedCount := 0
 	for _, a := range achievements {
 		if a.Achieved == 1 {
@@ -427,4 +417,3 @@ func (s *Service) VerifySteamOpenID(params map[string]string) (*SteamVerificatio
 		Valid:   true,
 	}, nil
 }
-

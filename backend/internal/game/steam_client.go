@@ -22,6 +22,8 @@ func NewSteamClient(apiKey string) *SteamClient {
 	}
 }
 
+func (c *SteamClient) SetHTTPClient(client *http.Client) { c.httpClient = client }
+
 type PlayerSummary struct {
 	SteamID      string `json:"steamid"`
 	PersonaName  string `json:"personaname"`
@@ -33,18 +35,18 @@ type PlayerSummary struct {
 }
 
 type OwnedGame struct {
-	AppID                  int    `json:"appid"`
-	Name                   string `json:"name"`
-	PlaytimeForever        int    `json:"playtime_forever"` // in minutes
-	Playtime2Weeks         int    `json:"playtime_2weeks"`
-	ImgIconURL             string `json:"img_icon_url"`
+	AppID                    int    `json:"appid"`
+	Name                     string `json:"name"`
+	PlaytimeForever          int    `json:"playtime_forever"` // in minutes
+	Playtime2Weeks           int    `json:"playtime_2weeks"`
+	ImgIconURL               string `json:"img_icon_url"`
 	HasCommunityVisibleStats bool   `json:"has_community_visible_stats"`
 }
 
 type Achievement struct {
-	APIName  string `json:"apiname"`
-	Achieved int    `json:"achieved"`
-	UnlockTime int64 `json:"unlocktime"`
+	APIName    string `json:"apiname"`
+	Achieved   int    `json:"achieved"`
+	UnlockTime int64  `json:"unlocktime"`
 }
 
 // ResolveVanityURL converts a custom vanity profile name into 64-bit Steam ID
@@ -55,6 +57,9 @@ func (c *SteamClient) ResolveVanityURL(vanityName string) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", fmt.Errorf("Steam API unavailable")
+	}
 
 	var result struct {
 		Response struct {
@@ -83,6 +88,9 @@ func (c *SteamClient) GetPlayerSummary(steamID string) (*PlayerSummary, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("Steam API unavailable")
+	}
 
 	var result struct {
 		Response struct {
@@ -94,7 +102,7 @@ func (c *SteamClient) GetPlayerSummary(steamID string) (*PlayerSummary, error) {
 		return nil, err
 	}
 
-	if len(result.Response.Players) == 0 {
+	if len(result.Response.Players) == 0 || result.Response.Players[0].SteamID != steamID {
 		return nil, fmt.Errorf("no steam player found for id: %s", steamID)
 	}
 
@@ -109,8 +117,14 @@ func (c *SteamClient) GetOwnedGames(steamID string) ([]OwnedGame, int, error) {
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, 0, fmt.Errorf("Steam API unavailable")
+	}
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	var result struct {
 		Response struct {
@@ -134,6 +148,9 @@ func (c *SteamClient) GetPlayerAchievements(steamID string, appID int) ([]Achiev
 		return nil, "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, "", fmt.Errorf("Steam API unavailable")
+	}
 
 	var result struct {
 		PlayerStats struct {
@@ -148,5 +165,8 @@ func (c *SteamClient) GetPlayerAchievements(steamID string, appID int) ([]Achiev
 		return nil, "", err
 	}
 
+	if !result.PlayerStats.Success {
+		return nil, "", fmt.Errorf("Steam achievements unavailable")
+	}
 	return result.PlayerStats.Achievements, result.PlayerStats.GameName, nil
 }

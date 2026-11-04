@@ -41,7 +41,6 @@ import {
   generateGameplayProof,
   verifySteamOpenID,
   createStripeCheckout,
-  authorizeMicropayment,
   GameStats,
   GameplayProof,
 } from "@/lib/api";
@@ -289,6 +288,7 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
     setProofLoading(true);
     try {
       const proof = await generateGameplayProof(steamData.steamId, targetAddress, targetAppId);
+      if (!proof) { setSteamNotice("Steam 数据源暂不可用，未生成存证或授信，请稍后重试。"); return; }
       if (proof) {
         setGameProof(proof);
         setCreditLimit((prev) => prev + proof.creditUnlockUSD);
@@ -335,135 +335,16 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
   };
 
   // ==================== 3. VISA HIGH-FREQUENCY MICROPAYMENTS ====================
-  const [microTxList, setMicroTxList] = useState<MicroTxLog[]>([
-    {
-      txId: "tx_init_01",
-      amountUSD: 4.50,
-      merchant: "Steam Games / Valve",
-      mcc: "7999",
-      authCode: "AUTH_222000",
-      responseCode: "00",
-      status: "APPROVED",
-      time: "2分钟前",
-    },
-  ]);
-  const [micropayLoading, setMicropayLoading] = useState(false);
+  const microTxList: MicroTxLog[] = [];
+  const micropayLoading = false;
   const [micropayNotice, setMicropayNotice] = useState<{ msg: string; type: "success" | "error" } | null>(null);
 
   const handleToggleFreeze = async () => {
-    const nextState = !cardFrozen;
-    setCardFrozen(nextState);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("koliance_agentcard_frozen", String(nextState));
-      } catch {
-        // ignore quota error
-      }
-    }
-    try {
-      const backendUrl = process.env.NEXT_PUBLIC_GO_BACKEND_URL || "";
-      if (backendUrl) {
-        await fetch(`${backendUrl}/api/v1/agentcard/freeze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ keyHex: "sk_sess_a1b1d073a99fdd2e432fe26f8d0a250da1c27e205bc39019" }),
-        }).catch(() => {});
-      }
-    } catch {
-      // ignore network errors
-    }
+    setMicropayNotice({ msg: "尚未取得当前账户的卡片授权，无法执行冻结。请先完成卡片签发。", type: "error" });
   };
 
-  const handleSimulateMicropayment = async (amount: number, merchant: string, mcc: string) => {
-    if (cardFrozen) {
-      setMicropayNotice({
-        msg: "卡片已被紧急熔断冻结，拒绝所有消费授权请求 [代码 57 - FROZEN]",
-        type: "error",
-      });
-      return;
-    }
-
-    setMicropayLoading(true);
-    setMicropayNotice(null);
-    try {
-      // Use active card session key
-      const res = await authorizeMicropayment("card_489049", "sk_sess_a1b1d073a99fdd2e432fe26f8d0a250da1c27e205bc39019", amount, merchant, mcc);
-      if (res.success) {
-        setCreditUsed((prev) => Number((prev + amount).toFixed(2)));
-        setMicroTxList((prev) => [
-          {
-            txId: res.transaction?.txId || `tx_${Date.now()}`,
-            amountUSD: amount,
-            merchant,
-            mcc,
-            authCode: res.authCode || "AUTH_OK",
-            responseCode: res.responseCode || "00",
-            status: "APPROVED",
-            time: "刚刚",
-          },
-          ...prev.slice(0, 5),
-        ]);
-        setMicropayNotice({
-          msg: `Visa 授权成功 [代码 00 - APPROVED]：已扣款 $${amount} USD (${merchant})`,
-          type: "success",
-        });
-
-        // 10% AgentCard Cashback in KOL
-        const cashbackKol = Number((amount * 0.1).toFixed(4));
-        if (cashbackKol > 0) {
-          const token = getWalletSessionToken(targetAddress) || getSessionToken();
-          if (token) {
-            fetch("/api/user/rewards", {
-              method: "POST",
-              headers: { "Content-Type": "application/json", ...authHeaders(token) },
-              body: JSON.stringify({
-                action: "CLAIM_ACTION",
-                action_type: "CARD_CASHBACK_10",
-                amount_kol: cashbackKol,
-              }),
-            }).catch(console.warn);
-          }
-          if (typeof window !== "undefined") {
-            window.dispatchEvent(
-              new CustomEvent("koliance:reward", {
-                detail: { amount: cashbackKol, actionType: "CARD_CASHBACK_10" },
-              })
-            );
-          }
-        }
-      } else {
-
-        setMicroTxList((prev) => [
-          {
-            txId: `tx_declined_${Date.now()}`,
-            amountUSD: amount,
-            merchant,
-            mcc,
-            authCode: "DECLINED",
-            responseCode: res.responseCode || "57",
-            status: "DECLINED",
-            time: "刚刚",
-          },
-          ...prev.slice(0, 5),
-        ]);
-        const errParts = [res.message || res.error || "交易被拒绝"];
-        if (res.code) errParts.push(`[${res.code}]`);
-        if (res.requestId) errParts.push(`(Req ID: ${res.requestId})`);
-        setMicropayNotice({
-          msg: `Visa 拒付拦截 [代码 ${res.responseCode || "57"} - NOT PERMITTED]：${errParts.join(" ")}`,
-          type: "error",
-        });
-      }
-    } catch {
-      setCreditUsed((prev) => Number((prev + amount).toFixed(2)));
-      setMicropayNotice({
-        msg: `本地模拟微支付成功：已扣款 $${amount} USD (${merchant})`,
-        type: "success",
-      });
-    } finally {
-      setMicropayLoading(false);
-      setTimeout(() => setMicropayNotice(null), 5000);
-    }
+  const handleSimulateMicropayment = async (_amount: number, _merchant: string, _mcc: string) => {
+    setMicropayNotice({ msg: "尚未取得当前账户的卡片授权，未发起消费或返现。请先完成卡片签发。", type: "error" });
   };
 
   // Micro-rewards stream
@@ -655,6 +536,9 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                   </div>
                 )}
 
+
+              </div>
+            )}
                 {/* Privacy Notice or Warning */}
                 {steamNotice && (
                   <div className="mt-3 p-3 rounded-md bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 text-xs font-mono flex items-center gap-2">
@@ -662,8 +546,6 @@ export function AgentCardTerminal({ currentAccount }: AgentCardTerminalProps) {
                     <span>{steamNotice}</span>
                   </div>
                 )}
-              </div>
-            )}
           </>
         )}
 

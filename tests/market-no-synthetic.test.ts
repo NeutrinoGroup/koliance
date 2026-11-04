@@ -106,8 +106,8 @@ function stripComments(source: string): string {
  * That file also holds Steam, AgentCard, Stripe, GitHub and Steam-proof
  * adapters. Two measured reasons the scan must not read them:
  *
- *  - `generateDeveloperProof` legitimately calls `Math.random()` to build a
- *    *simulated* proof hash, outside the market concerns;
+ *  - non-market adapters are outside this price-integrity boundary; the
+ *    negative control injects a random call outside the MARKET section;
  *  - `authorizeMicropayment` defaults `mcc` to `"7999"`, an ISO 18245 merchant
  *    category code — a four-digit integer that any "market-sized number" rule
  *    reports, and a real false positive this guard produced on its first run.
@@ -385,7 +385,7 @@ describe("market surface — no fabricated market fact survives", () => {
     // one a judge would be asked to verify.
     //
     // The negative-control side of this test is that the pattern itself must be
-    // able to match: `lib/api.ts` outside the MARKET banner does call it, which
+    // able to match: inject a call outside the MARKET banner, which
     // is what makes the banner scoping load-bearing rather than decorative.
     const randomCall = /Math\s*\.\s*random\s*\(/;
     for (const path of MARKET_SURFACE) {
@@ -393,8 +393,8 @@ describe("market surface — no fabricated market fact survives", () => {
       expect(randomCall.test(source), `${path} calls Math.random()`).toBe(false);
     }
     expect(
-      randomCall.test(blankOutsideMarket(read("../src/lib/api.ts"))),
-      "the control is blind: no Math.random() outside the MARKET section either"
+      randomCall.test(blankOutsideMarket(read("../src/lib/api.ts") + "\nMath.random()")),
+      "the injected out-of-market random call was not detected"
     ).toBe(true);
   });
 

@@ -59,7 +59,7 @@ func TestGetUserGameStatsShortIDDoesNotPanic(t *testing.T) {
 // data; the fallback must not panic either.
 func TestFallbackWithShortVanity(t *testing.T) {
 	st, err := offlineService().GetUserGameStats("abc")
-	if err != nil || st.PersonaName != "SteamOperative_abc" {
+	if !errors.Is(err, ErrUpstreamUnavailable) || st != nil {
 		t.Fatalf("got %+v, %v", st, err)
 	}
 }
@@ -105,14 +105,14 @@ func TestVerifySteamOpenID_Success(t *testing.T) {
 	svc.SetHTTPClient(mockServer.Client())
 
 	params := map[string]string{
-		"openid.ns":         "http://specs.openid.net/auth/2.0",
-		"openid.mode":       "id_res",
+		"openid.ns":          "http://specs.openid.net/auth/2.0",
+		"openid.mode":        "id_res",
 		"openid.op_endpoint": "https://steamcommunity.com/openid/login",
-		"openid.claimed_id": fmt.Sprintf("https://steamcommunity.com/openid/id/%s", expectedSteamID),
-		"openid.identity":   fmt.Sprintf("https://steamcommunity.com/openid/id/%s", expectedSteamID),
-		"openid.return_to":  "https://koliance.oodai.space/agentcard",
-		"openid.sig":        "test_sig_12345",
-		"openid.signed":     "signed,op_endpoint,claimed_id,identity,return_to",
+		"openid.claimed_id":  fmt.Sprintf("https://steamcommunity.com/openid/id/%s", expectedSteamID),
+		"openid.identity":    fmt.Sprintf("https://steamcommunity.com/openid/id/%s", expectedSteamID),
+		"openid.return_to":   "https://koliance.oodai.space/agentcard",
+		"openid.sig":         "test_sig_12345",
+		"openid.signed":      "signed,op_endpoint,claimed_id,identity,return_to",
 	}
 
 	result, err := svc.VerifySteamOpenID(params)
@@ -184,10 +184,10 @@ func TestVerifySteamOpenID_NegativeCases(t *testing.T) {
 
 	// 8. Untrusted op_endpoint (SSRF attempt)
 	if _, err := svc.VerifySteamOpenID(map[string]string{
-		"openid.mode":       "id_res",
-		"openid.ns":         "http://specs.openid.net/auth/2.0",
-		"openid.claimed_id": "https://steamcommunity.com/openid/id/76561198034202275",
-		"openid.identity":   "https://steamcommunity.com/openid/id/76561198034202275",
+		"openid.mode":        "id_res",
+		"openid.ns":          "http://specs.openid.net/auth/2.0",
+		"openid.claimed_id":  "https://steamcommunity.com/openid/id/76561198034202275",
+		"openid.identity":    "https://steamcommunity.com/openid/id/76561198034202275",
 		"openid.op_endpoint": "https://attacker.com/evil/login",
 	}); err == nil {
 		t.Error("expected error for untrusted openid.op_endpoint")
