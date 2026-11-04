@@ -884,6 +884,7 @@ ZK Validator 空接口（§3.4）、EIP-712 授权语义（改为升级 `agentca
 `/v2/updates/price/latest` REST GET + `price/expo` 归一化（`NormalizeHermesPrice` 已逐行镜像
 `PythOracleAdapter._normalize` 并有对拍测试）。生产叙事还差：
 
+- Signed update wiring now fetches and forwards Hermes binary updates and skips broadcast when data is missing; streaming, staleness, confidence and batching remain open. See `docs/changes/093-hermes-signed-update-review.md`.
 - **SSE/WS 流式 tick**：现为每价一次轮询式 GET，无订阅、无缓存。
 - **staleness 边界**：镜像 `PythOracleAdapter.getPriceNoOlderThan`——拉取式预言机上，测试网 feed
   可能**月级陈旧**却仍返回一个价；现实现不拒绝陈旧价，对保证金系统是错误失败模式。

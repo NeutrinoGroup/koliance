@@ -1,7 +1,15 @@
 package liquidator
 
 import (
+	"bytes"
 	"context"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/koliance/backend/internal/perp/nonce"
+	"github.com/koliance/backend/internal/perp/position"
+	"log/slog"
+	"math/big"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -39,5 +47,52 @@ func TestSleepCtx(t *testing.T) {
 	// A short sleep completes normally.
 	if !sleepCtx(context.Background(), time.Millisecond) {
 		t.Error("sleepCtx on a live ctx returned false")
+	}
+}
+
+type scanFeed struct{}
+
+func (scanFeed) Price(context.Context, string) (*big.Int, bool) { return big.NewInt(1), true }
+
+type scanSender struct {
+	calls   int
+	updates [][]byte
+	ids     []*big.Int
+}
+
+func (s *scanSender) Liquidate(_ context.Context, ids []*big.Int, updates [][]byte) (common.Hash, error) {
+	s.calls++
+	s.ids = ids
+	s.updates = updates
+	return common.Hash{}, nil
+}
+
+func TestScanHermesUpdateGate(t *testing.T) {
+	for _, tc := range []struct {
+		name, feed string
+		updates    [][]byte
+		calls      int
+	}{
+		{"missing hermes", "hermes", nil, 0},
+		{"signed hermes", "hermes", [][]byte{{0xde, 0xad, 0xbe, 0xef}}, 1},
+		{"demo no updates", "demo", nil, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			table := position.NewTable()
+			table.ApplyOpen(&position.Position{ID: 1, FeedID: "test-feed", CollateralUSD: big.NewInt(1), SizeUSD: big.NewInt(100), EntryPrice: big.NewInt(100), IsLong: true, EntryFundingIndex: big.NewInt(0)})
+			sender := &scanSender{}
+			var logs bytes.Buffer
+			b := &Bot{cfg: Config{Feed: tc.feed, TxTimeout: time.Second, MaxPositionsPerCall: 10}, log: slog.New(slog.NewTextHandler(&logs, nil)), table: table, feed: scanFeed{}, mmrBps: 100, sender: sender, nonce: nonce.NewManager(0), updates: func(context.Context, string) [][]byte { return tc.updates }}
+			b.scanAndLiquidate(context.Background())
+			if sender.calls != tc.calls {
+				t.Fatalf("broadcasts=%d want=%d; %s", sender.calls, tc.calls, logs.String())
+			}
+			if tc.calls == 0 && !strings.Contains(logs.String(), "no hermes update data") {
+				t.Fatal("missing skip diagnostic")
+			}
+			if tc.calls > 0 && (len(sender.ids) != 1 || sender.ids[0].Uint64() != 1 || !reflect.DeepEqual(sender.updates, tc.updates)) {
+				t.Fatalf("broadcast payload changed: ids=%v updates=%x", sender.ids, sender.updates)
+			}
+		})
 	}
 }
